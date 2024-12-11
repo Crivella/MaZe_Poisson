@@ -5,6 +5,11 @@ project(maze_poisson
     LANGUAGES C
 )
 
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
+
+# Require FFTW3
+find_package(FFTW3 REQUIRED COMPONENTS DOUBLE_OPENMP DOUBLE)
+
 # Set the build type to Release
 set(CMAKE_BUILD_TYPE Release)
 
@@ -48,9 +53,22 @@ if (MP_AVX)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx")
 endif()
 
+# Include the FFTW3 header files
+include_directories(${FFTW_INCLUDES})
+
 # Create the shared library
 add_library(maze_poisson SHARED
     laplace.c
+    fftw_wrap.c
+)
+
+# TODO: Need to generalize instead of hard code and consider also combination of FFTW3 and FFTW3_OMP
+target_link_libraries(maze_poisson 
+    # INTERFACE
+    # FFTW3
+    fftw3_omp
+    fftw3
+    m
 )
 
 install(TARGETS maze_poisson

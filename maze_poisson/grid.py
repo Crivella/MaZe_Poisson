@@ -74,7 +74,22 @@ class Grid:
         self.energy = 0
         self.temperature = md_variables.T
         self.potential_notelec = 0
-        
+
+        # Grids for FFT
+        d = 1
+        d = self.h
+        freqs = np.fft.fftfreq(self.N, d=d) * 2 * np.pi
+        freqs_r = np.fft.rfftfreq(self.N, d=d) * 2 * np.pi
+        gx, gy, gz = np.meshgrid(freqs, freqs, freqs_r, indexing='ij')
+        g2 = gx**2 + gy**2 + gz**2
+        g2[0, 0, 0] = 1  # to avoid division by zero
+        self.ig2_r = -1 / g2
+
+        freqs = np.fft.fftfreq(self.N, d=d) * 2 * np.pi
+        gx, gy, gz = np.meshgrid(freqs, freqs, freqs, indexing='ij')
+        g2 = gx**2 + gy**2 + gz**2
+        g2[0, 0, 0] = 1  # to avoid division by zero
+        self.ig2 = -1 / g2
     
     def RescaleVelocities(self):
         init_vel_Na = np.zeros(3)

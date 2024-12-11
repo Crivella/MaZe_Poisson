@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from ...constants import a0, t_au, density
+from ...constants import a0, density, t_au
 from ...grid import *
 from ...loggers import logger
 from ...restart import generate_restart
@@ -149,6 +149,8 @@ def main(grid_setting, output_settings, md_variables):
     #############################################################################################
 
     counter = 0 
+
+    tot_fft = 0
   
     # iterate over the number of steps (i.e times I move the particle 1)
     for i in tqdm(range(N_steps)):
@@ -170,6 +172,8 @@ def main(grid_setting, output_settings, md_variables):
             grid, y, iter_conv = VerletPoisson(grid, y=y)
             #grid, y, iter_conv = VerletPoissonBerendsen(grid, y)
             end_Verlet = time.time()
+            if iter_conv == -1:
+                tot_fft += 1
 
         if md_variables.integrator == 'OVRVO':
             grid.particles = OVRVO_part2(grid, thermostat = thermostat)
@@ -216,6 +220,8 @@ def main(grid_setting, output_settings, md_variables):
                 field_x_MaZe = np.array([grid.phi[l, j, k] for l in range(N)])
                 for n in range(N):
                     ofiles.file_output_field.write(str(i - init_steps) + ',' + str(X[n] * a0) + ',' + str(field_x_MaZe[n] * V) + '\n')
+
+    print('Number of FFTs = ', tot_fft)
 
     if output_settings.generate_restart_file:
         ofiles.file_output_solute.flush()

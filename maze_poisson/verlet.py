@@ -153,6 +153,9 @@ def MatrixVectorProduct_manual(v):
 
 MatrixVectorProduct = MatrixVectorProduct_C
 
+from .c_api import c_ffft_solve, c_fftw_3d, c_ifftw_3d
+
+
 # apply Verlet algorithm to compute the updated value of the field phi, with LCG + SHAKE
 def VerletPoisson(grid, y):
     tol = grid.md_variables.tol
@@ -168,7 +171,64 @@ def VerletPoisson(grid, y):
     sigma_p = grid.q / h + matrixmult / (4 * np.pi) # M @ grid.phi for row-by-column product
 
     # apply LCG
-    y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
+    ### Using Padded ffts
+    # pad = 31
+    # inp = np.pad(sigma_p, pad, mode='wrap')
+    # app = np.fft.fftn(inp)
+    # freqs = np.fft.fftfreq(sigma_p.shape[0] + 2*pad, d=1) * 2 * np.pi
+    # gx, gy, gz = np.meshgrid(freqs, freqs, freqs, indexing='ij')
+    # g2 = gx**2 + gy**2 + gz**2
+    # g2[0,0,0] = 1
+    # app = app / (-g2)
+    # y_fft = -np.fft.ifftn(app).real #.flatten()
+    # y_fft_pad = y_fft[pad:-pad, pad:-pad, pad:-pad]
+
+    ### Using real ffts
+    # s = sigma_p.shape
+    # s = np.array(sigma_p.shape) * 2
+    # app = np.fft.rfftn(sigma_p) * grid.ig2_r
+    # y_fft = np.fft.irfftn(app, s=sigma_p.shape).real #.flatten()
+
+    # app = np.empty_like(sigma_p, dtype=np.complex128)
+    # y_fft = np.empty_like(sigma_p)
+    # c_fftw_3d(sigma_p.shape[0], sigma_p, app)
+    # app *= grid.ig2
+    # c_ifftw_3d(sigma_p.shape[0],app, y_fft)
+    # y_fft = -y_fft
+
+    y_fft = np.empty_like(sigma_p)
+    c_ffft_solve(sigma_p.shape[0], sigma_p, grid.ig2, y_fft)
+
+    beta = 0.2
+    y_fft = y*beta + y_fft*(1-beta)
+
+    ### Using standard ffts
+    # app = np.fft.fftn(sigma_p) * grid.ig2
+    # y_fft = -np.abs(np.fft.ifftn(app, s=sigma_p.shape)).real #.flatten()
+
+    # y_new = -np.fft.ifftn(app).real #.flatten()
+    # y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y_fft, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
+    # y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
+
+    y_new, iter_conv = y_fft, -1
+    # prec = np.linalg.norm(MatrixVectorProduct_manual(y_fft) - sigma_p)
+    # if prec > 2:
+    #     y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y_fft, tol=tol)
+    # else:
+    #     # print('FFT precision: ' , prec)
+    #     iter_conv = -1
+    #     y_new = y_fft
+
+    # y_fft_rescale = np.copy(y_fft)
+    # y_fft_rescale -= np.min(y_fft_rescale)
+    # y_fft_rescale *= (np.max(y_new) - np.min(y_new)) / np.max(y_fft_rescale)
+    # y_fft_rescale += np.min(y_new)
+
+    # print('FFT-LCG:',        np.linalg.norm(y_new - y_fft))
+    # # print('FFT-pad precision: ', np.linalg.norm(MatrixVectorProduct_manual(y_fft_pad) - sigma_p))
+    # print('FFT precision: ', np.linalg.norm(MatrixVectorProduct_manual(y_fft) - sigma_p))
+    # print('FFT-rescale precision: ', np.linalg.norm(MatrixVectorProduct_manual(y_fft_rescale) - sigma_p))
+    # print('LCG precision: ', np.linalg.norm(MatrixVectorProduct(y_new) - sigma_p))
     
     # scale the field with the constrained 'force' term
     grid.phi -= y_new * (4 * np.pi)
