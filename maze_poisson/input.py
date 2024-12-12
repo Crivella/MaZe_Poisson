@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from .constants import a0, density, kB, m_Cl, m_Na, t_au, ref_L, ref_N
+from .constants import a0, density, kB, m_Cl, m_Na, ref_L, ref_N, t_au
 from .loggers import logger
 
 ###################################################################################
@@ -38,7 +38,6 @@ class GridSetting:
         self._restart_file = None
         
     # uncomment this block if you want to change N on your own
-    '''
     @property
     def N(self):
         return self._N
@@ -48,7 +47,6 @@ class GridSetting:
         self._N = value
         self._N_tot = int(value ** 3)
         self._h = None
-    '''
     @property
     def N_p(self):
         return self._N_p
@@ -57,8 +55,9 @@ class GridSetting:
     def N_p(self, value):
         self._N_p = value
         self.L_ang = np.round((((value*(m_Cl + m_Na)) / (2*density))  **(1/3)) *1.e9, 4) # in A
-        self.N = int(round((self.L_ang / ref_L )* ref_N))  # comment this line
-        self._N_tot = int(self.N ** 3)                     # and this line when u want to change N on your own
+        # self.N = int(round((self.L_ang / ref_L )* ref_N))  # comment this line
+        # self.N = 50
+        # self._N_tot = int(self.N ** 3)                     # and this line when u want to change N on your own
         self.L = self.L_ang / a0 # in amu
     
     @property
@@ -135,7 +134,7 @@ class MDVariables:
         return self._dt
 
 required_inputs = {
-    'grid_setting': ['N_p'],
+    'grid_setting': ['N', 'N_p'],
     'output_settings': ['restart'],
     'md_variables': ['N_steps', 'tol', 'rescale', 'T']
 }

@@ -1,203 +1,166 @@
 /*Wrappers for FFTW3 library*/
 
+// Order matters here, including complex.h before fftw3.h makes fftw_complex be a complex instead of a double[2]
 #include <stdio.h>
-#include <stdbool.h>
+#include <complex.h>
 #include <fftw3.h>
 #include <stdlib.h>
-#include <complex.h>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 
-bool initialized = false;
+int initialized_omp = 0;
+int initialized_c = 0;
+int initialized_r = 0;
 
-void init_fftw() {
-    if (initialized) {
+fftw_plan c_fwd_plan;
+fftw_plan c_bwd_plan;
+fftw_plan r_fwd_plan;
+fftw_plan r_bwd_plan;
+
+fftw_complex *c_in;
+fftw_complex *c_out;
+
+double *r_real;
+fftw_complex *r_cmpx;
+
+// int FLAG = FFTW_ESTIMATE;
+int FLAG = FFTW_MEASURE;
+// int FLAG = FFTW_PATIENT;
+
+void init_fftw_omp() {
+    #ifdef _OPENMP
+    if (initialized_omp != 0) {
         return;
     }
-    initialized = true;
-    printf("Initializing fftw\n");
-#ifdef _OPENMP
-    fftw_init_threads();
+    initialized_omp = 1;
+    int res = fftw_init_threads();
+    if (res == 0) {
+        printf("Error initializing fftw threads\n");
+        exit(1);
+    }
+    printf("FFTW: Running with %d threads\n", omp_get_max_threads());
+    #endif
+}
+
+void init_fftw_c(int n){
+    if (initialized_c != 0) {
+        return;
+    }
+    initialized_c = 1;
+    #ifdef _OPENMP
+    int tid = omp_get_thread_num();
     fftw_plan_with_nthreads(omp_get_max_threads());
-    printf("Running fftw with %d threads\n", omp_get_max_threads());
-#endif
+    #endif
+    c_in = (fftw_complex *)fftw_malloc(n * n * n * sizeof(fftw_complex));
+    c_out = (fftw_complex *)fftw_malloc(n * n * n * sizeof(fftw_complex));
+
+    #ifdef _OPENMP
+    if (tid == 0) {
+    #endif
+    printf("FFTW: Initializing C-C plans\n");
+    c_fwd_plan = fftw_plan_dft_3d(n, n, n, c_in, c_out, FFTW_FORWARD, FLAG | FFTW_DESTROY_INPUT);
+    c_bwd_plan = fftw_plan_dft_3d(n, n, n, c_in, c_out, FFTW_BACKWARD, FLAG | FFTW_DESTROY_INPUT);
+    printf("FFTW: ...DONE\n");
+    #ifdef _OPENMP
+    }
+    #endif
 }
 
-/*Perform a 3D fftw real to complex*/
-void fftw_3d(int n, double *in, complex *out) {
-    init_fftw();
-    fftw_plan plan;
-    int i, j, k;
-    long int n2 = n * n;
-    long int n3 = n2 * n;
-    fftw_complex *in_c = (fftw_complex *)fftw_malloc(n3 * sizeof(fftw_complex));
-    fftw_complex *out_c = (fftw_complex *)fftw_malloc(n3 * sizeof(fftw_complex));
-
-    for (i = 0; i < n; i++) {
-        for (j = 0; j < n; j++) {
-            for (k = 0; k < n; k++) {
-                in_c[i * n2 + j * n + k][0] = in[i * n2 + j * n + k];
-                in_c[i * n2 + j * n + k][1] = 0.0;
-            }
-        }
+void init_fftw_r(int n) {
+    if (initialized_r != 0) {
+        return;
     }
+    int nh = n / 2 + 1;
+    initialized_r = 1;
+    #ifdef _OPENMP
+    int tid = omp_get_thread_num();
+    fftw_plan_with_nthreads(omp_get_max_threads());
+    #endif
+  
+    r_real = (double *)fftw_malloc(n * n * n * sizeof(double));
+    r_cmpx = (fftw_complex *)fftw_malloc(n * n * nh * sizeof(fftw_complex));
 
-    plan = fftw_plan_dft_3d(n, n, n, in_c, out_c, FFTW_FORWARD, FFTW_ESTIMATE);
-    fftw_execute(plan);
-
-    for (i = 0; i < n; i++) {
-        for (j = 0; j < n; j++) {
-            for (k = 0; k < n; k++) {
-                out[i * n2 + j * n + k] = out_c[i * n2 + j * n + k][0] + I * out_c[i * n2 + j * n + k][1];
-            }
-        }
+    #ifdef _OPENMP
+    if (tid == 0) {
+    #endif
+    printf("FFTW: Initializing plans\n");
+    r_fwd_plan = fftw_plan_dft_r2c_3d(n, n, n, r_real, r_cmpx, FLAG | FFTW_DESTROY_INPUT);
+    r_bwd_plan = fftw_plan_dft_c2r_3d(n, n, n, r_cmpx, r_real, FLAG | FFTW_DESTROY_INPUT);
+    printf("FFTW: ...DONE\n");
+    #ifdef _OPENMP
     }
-
-    fftw_destroy_plan(plan);
-    fftw_free(in_c);
-    fftw_free(out_c);
+    #endif
 }
 
-/*Perform a inverse 3D fftw complex to real*/
-void ifftw_3d(int n, complex *in, double *out) {
-    init_fftw();
-    fftw_plan plan;
-    int i, j, k;
-    long int n2 = n * n;
-    long int n3 = n2 * n;
-    fftw_complex *in_c = (fftw_complex *)fftw_malloc(n3 * sizeof(fftw_complex));
-    fftw_complex *out_c = (fftw_complex *)fftw_malloc(n3 * sizeof(fftw_complex));
-
-    for (i = 0; i < n; i++) {
-        for (j = 0; j < n; j++) {
-            for (k = 0; k < n; k++) {
-                in_c[i * n2 + j * n + k][0] = creal(in[i * n2 + j * n + k]);
-                in_c[i * n2 + j * n + k][1] = cimag(in[i * n2 + j * n + k]);
-            }
-        }
+void cleanup_fftw() {
+    printf("FFTW: Cleaning up\n");
+    if (initialized_c == 0) {
+        fftw_destroy_plan(c_fwd_plan);
+        fftw_destroy_plan(c_bwd_plan);
+        fftw_free(c_in);
+        fftw_free(c_out);
+        initialized_c = 0;
     }
-
-    plan = fftw_plan_dft_3d(n, n, n, in_c, out_c, FFTW_BACKWARD, FFTW_ESTIMATE);
-    fftw_execute(plan);
-
-    for (i = 0; i < n; i++) {
-        for (j = 0; j < n; j++) {
-            for (k = 0; k < n; k++) {
-                out[i * n2 + j * n + k] = out_c[i * n2 + j * n + k][0] / n3;
-            }
-        }
+    if (initialized_r == 0) {
+        fftw_destroy_plan(r_fwd_plan);
+        fftw_destroy_plan(r_bwd_plan);
+        fftw_free(r_real);
+        fftw_free(r_cmpx);
+        initialized_r = 0;
     }
-
-    fftw_destroy_plan(plan);
-    fftw_free(in_c);
-    fftw_free(out_c);
+    if (initialized_omp) {
+        fftw_cleanup_threads();
+        initialized_omp = 0;
+    }
+    printf("FFTW: ...DONE\n");
 }
 
 /*Solve Ax=b where A is the laplacian using FFTS*/
 void ffft_solve(int n, double *b, double *ig2, double *x) {
-    init_fftw();
-    long int i;
-    long int n2 = n * n;
-    long int n3 = n2 * n;
-    fftw_plan plan;
-    fftw_complex *a_c = (fftw_complex *)fftw_malloc(n3 * sizeof(fftw_complex));
-    fftw_complex *b_c = (fftw_complex *)fftw_malloc(n3 * sizeof(fftw_complex));
+    long int size = n * n * n;
 
-    // #pragma omp parallel for
-    for (i = 0; i < n3; i++) {
-        a_c[i][0] = b[i];
-        a_c[i][1] = 0.0;
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        c_in[i] = b[i];
     }
 
-    plan = fftw_plan_dft_3d(n, n, n, a_c, b_c, FFTW_FORWARD, FFTW_ESTIMATE);
-    fftw_execute(plan);
+    fftw_execute(c_fwd_plan);
 
-    // #pragma omp parallel
-    for (i = 0; i < n3; i++) {
-        b_c[i][0] *= ig2[i];
-        b_c[i][1] *= ig2[i];
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        c_in[i] = c_out[i] * ig2[i];
     }
 
-    fftw_destroy_plan(plan);
+    fftw_execute(c_bwd_plan);
 
-    plan = fftw_plan_dft_3d(n, n, n, b_c, a_c, FFTW_BACKWARD, FFTW_ESTIMATE);
-    fftw_execute(plan);
-
-    // #pragma omp parallel for
-    for (i = 0; i < n3; i++) {
-        x[i] = a_c[i][0] / n3;
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        x[i] = creal(c_out[i]) / size;
     }
-
-    fftw_destroy_plan(plan);
-    fftw_free(a_c);
-    fftw_free(b_c);
 }
 
-/*Perform a 3D fftw real to complex using r2c*/
-void rfftw_3d(int n, double *in, complex *out) {
-    init_fftw();
-    fftw_plan plan;
-    int i, j, k;
+void ffft_solve_r(int n, double *b, double *ig2, double *x) {
     int nh = n / 2 + 1;
-    long int n2 = n * n;
-    long int n3 = n2 * nh;
-    long int idx;
-    fftw_complex *out_c = (fftw_complex *)fftw_malloc(n3 * sizeof(fftw_complex));
-    printf("n3: %ld\n", n3);
-    fflush(stdout);
-
-    plan = fftw_plan_dft_r2c_3d(n, n, n, in, out_c, FFTW_ESTIMATE);
-    fftw_execute(plan);
-
-    printf("RFFTW_3D: EXECUTE DONE\n");
-    fflush(stdout);
-
-    // OUT is of size N x N x (N/2 + 1)
-    for (i = 0; i < n; i++) {
-        for (j = 0; j < n; j++) {
-            for (k = 0; k < nh; k++) {
-                idx = i * n2 + j * n + k;
-                out[idx] = out_c[idx][0] + I * out_c[idx][1];
-                printf("RFFTW_3D: out[%ld]: %f + %f i\n", idx, creal(out[idx]), cimag(out[idx]));
-            }
-        }
+    long int size = n * n * nh;
+    long int n3r = n * n * n;
+    
+    #pragma omp parallel for
+    for (long int i = 0; i < n3r; i++) {
+        r_real[i] = b[i];
     }
 
-    printf("RFFTW_3D: remap int out DONE\n");
-    fflush(stdout);
+    fftw_execute(r_fwd_plan);
 
-    fftw_destroy_plan(plan);
-    printf("RFFTW_3D: destroy_plan DONE\n");
-    fflush(stdout);
-    fftw_free(out_c);
-    printf("RFFTW_3D: free DONE\n");
-    fflush(stdout);
-}
-
-/*Perform a inverse 3D fftw complex to real using c2r*/
-void irfftw_3d(int n, complex *in, double *out) {
-    init_fftw();
-    fftw_plan plan;
-    int i, j, k;
-    long int n2 = n * n;
-    long int n3 = n2 * (n/2 + 1);
-    fftw_complex *in_c = (fftw_complex *)fftw_malloc(n3 * sizeof(fftw_complex));
-
-    for (i = 0; i < n; i++) {
-        for (j = 0; j < n; j++) {
-            for (k = 0; k < n / 2 + 1; k++) {
-                in_c[i * n2 + j * (n / 2 + 1) + k][0] = creal(in[i * n2 + j * n + k]);
-                in_c[i * n2 + j * (n / 2 + 1) + k][1] = cimag(in[i * n2 + j * n + k]);
-            }
-        }
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        r_cmpx[i] *= ig2[i];
     }
 
-    plan = fftw_plan_dft_c2r_3d(n, n, n, in_c, out, FFTW_ESTIMATE);
-    fftw_execute(plan);
+    fftw_execute(r_bwd_plan);
 
-    for (i = 0; i < n3; i++) {
-        out[i] /= n3;
+    #pragma omp parallel for
+    for (long int i = 0; i < n3r; i++) {
+        x[i] = r_real[i] / n3r;
     }
-
-    fftw_destroy_plan(plan);
-    fftw_free(in_c);
 }

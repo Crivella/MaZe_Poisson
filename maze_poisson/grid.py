@@ -77,6 +77,7 @@ class Grid:
 
         # Grids for FFT
         d = 1
+        # d = grid_setting.L_ang / grid_setting.N
         d = self.h
         freqs = np.fft.fftfreq(self.N, d=d) * 2 * np.pi
         freqs_r = np.fft.rfftfreq(self.N, d=d) * 2 * np.pi
@@ -90,6 +91,13 @@ class Grid:
         g2 = gx**2 + gy**2 + gz**2
         g2[0, 0, 0] = 1  # to avoid division by zero
         self.ig2 = -1 / g2
+
+        freqs2 = np.fft.fftfreq(self.N*2, d=d) * 2 * np.pi
+        freqs2_r = np.fft.rfftfreq(self.N*2, d=d) * 2 * np.pi
+        gx, gy, gz = np.meshgrid(freqs2, freqs2, freqs2_r, indexing='ij')
+        g2 = gx**2 + gy**2 + gz**2
+        g2[0, 0, 0] = 1  # to avoid division by zero
+        self.ig2_r2 = -1 / g2
     
     def RescaleVelocities(self):
         init_vel_Na = np.zeros(3)

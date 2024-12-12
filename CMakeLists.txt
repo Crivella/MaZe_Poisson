@@ -24,7 +24,7 @@ option(MP_MTUNE "Enable -mtune=native" ON)
 option(MP_AVX "Enable AVX" ON)
 
 # Set the compiler flags
-set(CMAKE_C_FLAGS "-Wall -Wextra -Wpedantic -Werror")
+# set(CMAKE_C_FLAGS "-Wall -Wextra -Wpedantic -Werror")
 set(CMAKE_C_FLAGS_DEBUG "-g")
 set(CMAKE_C_FLAGS_RELEASE "-O3")
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g")

@@ -153,7 +153,8 @@ def MatrixVectorProduct_manual(v):
 
 MatrixVectorProduct = MatrixVectorProduct_C
 
-from .c_api import c_ffft_solve, c_fftw_3d, c_ifftw_3d
+from .c_api import (c_ffft_solve, c_ffft_solve_r,  # c_fftw_3d, c_ifftw_3d,
+                    c_init_fftw_c, c_init_fftw_r)
 
 
 # apply Verlet algorithm to compute the updated value of the field phi, with LCG + SHAKE
@@ -183,34 +184,55 @@ def VerletPoisson(grid, y):
     # y_fft = -np.fft.ifftn(app).real #.flatten()
     # y_fft_pad = y_fft[pad:-pad, pad:-pad, pad:-pad]
 
+    ####################################################
     ### Using real ffts
-    # s = sigma_p.shape
-    # s = np.array(sigma_p.shape) * 2
-    # app = np.fft.rfftn(sigma_p) * grid.ig2_r
-    # y_fft = np.fft.irfftn(app, s=sigma_p.shape).real #.flatten()
+    # y_fft = np.fft.irfftn(np.fft.rfftn(sigma_p) * grid.ig2_r, s=sigma_p.shape).real #.flatten()
+    ####################################################
 
-    # app = np.empty_like(sigma_p, dtype=np.complex128)
-    # y_fft = np.empty_like(sigma_p)
-    # c_fftw_3d(sigma_p.shape[0], sigma_p, app)
-    # app *= grid.ig2
-    # c_ifftw_3d(sigma_p.shape[0],app, y_fft)
-    # y_fft = -y_fft
+    ####################################################
+    ### Using real ffts with padded double grid
+    # N = sigma_p.shape[0]
+    # b = np.zeros((2*N, 2*N, 2*N))
+    # b[::2, ::2, ::2] = sigma_p
+    # y_fft = np.fft.irfftn(np.fft.rfftn(b) * grid.ig2_r2, s=b.shape).real #.flatten()
+    # y_fft = y_fft[::2, ::2, ::2]
+    ####################################################
 
+    ####################################################
+    # Using C implementation of fft
     y_fft = np.empty_like(sigma_p)
-    c_ffft_solve(sigma_p.shape[0], sigma_p, grid.ig2, y_fft)
 
-    beta = 0.2
-    y_fft = y*beta + y_fft*(1-beta)
+    # c_init_fftw_c(sigma_p.shape[0])
+    # c_ffft_solve(sigma_p.shape[0], sigma_p, grid.ig2, y_fft)
 
+    c_init_fftw_r(sigma_p.shape[0])
+    c_ffft_solve_r(sigma_p.shape[0], sigma_p, grid.ig2_r, y_fft)
+    ####################################################
+
+
+    ####################################################
     ### Using standard ffts
     # app = np.fft.fftn(sigma_p) * grid.ig2
     # y_fft = -np.abs(np.fft.ifftn(app, s=sigma_p.shape)).real #.flatten()
+    ####################################################
 
-    # y_new = -np.fft.ifftn(app).real #.flatten()
-    # y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y_fft, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
-    # y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
-
+    ####################################################
+    # Using results of fft (with possible mixing)
+    # beta = 0.05
+    # y_fft = y*beta + y_fft*(1-beta)
     y_new, iter_conv = y_fft, -1
+    ####################################################
+
+    ####################################################
+    # Using LCG on top of FFT
+    # y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=np.array(y_fft), tol=tol)
+    ####################################################
+
+    ####################################################
+    # Using LCG only
+    # y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
+    ####################################################
+
     # prec = np.linalg.norm(MatrixVectorProduct_manual(y_fft) - sigma_p)
     # if prec > 2:
     #     y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y_fft, tol=tol)

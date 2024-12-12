@@ -1,3 +1,4 @@
+import atexit
 import ctypes
 import os
 import signal
@@ -20,30 +21,47 @@ try:
 except:
     c_get_omp_info = lambda: 0
 
-# # void init_fftw()
-# c_init_fftw = library.init_fftw
-# c_init_fftw.restype = None
-# c_init_fftw.argtypes = []
+# init_fftw_omp()
+c_init_fftw_omp = library.init_fftw_omp
+c_init_fftw_omp.restype = None
+c_init_fftw_omp.argtypes = []
+c_init_fftw_omp()
 
+# void init_fftw_c(int n)
+c_init_fftw_c = library.init_fftw_c
+c_init_fftw_c.restype = None
+c_init_fftw_c.argtypes = [ctypes.c_int]
 # c_init_fftw()
 
-# void fftw_3d(int n, double *in, complex *out)
-c_fftw_3d = library.fftw_3d
-c_fftw_3d.restype = None
-c_fftw_3d.argtypes = [
-    ctypes.c_int,
-    npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
-    npct.ndpointer(dtype=np.complex128, ndim=3, flags='C_CONTIGUOUS'),
-]
+# void init_fftw_r(int n)
+c_init_fftw_r = library.init_fftw_r
+c_init_fftw_r.restype = None
+c_init_fftw_r.argtypes = [ctypes.c_int]
 
-#void ifftw_3d(int n, complex *in, double *out)
-c_ifftw_3d = library.ifftw_3d
-c_ifftw_3d.restype = None
-c_ifftw_3d.argtypes = [
-    ctypes.c_int,
-    npct.ndpointer(dtype=np.complex128, ndim=3, flags='C_CONTIGUOUS'),
-    npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
-]
+# void cleanup_fftw()
+c_cleanup_fftw = library.cleanup_fftw
+c_cleanup_fftw.restype = None
+c_cleanup_fftw.argtypes = []
+
+atexit.register(c_cleanup_fftw)
+
+# # void fftw_3d(int n, double *in, complex *out)
+# c_fftw_3d = library.fftw_3d
+# c_fftw_3d.restype = None
+# c_fftw_3d.argtypes = [
+#     ctypes.c_int,
+#     npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+#     npct.ndpointer(dtype=np.complex128, ndim=3, flags='C_CONTIGUOUS'),
+# ]
+
+# #void ifftw_3d(int n, complex *in, double *out)
+# c_ifftw_3d = library.ifftw_3d
+# c_ifftw_3d.restype = None
+# c_ifftw_3d.argtypes = [
+#     ctypes.c_int,
+#     npct.ndpointer(dtype=np.complex128, ndim=3, flags='C_CONTIGUOUS'),
+#     npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+# ]
 
 # # void rfftw_3d(int n, double *in, complex *out)
 # c_rfftw_3d = library.rfftw_3d
@@ -97,6 +115,16 @@ c_ifftw_3d.argtypes = [
 c_ffft_solve = library.ffft_solve
 c_ffft_solve.restype = None
 c_ffft_solve.argtypes = [
+    ctypes.c_int,
+    npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+]
+
+# void ffft_solve_r(int n, double *b, double *ig2, double *x)
+c_ffft_solve_r = library.ffft_solve_r
+c_ffft_solve_r.restype = None
+c_ffft_solve_r.argtypes = [
     ctypes.c_int,
     npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
     npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
