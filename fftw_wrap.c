@@ -84,7 +84,7 @@ void init_fftw_r(int n) {
     #ifdef _OPENMP
     if (tid == 0) {
     #endif
-    printf("FFTW: Initializing plans\n");
+    printf("FFTW: Initializing R-C-R plans\n");
     r_fwd_plan = fftw_plan_dft_r2c_3d(n, n, n, r_real, r_cmpx, FLAG | FFTW_DESTROY_INPUT);
     r_bwd_plan = fftw_plan_dft_c2r_3d(n, n, n, r_cmpx, r_real, FLAG | FFTW_DESTROY_INPUT);
     printf("FFTW: ...DONE\n");
@@ -114,6 +114,62 @@ void cleanup_fftw() {
         initialized_omp = 0;
     }
     printf("FFTW: ...DONE\n");
+}
+
+void c_fft_3d(int n, double *in, complex *out) {
+    int size = n * n * n;
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        c_in[i] = in[i];
+    }
+    fftw_execute(c_fwd_plan);
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        out[i] = c_out[i];
+    }
+}
+
+void c_ifft_3d(int n, complex *in, double *out) {
+    long int size = n * n * n;
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        c_in[i] = in[i];
+    }
+    fftw_execute(c_bwd_plan);
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        out[i] = creal(c_out[i]) / size;
+    }
+}
+
+void r_fft_3d(int n, double *in, complex *out) {
+    int nh = n / 2 + 1;
+    long int size = n * n * nh;
+    long int n3r = n * n * n;
+    #pragma omp parallel for
+    for (long int i = 0; i < n3r; i++) {
+        r_real[i] = in[i];
+    }
+    fftw_execute(r_fwd_plan);
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        out[i] = r_cmpx[i];
+    }
+}
+
+void r_ifft_3d(int n, complex *in, double *out) {
+    int nh = n / 2 + 1;
+    long int size = n * n * nh;
+    long int n3r = n * n * n;
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        r_cmpx[i] = in[i];
+    }
+    fftw_execute(r_bwd_plan);
+    #pragma omp parallel for
+    for (long int i = 0; i < n3r; i++) {
+        out[i] = r_real[i] / n3r;
+    }
 }
 
 /*Solve Ax=b where A is the laplacian using FFTS*/
@@ -152,8 +208,9 @@ void ffft_solve_r(int n, double *b, double *ig2, double *x) {
 
     fftw_execute(r_fwd_plan);
 
+    r_cmpx[0] = 0;
     #pragma omp parallel for
-    for (long int i = 0; i < size; i++) {
+    for (long int i = 1; i < size; i++) {
         r_cmpx[i] *= ig2[i];
     }
 

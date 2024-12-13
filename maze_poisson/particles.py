@@ -4,6 +4,7 @@ import numpy as np
 from scipy import sparse
 from scipy.spatial import KDTree
 
+from .c_api import c_r_ifft_3d
 from .constants import a0
 from .indices import GetDictTF
 from .profiling import profile
@@ -70,6 +71,7 @@ class Particles:
     # Currently using this one
     @profile 
     def ComputeForce_FD(self, prev):
+        raise
         h = self.grid.h
 
         # Choose the appropriate potential
@@ -79,6 +81,50 @@ class Particles:
         E_x = (np.roll(phi_v, -1, axis=0) - np.roll(phi_v, 1, axis=0)) / (2 * h)
         E_y = (np.roll(phi_v, -1, axis=1) - np.roll(phi_v, 1, axis=1)) / (2 * h)
         E_z = (np.roll(phi_v, -1, axis=2) - np.roll(phi_v, 1, axis=2)) / (2 * h)
+
+        # Electric field at neighbor points for all particles (Shape: (n_particles, 8, 3))
+        neighbors = self.neighbors  # Shape: (n_particles, 8, 3)
+        q_neighbors = self.grid.q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]  # Shape: (n_particles, 8)
+
+        E_neighbors = np.stack([
+            E_x[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
+            E_y[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
+            E_z[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
+        ], axis=-1)  # Shape: (n_particles, 8, 3)
+
+        # Compute the forces (sum contributions from 8 neighbors)
+        self.forces = -np.sum(q_neighbors[:, :, np.newaxis] * E_neighbors, axis=1)  # Shape: (n_particles, 3)
+
+        # Compute total charge contribution (optional)
+        self.grid.q_tot = np.sum(q_neighbors)  # Scalar
+
+    def ComputeForce_FD_Q(self, prev):
+        h = self.grid.h
+        N = self.grid.N
+
+        # Choose the appropriate potential
+        phi_v_q = self.grid.phi_prev_q if prev else self.grid.phi_q
+        # print(type(phi_v_q), phi_v_q.dtype, phi_v_q.shape)
+        # print((-1j * self.grid.gx * phi_v_q)[3,3,3])
+
+        E_x = np.empty_like(self.grid.q, dtype=np.float64)
+        E_y = np.empty_like(self.grid.q, dtype=np.float64)
+        E_z = np.empty_like(self.grid.q, dtype=np.float64)
+        pref = 1
+        c_r_ifft_3d(N, self.grid.igx * phi_v_q * pref, E_x)
+        c_r_ifft_3d(N, self.grid.igy * phi_v_q * pref, E_y)
+        c_r_ifft_3d(N, self.grid.igz * phi_v_q * pref, E_z)
+
+        # E_x = np.fft.irfftn(1j * self.grid.gx * phi_v_q).real
+        # E_y = np.fft.irfftn(1j * self.grid.gy * phi_v_q).real
+        # E_z = np.fft.irfftn(1j * self.grid.gz * phi_v_q).real
+        # print(E_x[3,3,3])
+
+
+        # Precompute electric field components (central difference approximation)
+        # E_x = (np.roll(phi_v, -1, axis=0) - np.roll(phi_v, 1, axis=0)) / (2 * h)
+        # E_y = (np.roll(phi_v, -1, axis=1) - np.roll(phi_v, 1, axis=1)) / (2 * h)
+        # E_z = (np.roll(phi_v, -1, axis=2) - np.roll(phi_v, 1, axis=2)) / (2 * h)
 
         # Electric field at neighbor points for all particles (Shape: (n_particles, 8, 3))
         neighbors = self.neighbors  # Shape: (n_particles, 8, 3)
@@ -219,6 +265,7 @@ class Particles:
 
 
     def ComputeForce(self, grid, prev):
+        raise
         L = grid.L
         h = grid.h
 

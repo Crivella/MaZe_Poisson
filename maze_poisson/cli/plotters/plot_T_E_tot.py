@@ -3,9 +3,9 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from ...loggers import logger
 
-from ...constants import a0, t_au, m_Cl, m_Na, density
+from ...constants import a0, density, m_Cl, m_Na, t_au
+from ...loggers import logger
 from . import get_N, get_Np, get_Np_input
 
 path = 'Outputs/'
@@ -18,18 +18,9 @@ isExist = os.path.exists(path_pdf)
 if not isExist:
     os.makedirs(path_pdf)
 
-def PlotT(filename, dt, therm, label='iter'):
-    path = 'Outputs/'
-    path_pdf = path + 'PDFs/'
-    if therm == 'Y':  # save to a different sub-folder inside Outputs/
-        path += 'Thermostatted/'
-        isExist = os.path.exists(path)
-        if not isExist:
-            os.makedirs(path)
-        path_pdf+='Thermostatted/'
-        isExist = os.path.exists(path_pdf)
-        if not isExist:
-            os.makedirs(path_pdf)
+def PlotT(filename, dt, label='iter'):
+    # Outname as filename but with .pdf
+    outname = os.path.splitext(filename)[0] + '.pdf'
     
     df = pd.read_csv(filename)
     N = get_N(filename)
@@ -52,23 +43,13 @@ def PlotT(filename, dt, therm, label='iter'):
     plt.axhline(1550)
     plt.legend()
     plt.grid()
-    plt.savefig(path_pdf+'T_N' + str(N) + '_dt_' + str(np.round(dt,4)) + '_N_p_'+str(N_p)+'.pdf', format='pdf')
+    plt.savefig(outname, format='pdf')
     logger.info("file saved at "+path_pdf+'T_N' + str(N) + '_dt' + str(np.round(dt,4)) + '_N_p_'+str(N_p)+'.pdf')
     plt.show()
 
-def plot_Etot_trp(filename, dt, therm, N_th=0, upper_lim=None):
-    path = 'Outputs/'
-    path_pdf = path + 'PDFs/'
-
-    if therm == 'Y':  # save to a different sub-folder inside Outputs/
-        path += 'Thermostatted/'
-        isExist = os.path.exists(path)
-        if not isExist:
-            os.makedirs(path)
-        path_pdf+='Thermostatted/'
-        isExist = os.path.exists(path_pdf)
-        if not isExist:
-            os.makedirs(path_pdf)
+def plot_Etot_trp(filename, dt, N_th=0, upper_lim=None):
+    # Outname as filename but with .pdf
+    outname = os.path.splitext(filename)[0] + '.pdf'
         
     N = get_N(filename)
     N_p = get_Np(filename)
@@ -168,7 +149,7 @@ def plot_Etot_trp(filename, dt, therm, N_th=0, upper_lim=None):
     ax3.legend(loc='upper right')
     ax3.grid(True)
     plt.tight_layout()
-    plt.savefig(path_pdf + 'Energy_analysis_trp_N' + str(N) + '_dt_' + str(dt) +'_N_p_'+str(N_p)+ '.pdf', format='pdf')
+    # plt.savefig(outname, format='pdf')
     logger.info("file saved at "+path_pdf + 'Energy_analysis_trp_N' + str(N) + '_dt_' + str(dt) + '_N_p_'+str(N_p)+'.pdf')
     plt.show()
 

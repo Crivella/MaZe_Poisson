@@ -50,7 +50,7 @@ if(MP_MTUNE)
 endif()
 
 if (MP_AVX)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx2")
 endif()
 
 # Include the FFTW3 header files

@@ -45,6 +45,42 @@ c_cleanup_fftw.argtypes = []
 
 atexit.register(c_cleanup_fftw)
 
+# void c_fft_3d(int n, double *in, complex *out)
+c_c_fft_3d = library.c_fft_3d
+c_c_fft_3d.restype = None
+c_c_fft_3d.argtypes = [
+    ctypes.c_int,
+    npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    npct.ndpointer(dtype=np.complex128, ndim=3, flags='C_CONTIGUOUS'),
+]
+
+# void c_ifft_3d(int n, complex *in, double *out)
+c_c_ifft_3d = library.c_ifft_3d
+c_c_ifft_3d.restype = None
+c_c_ifft_3d.argtypes = [
+    ctypes.c_int,
+    npct.ndpointer(dtype=np.complex128, ndim=3, flags='C_CONTIGUOUS'),
+    npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+]
+
+# void r_fft_3d(int n, double *in, complex *out)
+c_r_fft_3d = library.r_fft_3d
+c_r_fft_3d.restype = None
+c_r_fft_3d.argtypes = [
+    ctypes.c_int,
+    npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    npct.ndpointer(dtype=np.complex128, ndim=3, flags='C_CONTIGUOUS'),
+]
+
+# void r_ifft_3d(int n, complex *in, double *out)
+c_r_ifft_3d = library.r_ifft_3d
+c_r_ifft_3d.restype = None
+c_r_ifft_3d.argtypes = [
+    ctypes.c_int,
+    npct.ndpointer(dtype=np.complex128, ndim=3, flags='C_CONTIGUOUS'),
+    npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+]
+
 # # void fftw_3d(int n, double *in, complex *out)
 # c_fftw_3d = library.fftw_3d
 # c_fftw_3d.restype = None

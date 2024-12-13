@@ -27,6 +27,22 @@ def main_maze_md(filename):
     gs, os, ms = initialize_from_yaml(filename)
     _main_maze_md(gs, os, ms)
 
+@run.command()
+@click.argument(
+    'filename',
+    type=click.Path(exists=True),
+    required=True,
+    metavar='YAML_INPUT_FILE',
+    )
+def main_maze_md_q(filename):
+    gs, os, ms = initialize_from_yaml(filename)
+    _main_maze_md_q(gs, os, ms)
+
 def _main_maze_md(*args):
+    raise
     from .runners.main_Maze_md import main as main_Maze_md
     main_Maze_md(*args)
+
+def _main_maze_md_q(*args):
+    from .runners.main_Maze_md_q import main as main_Maze_md_q
+    main_Maze_md_q(*args)

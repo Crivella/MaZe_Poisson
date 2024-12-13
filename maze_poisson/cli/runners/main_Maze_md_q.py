@@ -7,12 +7,14 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from ...c_api import c_init_fftw_r
 from ...constants import a0, density, t_au
 from ...grid import *
 from ...loggers import logger
 from ...restart import generate_restart
-from ...verlet import (OVRVO_part1, OVRVO_part2, PrecondLinearConjGradPoisson,
-                       VerletPoisson, VerletSolutePart1, VerletSolutePart2)
+from ...verlet import (OVRVO_part1, OVRVO_part2,
+                       PrecondLinearConjGradPoisson_Q, VerletPoisson_Q,
+                       VerletSolutePart1, VerletSolutePart2)
 
 
 def main(grid_setting, output_settings, md_variables):
@@ -27,6 +29,9 @@ def main(grid_setting, output_settings, md_variables):
     N = grid_setting.N
     N_p = grid_setting.N_p
     h_ang = L_ang/N
+
+    print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
+    c_init_fftw_r(N)
 
     T = md_variables.T
     not_elec = md_variables.not_elec
@@ -77,14 +82,14 @@ def main(grid_setting, output_settings, md_variables):
     # initialize the electrostatic field with CG                  
     if preconditioning == "Yes":
         #logger.info('Preconditioning being done for elec field')
-        grid.phi_prev, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol)
+        grid.phi_prev_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q / h, grid)
 
     if not_elec:
         grid.particles.ComputeForceNotElec()
         #logger.info('Non_elec force being computed')
 
     if elec:
-        grid.particles.ComputeForce_FD(prev=True) 
+        grid.particles.ComputeForce_FD_Q(prev=True) 
         #logger.info('Elec force being computed')
     
     else:
@@ -111,7 +116,7 @@ def main(grid_setting, output_settings, md_variables):
     #logger.info("Charges set with weight function")
         
     if preconditioning == "Yes":
-        grid.phi, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol, x0=grid.phi_prev)
+        grid.phi_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q / h, grid)
 
     if md_variables.integrator == 'OVRVO':
         grid.particles = OVRVO_part2(grid, thermostat = thermostat)
@@ -144,14 +149,12 @@ def main(grid_setting, output_settings, md_variables):
     # print('Number of initialization steps:', init_steps,'\n')
     logger.info('Number of initialization steps '+str(init_steps))
 
-    y = np.zeros_like(grid.q) 
-
     ######################################### Verlet ############################################
     #############################################################################################
 
     counter = 0 
 
-    tot_fft = 0
+    # tot_fft = 0
   
     # iterate over the number of steps (i.e times I move the particle 1)
     for i in tqdm(range(N_steps)):
@@ -169,12 +172,12 @@ def main(grid_setting, output_settings, md_variables):
             grid.SetCharges()
 
             # apply Verlet algorithm
-            start_Verlet = time.time()
-            grid, y, iter_conv = VerletPoisson(grid, y=y)
+            # start_Verlet = time.time()
+            VerletPoisson_Q(grid)
             #grid, y, iter_conv = VerletPoissonBerendsen(grid, y)
-            end_Verlet = time.time()
-            if iter_conv == -1:
-                tot_fft += 1
+            # end_Verlet = time.time()
+            # if iter_conv == -1:
+            #     tot_fft += 1
 
         if md_variables.integrator == 'OVRVO':
             grid.particles = OVRVO_part2(grid, thermostat = thermostat)
@@ -214,15 +217,15 @@ def main(grid_setting, output_settings, md_variables):
                     logger.info('End of thermostatting')
                     thermostat = False
                     counter = counter + 1
-            if output_settings.print_performance and elec:
-                ofiles.file_output_performance.write(str(i - init_steps) + ',' + str(end_Verlet - start_Verlet) + ',' + str(iter_conv) + "\n") #+ ',' + str(end_Matrix - start_Matrix) + "\n"
+            # if output_settings.print_performance and elec:
+            #     ofiles.file_output_performance.write(str(i - init_steps) + ',' + str(end_Verlet - start_Verlet) + ',' + str(iter_conv) + "\n") #+ ',' + str(end_Matrix - start_Matrix) + "\n"
                         
-            if output_settings.print_field and elec:
-                field_x_MaZe = np.array([grid.phi[l, j, k] for l in range(N)])
-                for n in range(N):
-                    ofiles.file_output_field.write(str(i - init_steps) + ',' + str(X[n] * a0) + ',' + str(field_x_MaZe[n] * V) + '\n')
+            # if output_settings.print_field and elec:
+            #     field_x_MaZe = np.array([grid.phi[l, j, k] for l in range(N)])
+            #     for n in range(N):
+            #         ofiles.file_output_field.write(str(i - init_steps) + ',' + str(X[n] * a0) + ',' + str(field_x_MaZe[n] * V) + '\n')
 
-    print('Number of FFTs = ', tot_fft)
+    # print('Number of FFTs = ', tot_fft)
 
     if output_settings.generate_restart_file:
         ofiles.file_output_solute.flush()

@@ -68,8 +68,11 @@ class Grid:
 
         self.shape = (self.N,)*3
         self.q = np.zeros(self.shape, dtype=float)          # charge vector - q for every grid point
-        self.phi = np.zeros(self.shape, dtype=float)          # electrostatic field updated with MaZe
-        self.phi_prev = np.zeros(self.shape, dtype=float)     # electrostatic field for step t - 1 Verlet
+        # self.phi = np.zeros(self.shape, dtype=float)          # electrostatic field updated with MaZe
+        # self.phi_prev = np.zeros(self.shape, dtype=float)     # electrostatic field for step t - 1 Verlet
+        self.shape2 = (self.N, self.N, self.N//2 + 1)
+        self.phi_q = np.zeros(self.shape2, dtype=np.complex128)          # electrostatic field updated with MaZe
+        self.phi_prev_q = np.zeros(self.shape2, dtype=np.complex128)     # electrostatic field for step t - 1 Verlet
         self.linked_cell = None
         self.energy = 0
         self.temperature = md_variables.T
@@ -78,26 +81,42 @@ class Grid:
         # Grids for FFT
         d = 1
         # d = grid_setting.L_ang / grid_setting.N
-        d = self.h
+        d = self.h # * a0
+
+
+        # freqs = np.fft.fftfreq(self.N, d=d) * 2 * np.pi
+        # freqs_r = np.fft.rfftfreq(self.N, d=d) * 2 * np.pi
+        # gx, gy, gz = np.meshgrid(freqs, freqs, freqs_r, indexing='ij')
+        # g2 = gx**2 + gy**2 + gz**2
+        # g2[0, 0, 0] = 1  # to avoid division by zero
+        # # g2 *= 4 * np.pi
+        # self.ig2_r = -1 / g2
+        # self.gx = gx
+        # self.gy = gy
+        # self.gz = gz
+
         freqs = np.fft.fftfreq(self.N, d=d) * 2 * np.pi
         freqs_r = np.fft.rfftfreq(self.N, d=d) * 2 * np.pi
         gx, gy, gz = np.meshgrid(freqs, freqs, freqs_r, indexing='ij')
         g2 = gx**2 + gy**2 + gz**2
-        g2[0, 0, 0] = 1  # to avoid division by zero
-        self.ig2_r = -1 / g2
+        g2[0, 0, 0] = 2*np.pi  # to avoid division by zero
+        # self.g2 = g2
+        # self.ig2 = 1 / g2
 
-        freqs = np.fft.fftfreq(self.N, d=d) * 2 * np.pi
-        gx, gy, gz = np.meshgrid(freqs, freqs, freqs, indexing='ij')
-        g2 = gx**2 + gy**2 + gz**2
-        g2[0, 0, 0] = 1  # to avoid division by zero
-        self.ig2 = -1 / g2
+        # freqs2 = np.fft.fftfreq(self.N*2, d=d) * 2 * np.pi
+        # freqs2_r = np.fft.rfftfreq(self.N*2, d=d) * 2 * np.pi
+        # gx, gy, gz = np.meshgrid(freqs2, freqs2, freqs2_r, indexing='ij')
+        # g2 = gx**2 + gy**2 + gz**2
+        # g2[0, 0, 0] = 1  # to avoid division by zero
+        # self.ig2_r2 = -1 / g2
 
-        freqs2 = np.fft.fftfreq(self.N*2, d=d) * 2 * np.pi
-        freqs2_r = np.fft.rfftfreq(self.N*2, d=d) * 2 * np.pi
-        gx, gy, gz = np.meshgrid(freqs2, freqs2, freqs2_r, indexing='ij')
-        g2 = gx**2 + gy**2 + gz**2
-        g2[0, 0, 0] = 1  # to avoid division by zero
-        self.ig2_r2 = -1 / g2
+        self.igx = 1j * gx
+        self.igy = 1j * gy
+        self.igz = 1j * gz
+        # self.g2 = g2
+        self.ig2 = 1 / g2
+        self.mig2 = - self.ig2
+        del g2
     
     def RescaleVelocities(self):
         init_vel_Na = np.zeros(3)
