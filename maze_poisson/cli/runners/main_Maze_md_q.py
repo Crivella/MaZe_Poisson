@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from ...c_api import c_init_fftw_r
+from ...c_api import init_rfft
 from ...constants import a0, density, t_au
 from ...grid import *
 from ...loggers import logger
@@ -31,7 +31,7 @@ def main(grid_setting, output_settings, md_variables):
     h_ang = L_ang/N
 
     print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
-    c_init_fftw_r(N)
+    init_rfft(N)
 
     T = md_variables.T
     not_elec = md_variables.not_elec
@@ -83,6 +83,7 @@ def main(grid_setting, output_settings, md_variables):
     if preconditioning == "Yes":
         #logger.info('Preconditioning being done for elec field')
         grid.phi_prev_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q / h, grid)
+        # grid.phi_prev_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q, grid)
 
     if not_elec:
         grid.particles.ComputeForceNotElec()
@@ -117,6 +118,7 @@ def main(grid_setting, output_settings, md_variables):
         
     if preconditioning == "Yes":
         grid.phi_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q / h, grid)
+        # grid.phi_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q, grid)
 
     if md_variables.integrator == 'OVRVO':
         grid.particles = OVRVO_part2(grid, thermostat = thermostat)
@@ -185,7 +187,6 @@ def main(grid_setting, output_settings, md_variables):
             grid = VerletSolutePart2(grid)
 
         if output_settings.print_tot_force:
-            tot_force = np.zeros(3)
             tot_force = np.sum(grid.particles.forces + grid.particles.forces_notelec, axis=0)
             
             ofiles.file_output_tot_force.write(str(i) + ',' + str(tot_force[0]) + ',' + str(tot_force[1]) + ','+ str(tot_force[2]) + "\n") 

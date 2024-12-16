@@ -43,7 +43,7 @@ void init_fftw_omp() {
     #endif
 }
 
-void init_fftw_c(int n){
+void init_fft(int n){
     if (initialized_c != 0) {
         return;
     }
@@ -67,7 +67,7 @@ void init_fftw_c(int n){
     #endif
 }
 
-void init_fftw_r(int n) {
+void init_rfft(int n) {
     if (initialized_r != 0) {
         return;
     }
@@ -116,7 +116,7 @@ void cleanup_fftw() {
     printf("FFTW: ...DONE\n");
 }
 
-void c_fft_3d(int n, double *in, complex *out) {
+void fft_3d(int n, double *in, complex *out) {
     int size = n * n * n;
     #pragma omp parallel for
     for (long int i = 0; i < size; i++) {
@@ -129,7 +129,7 @@ void c_fft_3d(int n, double *in, complex *out) {
     }
 }
 
-void c_ifft_3d(int n, complex *in, double *out) {
+void ifft_3d(int n, complex *in, double *out) {
     long int size = n * n * n;
     #pragma omp parallel for
     for (long int i = 0; i < size; i++) {
@@ -142,7 +142,7 @@ void c_ifft_3d(int n, complex *in, double *out) {
     }
 }
 
-void r_fft_3d(int n, double *in, complex *out) {
+void rfft_3d(int n, double *in, complex *out) {
     int nh = n / 2 + 1;
     long int size = n * n * nh;
     long int n3r = n * n * n;
@@ -157,7 +157,7 @@ void r_fft_3d(int n, double *in, complex *out) {
     }
 }
 
-void r_ifft_3d(int n, complex *in, double *out) {
+void irfft_3d(int n, complex *in, double *out) {
     int nh = n / 2 + 1;
     long int size = n * n * nh;
     long int n3r = n * n * n;
@@ -173,7 +173,7 @@ void r_ifft_3d(int n, complex *in, double *out) {
 }
 
 /*Solve Ax=b where A is the laplacian using FFTS*/
-void ffft_solve(int n, double *b, double *ig2, double *x) {
+void fft_solve(int n, double *b, double *ig2, double *x) {
     long int size = n * n * n;
 
     #pragma omp parallel for
@@ -196,7 +196,7 @@ void ffft_solve(int n, double *b, double *ig2, double *x) {
     }
 }
 
-void ffft_solve_r(int n, double *b, double *ig2, double *x) {
+void rfft_solve(int n, double *b, double *ig2, double *x) {
     int nh = n / 2 + 1;
     long int size = n * n * nh;
     long int n3r = n * n * n;

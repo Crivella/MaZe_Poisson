@@ -81,8 +81,9 @@ class Grid:
         # Grids for FFT
         d = 1
         # d = grid_setting.L_ang / grid_setting.N
-        d = self.h # * a0
-
+        d = self.h  # in a.u
+        # d = self.h * a0  # in Angstrom
+# 
 
         # freqs = np.fft.fftfreq(self.N, d=d) * 2 * np.pi
         # freqs_r = np.fft.rfftfreq(self.N, d=d) * 2 * np.pi
@@ -97,9 +98,14 @@ class Grid:
 
         freqs = np.fft.fftfreq(self.N, d=d) * 2 * np.pi
         freqs_r = np.fft.rfftfreq(self.N, d=d) * 2 * np.pi
+        # n2 = self.N // 2
+        # freqs = np.roll(np.arange(-n2, n2 + self.N % 2), -n2) * 2 * np.pi / self.L
+        # freqs_r = np.arange(n2 + 1) * 2 * np.pi / self.L
+        print(freqs)
+        # print(2*np.pi*np.arange(N//2+1)/L)
         gx, gy, gz = np.meshgrid(freqs, freqs, freqs_r, indexing='ij')
         g2 = gx**2 + gy**2 + gz**2
-        g2[0, 0, 0] = 2*np.pi  # to avoid division by zero
+        g2[0, 0, 0] = 1  # to avoid division by zero
         # self.g2 = g2
         # self.ig2 = 1 / g2
 
@@ -116,7 +122,11 @@ class Grid:
         # self.g2 = g2
         self.ig2 = 1 / g2
         self.mig2 = - self.ig2
+        self.ig2 *= 4*np.pi / self.h
         del g2
+
+        self.fq = np.empty_like(self.q, dtype=np.float64)
+        self.qq = np.empty_like(self.phi_q, dtype=np.complex128)
     
     def RescaleVelocities(self):
         init_vel_Na = np.zeros(3)

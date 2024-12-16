@@ -4,7 +4,7 @@ from math import exp, tanh
 import numpy as np
 from scipy.sparse.linalg import LinearOperator, cg
 
-from .c_api import c_conj_grad, c_laplace, c_r_fft_3d
+from .c_api import c_conj_grad, c_laplace, rfft_3d
 from .constants import kB
 from .profiling import profile
 
@@ -41,7 +41,7 @@ def VerletSolutePart2(grid, prev=False):
         particles.ComputeForceNotElec()
 
     if elec:
-        particles.ComputeForce_FD(prev=prev)
+        particles.ComputeForce_FD_Q(prev=prev)
 
     particles.vel = particles.vel + 0.5 * dt * (particles.forces + particles.forces_notelec) / particles.masses[:, np.newaxis]
     
@@ -153,28 +153,32 @@ def MatrixVectorProduct_manual(v):
 
 MatrixVectorProduct = MatrixVectorProduct_C
 
-from .c_api import (c_ffft_solve, c_ffft_solve_r,  # c_fftw_3d, c_ifftw_3d,
-                    c_init_fftw_c, c_init_fftw_r)
+from .c_api import (fft_solve, init_fft, init_rfft,  # c_fftw_3d, c_ifftw_3d,
+                    rfft_solve)
 
 
 def VerletPoisson_Q(grid):
-    h = grid.h
+    # h = grid.h
 
     # compute provisional update for the field phi
-    tmp = np.copy(grid.phi_q)
-    grid.phi_q = 2 * grid.phi_q - grid.phi_prev_q
-    grid.phi_prev_q = tmp
+    # tmp = np.copy(grid.phi_q)
+    # grid.phi_q = 2 * grid.phi_q - grid.phi_prev_q
+    # grid.phi_prev_q = tmp
 
-    qq = np.empty_like(grid.phi_q, dtype=np.complex128)
-    c_r_fft_3d(grid.N, grid.q, qq)
-    # qq = np.fft.rfftn(grid.q)
+    grid.phi_prev_q = grid.phi_q
+
+    # qq = np.empty_like(grid.phi_q, dtype=np.complex128)
+    rfft_3d(grid.N, grid.q, grid.qq)
+    # grid.qq = np.fft.rfftn(grid.q)
     # print(qq.shape)
-    grid.phi_q = 4*np.pi / h * grid.ig2 * qq
+    grid.phi_q = grid.ig2 * grid.qq
+    # grid.phi_q = 4*np.pi * grid.ig2 * grid.qq
 
 
 
 # apply Verlet algorithm to compute the updated value of the field phi, with LCG + SHAKE
 def VerletPoisson(grid, y):
+    raise
     tol = grid.md_variables.tol
     h = grid.h
 
@@ -214,8 +218,8 @@ def VerletPoisson(grid, y):
     # y_fft = np.fft.irfftn(np.fft.rfftn(b) * grid.ig2_r2, s=b.shape).real #.flatten()
 
     y_fft = np.empty_like(b)
-    c_init_fftw_r(b.shape[0])
-    c_ffft_solve_r(b.shape[0], b, grid.ig2_r2, y_fft)
+    init_rfft(b.shape[0])
+    fft_solve_r(b.shape[0], b, grid.ig2_r2, y_fft)
 
     y_fft = y_fft[::2, ::2, ::2]
     ####################################################
@@ -367,10 +371,10 @@ PrecondLinearConjGradPoisson = PrecondLinearConjGradPoisson_C
 
 def PrecondLinearConjGradPoisson_Q(b, grid):
     """Solves \\nabla^2 x = b in reciprocal space"""
-    y = np.empty_like(grid.phi_q, dtype=np.complex128)
-    c_r_fft_3d(grid.N, b, y)
+    # qq = np.empty_like(grid.phi_q, dtype=np.complex128)
+    rfft_3d(grid.N, b, grid.qq)
     # y = np.fft.rfftn(b)
-    return y * grid.mig2
+    return grid.qq * grid.mig2
 
 
 
@@ -382,6 +386,7 @@ def MatrixVectorProduct_7entries(M, v, index):
 
 # apply Verlet algorithm to compute the updated value of the field phi, with LCG + SHAKE
 def VerletPoissonBerendsen(grid,eta):
+    raise
     h = grid.h
     tol = grid.md_variables.tol
 

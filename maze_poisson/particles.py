@@ -4,7 +4,7 @@ import numpy as np
 from scipy import sparse
 from scipy.spatial import KDTree
 
-from .c_api import c_r_ifft_3d
+from .c_api import irfft_3d
 from .constants import a0
 from .indices import GetDictTF
 from .profiling import profile
@@ -99,45 +99,53 @@ class Particles:
         self.grid.q_tot = np.sum(q_neighbors)  # Scalar
 
     def ComputeForce_FD_Q(self, prev):
-        h = self.grid.h
+        h = self.grid.h * a0 # h in angstrom
         N = self.grid.N
 
         # Choose the appropriate potential
         phi_v_q = self.grid.phi_prev_q if prev else self.grid.phi_q
-        # print(type(phi_v_q), phi_v_q.dtype, phi_v_q.shape)
-        # print((-1j * self.grid.gx * phi_v_q)[3,3,3])
 
-        E_x = np.empty_like(self.grid.q, dtype=np.float64)
-        E_y = np.empty_like(self.grid.q, dtype=np.float64)
-        E_z = np.empty_like(self.grid.q, dtype=np.float64)
-        pref = 1
-        c_r_ifft_3d(N, self.grid.igx * phi_v_q * pref, E_x)
-        c_r_ifft_3d(N, self.grid.igy * phi_v_q * pref, E_y)
-        c_r_ifft_3d(N, self.grid.igz * phi_v_q * pref, E_z)
-
-        # E_x = np.fft.irfftn(1j * self.grid.gx * phi_v_q).real
-        # E_y = np.fft.irfftn(1j * self.grid.gy * phi_v_q).real
-        # E_z = np.fft.irfftn(1j * self.grid.gz * phi_v_q).real
-        # print(E_x[3,3,3])
-
-
-        # Precompute electric field components (central difference approximation)
+        #####################################################################################
+        # # Precompute electric field components (central difference approximation)
         # E_x = (np.roll(phi_v, -1, axis=0) - np.roll(phi_v, 1, axis=0)) / (2 * h)
         # E_y = (np.roll(phi_v, -1, axis=1) - np.roll(phi_v, 1, axis=1)) / (2 * h)
         # E_z = (np.roll(phi_v, -1, axis=2) - np.roll(phi_v, 1, axis=2)) / (2 * h)
+
+        # # Electric field at neighbor points for all particles (Shape: (n_particles, 8, 3))
+        # neighbors = self.neighbors  # Shape: (n_particles, 8, 3)
+        # q_neighbors = self.grid.q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]  # Shape: (n_particles, 8)
+
+        # E_neighbors = np.stack([
+        #     E_x[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
+        #     E_y[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
+        #     E_z[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
+        # ], axis=-1)  # Shape: (n_particles, 8, 3)
+
+        # # Compute the forces (sum contributions from 8 neighbors)
+        # self.forces = -np.sum(q_neighbors[:, :, np.newaxis] * E_neighbors, axis=1) / a0  # Shape: (n_particles, 3)
+        #####################################################################################
 
         # Electric field at neighbor points for all particles (Shape: (n_particles, 8, 3))
         neighbors = self.neighbors  # Shape: (n_particles, 8, 3)
         q_neighbors = self.grid.q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]  # Shape: (n_particles, 8)
 
-        E_neighbors = np.stack([
-            E_x[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
-            E_y[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
-            E_z[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
-        ], axis=-1)  # Shape: (n_particles, 8, 3)
+        # E from first derivative in reciprocal space using FFT(f'(x)) = i*G*FFT(f)(G)
+        # tmp = self.grid.fq
+        # for i,ig in enumerate([self.grid.igx, self.grid.igy, self.grid.igz]):
+        #     irfft_3d(N, ig * phi_v_q, tmp)
+        #     self.forces[:,i] = -np.sum(
+        #         q_neighbors * tmp[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]], axis=1
+        #         ) # / a0
+        #### MAYBE problem due to grid being defined with endpoint???
 
-        # Compute the forces (sum contributions from 8 neighbors)
-        self.forces = -np.sum(q_neighbors[:, :, np.newaxis] * E_neighbors, axis=1)  # Shape: (n_particles, 3)
+        # E from finite difference on phi(r) (phi'_{n} = (phi_{n+1} - phi_{n-1}) / 2h)
+        irfft_3d(N, phi_v_q, self.grid.fq)
+        phi = self.grid.fq
+        for i in range(3):
+            E = (np.roll(phi, -1, axis=i) - np.roll(phi, 1, axis=i)) / (2 * h)
+            self.forces[:,i] = -np.sum(
+                q_neighbors * E[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]], axis=1
+                ) #/ a0 # a0 here for h -> h_ang
 
         # Compute total charge contribution (optional)
         self.grid.q_tot = np.sum(q_neighbors)  # Scalar
@@ -191,76 +199,76 @@ class Particles:
 
         self.grid.potential_notelec = potential_energy  # Store the potential energy
 
-    # Test with KDTree (might be faster with low particle density)
-    # Should also be more memory efficient
-    def _ComputeTFForces(self):
-        tree = KDTree(self.pos, boxsize=self.grid.L)
-        neigh_lst = tree.query_ball_tree(tree, self.r_cutoff)
+    # # Test with KDTree (might be faster with low particle density)
+    # # Should also be more memory efficient
+    # def _ComputeTFForces(self):
+    #     tree = KDTree(self.pos, boxsize=self.grid.L)
+    #     neigh_lst = tree.query_ball_tree(tree, self.r_cutoff)
 
-        potential_energy = 0
-        for i, neigh in enumerate(neigh_lst):
-            neigh.remove(i)
-            r_diff = self.pos[neigh] - self.pos[i]
-            r_diff = BoxScale(r_diff, self.grid.L)
-            r_mag = np.linalg.norm(r_diff, axis=1)
-            r_cap = r_diff / r_mag[:, np.newaxis]
+    #     potential_energy = 0
+    #     for i, neigh in enumerate(neigh_lst):
+    #         neigh.remove(i)
+    #         r_diff = self.pos[neigh] - self.pos[i]
+    #         r_diff = BoxScale(r_diff, self.grid.L)
+    #         r_mag = np.linalg.norm(r_diff, axis=1)
+    #         r_cap = r_diff / r_mag[:, np.newaxis]
 
-            # A = self.A[i, neigh]
-            # C = self.C[i, neigh]
-            # D = self.D[i, neigh]
-            # sigma_TF = self.sigma_TF[i, neigh]
-            # alpha = self.alpha[i, neigh]
-            # beta = self.beta[i, neigh]
-            A = np.vectorize(lambda q: self.tf_params[q][0])(self.charges[i] + self.charges[neigh])
-            C = np.vectorize(lambda q: self.tf_params[q][1])(self.charges[i] + self.charges[neigh])
-            D = np.vectorize(lambda q: self.tf_params[q][2])(self.charges[i] + self.charges[neigh])
-            sigma_TF = np.vectorize(lambda q: self.tf_params[q][3])(self.charges[i] + self.charges[neigh])
-            V_shift = A * np.exp(self.B * (sigma_TF - self.r_cutoff)) - C / self.r_cutoff**6 - D / self.r_cutoff**8
-            alpha = A * self.B * np.exp(self.B * (sigma_TF - self.r_cutoff)) - 6 * C / self.r_cutoff**7 - 8 * D / self.r_cutoff**9
-            beta = - V_shift - alpha * self.r_cutoff
+    #         # A = self.A[i, neigh]
+    #         # C = self.C[i, neigh]
+    #         # D = self.D[i, neigh]
+    #         # sigma_TF = self.sigma_TF[i, neigh]
+    #         # alpha = self.alpha[i, neigh]
+    #         # beta = self.beta[i, neigh]
+    #         A = np.vectorize(lambda q: self.tf_params[q][0])(self.charges[i] + self.charges[neigh])
+    #         C = np.vectorize(lambda q: self.tf_params[q][1])(self.charges[i] + self.charges[neigh])
+    #         D = np.vectorize(lambda q: self.tf_params[q][2])(self.charges[i] + self.charges[neigh])
+    #         sigma_TF = np.vectorize(lambda q: self.tf_params[q][3])(self.charges[i] + self.charges[neigh])
+    #         V_shift = A * np.exp(self.B * (sigma_TF - self.r_cutoff)) - C / self.r_cutoff**6 - D / self.r_cutoff**8
+    #         alpha = A * self.B * np.exp(self.B * (sigma_TF - self.r_cutoff)) - 6 * C / self.r_cutoff**7 - 8 * D / self.r_cutoff**9
+    #         beta = - V_shift - alpha * self.r_cutoff
 
-            f_mag = self.B * A * np.exp(self.B * (sigma_TF - r_mag)) - 6 * C / r_mag**7 - 8 * D / r_mag**9 - alpha
-            V_mag = A * np.exp(self.B * (sigma_TF - r_mag)) - C / r_mag**6 - D / r_mag**8 + alpha * r_mag + beta
+    #         f_mag = self.B * A * np.exp(self.B * (sigma_TF - r_mag)) - 6 * C / r_mag**7 - 8 * D / r_mag**9 - alpha
+    #         V_mag = A * np.exp(self.B * (sigma_TF - r_mag)) - C / r_mag**6 - D / r_mag**8 + alpha * r_mag + beta
 
-            pairwise_forces = f_mag[:, np.newaxis] * r_cap
-            net_forces = -np.sum(pairwise_forces, axis=0)
+    #         pairwise_forces = f_mag[:, np.newaxis] * r_cap
+    #         net_forces = -np.sum(pairwise_forces, axis=0)
 
-            self.forces_notelec[i] = net_forces
+    #         self.forces_notelec[i] = net_forces
 
-            potential_energy += np.sum(V_mag)
+    #         potential_energy += np.sum(V_mag)
 
-        potential_energy /= 2
-        self.grid.potential_notelec = potential_energy
+    #     potential_energy /= 2
+    #     self.grid.potential_notelec = potential_energy
 
-    # Test with KDTree + sparse matrix WIP!!!
-    def _ComputeTFForces(self):
-        tree = KDTree(self.pos, boxsize=self.grid.L)
-        r_mag = tree.sparse_distance_matrix(tree, self.r_cutoff, output_type='coo_matrix')
-        print(r_mag.row)
-        for i in range(self.N_p):
-            r_mag[i, i] = np.inf
-        # print((self.pos[r_mag.row] - self.pos[r_mag.col]).shape)
-        # print(r_mag.row.shape)
-        # print(r_mag.col.shape)
-        # exit()
-        r_diff = self.pos[r_mag.row] - self.pos[r_mag.col]
-        r_cap = r_diff / r_mag.data[:, np.newaxis]
-        # print(type(r_diff))
-        # get pair indexes from sparse matrix
-        # r_mag = r_diff.tocoo()
-        print(r_mag.shape)
-        print(r_diff.shape)
-        # exit()
-        r_mag = np.linalg.norm(r_diff, axis=2)
+    # # Test with KDTree + sparse matrix WIP!!!
+    # def _ComputeTFForces(self):
+    #     tree = KDTree(self.pos, boxsize=self.grid.L)
+    #     r_mag = tree.sparse_distance_matrix(tree, self.r_cutoff, output_type='coo_matrix')
+    #     print(r_mag.row)
+    #     for i in range(self.N_p):
+    #         r_mag[i, i] = np.inf
+    #     # print((self.pos[r_mag.row] - self.pos[r_mag.col]).shape)
+    #     # print(r_mag.row.shape)
+    #     # print(r_mag.col.shape)
+    #     # exit()
+    #     r_diff = self.pos[r_mag.row] - self.pos[r_mag.col]
+    #     r_cap = r_diff / r_mag.data[:, np.newaxis]
+    #     # print(type(r_diff))
+    #     # get pair indexes from sparse matrix
+    #     # r_mag = r_diff.tocoo()
+    #     print(r_mag.shape)
+    #     print(r_diff.shape)
+    #     # exit()
+    #     r_mag = np.linalg.norm(r_diff, axis=2)
 
 
-        charges_sum = self.charges[:, np.newaxis] + self.charges
-        A = np.vectorize(lambda q: self.tf_params[q][0])(charges_sum)
-        C = np.vectorize(lambda q: self.tf_params[q][1])(charges_sum)
-        D = np.vectorize(lambda q: self.tf_params[q][2])(charges_sum)
-        sigma_TF = np.vectorize(lambda q: self.tf_params[q][3])(charges_sum)
+    #     charges_sum = self.charges[:, np.newaxis] + self.charges
+    #     A = np.vectorize(lambda q: self.tf_params[q][0])(charges_sum)
+    #     C = np.vectorize(lambda q: self.tf_params[q][1])(charges_sum)
+    #     D = np.vectorize(lambda q: self.tf_params[q][2])(charges_sum)
+    #     sigma_TF = np.vectorize(lambda q: self.tf_params[q][3])(charges_sum)
 
-        V_shift = A * np.exp(self.B * (sigma_TF - self.r_cutoff)) - C / self.r_cutoff**6 - D / self
+    #     V_shift = A * np.exp(self.B * (sigma_TF - self.r_cutoff)) - C / self.r_cutoff**6 - D / self
 
 
 
