@@ -1,8 +1,4 @@
-import math
-
 import numpy as np
-from scipy import sparse
-from scipy.spatial import KDTree
 
 from .c_api import irfft_3d
 from .constants import a0
@@ -69,7 +65,7 @@ class Particles:
             self.neighbors[n] = neigh_indices
             
     # Currently using this one
-    @profile 
+    @profile
     def ComputeForce_FD(self, prev):
         h = self.grid.h
 
@@ -97,12 +93,12 @@ class Particles:
         # Compute total charge contribution (optional)
         self.grid.q_tot = np.sum(q_neighbors)  # Scalar
 
-    def ComputeForce_FD_Q(self, prev):
+    def ComputeForce_FD_Q(self, prev=False):
         h = self.grid.h # h in angstrom
-        N = self.grid.N
+        # N = self.grid.N
 
         # Choose the appropriate potential
-        phi_v_q = self.grid.phi_prev_q if prev else self.grid.phi_q
+        # phi_v_q = self.grid.phi_q
 
         # Electric field at neighbor points for all particles (Shape: (n_particles, 8, 3))
         neighbors = self.neighbors  # Shape: (n_particles, 8, 3)
@@ -117,8 +113,8 @@ class Particles:
         #         ) # / a0
 
         # E from finite difference on phi(r) (phi'_{n} = (phi_{n+1} - phi_{n-1}) / 2h)
-        irfft_3d(N, phi_v_q, self.grid.fq)
-        phi = self.grid.fq
+        # irfft_3d(N, phi_v_q, self.grid.fq)
+        phi = self.grid.calculate_phi()
         for i in range(3):
             E = (np.roll(phi, -1, axis=i) - np.roll(phi, 1, axis=i)) / (2 * h)
             self.forces[:,i] = -np.sum(
@@ -219,7 +215,6 @@ class Particles:
     #     self.grid.potential_notelec = potential_energy
 
     def ComputeForce(self, grid, prev):
-        raise
         L = grid.L
         h = grid.h
 

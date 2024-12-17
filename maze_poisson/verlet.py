@@ -42,6 +42,7 @@ def VerletSolutePart2(grid, prev=False):
 
     if elec:
         particles.ComputeForce_FD_Q(prev=prev)
+        # particles.ComputeForce_FD(prev=prev)
 
     particles.vel = particles.vel + 0.5 * dt * (particles.forces + particles.forces_notelec) / particles.masses[:, np.newaxis]
     
@@ -115,6 +116,7 @@ def OVRVO_part2(grid, prev=False, thermostat=False):
 
     if grid.elec:
         grid.particles.ComputeForce_FD_Q(prev=prev)
+        # grid.particles.ComputeForce_FD(prev=prev)
 
     grid.particles.vel = V_block(grid.particles.vel, grid.particles.forces + grid.particles.forces_notelec, grid.particles.masses, gamma_sim, dt)
     grid.particles.vel = O_block(N_p, grid.particles.vel, grid.particles.masses, gamma_sim, dt, kBT)
@@ -158,27 +160,11 @@ from .c_api import (fft_solve, init_fft, init_rfft,  # c_fftw_3d, c_ifftw_3d,
 
 
 def VerletPoisson_Q(grid):
-    # h = grid.h
-
-    # compute provisional update for the field phi
-    # tmp = np.copy(grid.phi_q)
-    # grid.phi_q = 2 * grid.phi_q - grid.phi_prev_q
-    # grid.phi_prev_q = tmp
-
-    grid.phi_prev_q = grid.phi_q
-
-    # qq = np.empty_like(grid.phi_q, dtype=np.complex128)
-    rfft_3d(grid.N, grid.q, grid.qq)
-    # grid.qq = np.fft.rfftn(grid.q)
-    # print(qq.shape)
-    grid.phi_q = grid.ig2 * grid.qq
-    # grid.phi_q = 4*np.pi * grid.ig2 * grid.qq
-
+    grid.calculate_phi_q()
 
 
 # apply Verlet algorithm to compute the updated value of the field phi, with LCG + SHAKE
 def VerletPoisson(grid, y):
-    raise
     tol = grid.md_variables.tol
     h = grid.h
 
@@ -211,17 +197,17 @@ def VerletPoisson(grid, y):
 
     ####################################################
     ### Using real ffts with padded double grid
-    N = sigma_p.shape[0]
-    b = np.zeros((2*N, 2*N, 2*N))
-    b[::2, ::2, ::2] = sigma_p
+    # N = sigma_p.shape[0]
+    # b = np.zeros((2*N, 2*N, 2*N))
+    # b[::2, ::2, ::2] = sigma_p
 
-    # y_fft = np.fft.irfftn(np.fft.rfftn(b) * grid.ig2_r2, s=b.shape).real #.flatten()
+    # # y_fft = np.fft.irfftn(np.fft.rfftn(b) * grid.ig2_r2, s=b.shape).real #.flatten()
 
-    y_fft = np.empty_like(b)
-    init_rfft(b.shape[0])
-    fft_solve_r(b.shape[0], b, grid.ig2_r2, y_fft)
+    # y_fft = np.empty_like(b)
+    # init_rfft(b.shape[0])
+    # fft_solve_r(b.shape[0], b, grid.ig2_r2, y_fft)
 
-    y_fft = y_fft[::2, ::2, ::2]
+    # y_fft = y_fft[::2, ::2, ::2]
     ####################################################
 
     ####################################################
@@ -246,7 +232,7 @@ def VerletPoisson(grid, y):
     # Using results of fft (with possible mixing)
     # beta = 0.05
     # y_fft = y*beta + y_fft*(1-beta)
-    y_new, iter_conv = y_fft, -1
+    # y_new, iter_conv = y_fft, -1
     ####################################################
 
     ####################################################
@@ -256,7 +242,7 @@ def VerletPoisson(grid, y):
 
     ####################################################
     # Using LCG only
-    # y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
+    y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
     ####################################################
 
     # prec = np.linalg.norm(MatrixVectorProduct_manual(y_fft) - sigma_p)
@@ -369,12 +355,12 @@ PrecondLinearConjGradPoisson = PrecondLinearConjGradPoisson_C
 # PrecondLinearConjGradPoisson = PrecondLinearConjGradPoisson_scipy
 # PrecondLinearConjGradPoisson = PrecondLinearConjGradPoisson_OLD
 
-def PrecondLinearConjGradPoisson_Q(b, grid):
-    """Solves \\nabla^2 x = b in reciprocal space"""
-    # qq = np.empty_like(grid.phi_q, dtype=np.complex128)
-    rfft_3d(grid.N, b, grid.qq)
-    # y = np.fft.rfftn(b)
-    return grid.qq * grid.mig2
+# def PrecondLinearConjGradPoisson_Q(b, grid):
+#     """Solves \\nabla^2 x = b in reciprocal space"""
+#     # qq = np.empty_like(grid.phi_q, dtype=np.complex128)
+#     rfft_3d(grid.N, b, grid.qq)
+#     # y = np.fft.rfftn(b)
+#     return grid.qq * grid.mig2
 
 
 

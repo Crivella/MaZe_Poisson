@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+from . import c_api
 from .constants import a0, conv_mass, kB
 from .loggers import logger
 from .output_md import generate_output_files
@@ -38,8 +39,6 @@ class Grid:
         
         self.output_files = generate_output_files(self, md_variables)
 
-        self.particles = [] # list of class instances of class particle
-        
         if output_settings.restart == False: # if False then it starts from a good initial config (BCC lattice) - i.e from an input file.
             df = pd.read_csv(grid_setting.input_file) # from file
             print('START new simulation from file:' + grid_setting.input_file)
@@ -71,45 +70,46 @@ class Grid:
         # self.phi = np.zeros(self.shape, dtype=float)          # electrostatic field updated with MaZe
         # self.phi_prev = np.zeros(self.shape, dtype=float)     # electrostatic field for step t - 1 Verlet
         self.shape2 = (self.N, self.N, self.N//2 + 1)
+        self.phi_r = np.zeros(self.shape, dtype=np.float64)          # electrostatic field updated with MaZe
         self.phi_q = np.zeros(self.shape2, dtype=np.complex128)          # electrostatic field updated with MaZe
-        self.phi_prev_q = np.zeros(self.shape2, dtype=np.complex128)     # electrostatic field for step t - 1 Verlet
+        # self.phi_prev_q = np.zeros(self.shape2, dtype=np.complex128)     # electrostatic field for step t - 1 Verlet
         self.linked_cell = None
         self.energy = 0
         self.temperature = md_variables.T
         self.potential_notelec = 0
 
         # Grids for FFT
-        d = 1
-        # d = grid_setting.L_ang / grid_setting.N
-        d = self.h  # in a.u
         # d = self.h * a0  # in Angstrom
+        d = self.h  # in a.u
 
         freqs = np.fft.fftfreq(self.N, d=d) * 2 * np.pi
         freqs_r = np.fft.rfftfreq(self.N, d=d) * 2 * np.pi
-        # n2 = self.N // 2
-        # freqs = np.roll(np.arange(-n2, n2 + self.N % 2), -n2) * 2 * np.pi / self.L
-        # freqs_r = np.arange(n2 + 1) * 2 * np.pi / self.L
-        # print(freqs)
         gx, gy, gz = np.meshgrid(freqs, freqs, freqs_r, indexing='ij')
-
-        # freqs2 = np.fft.fftfreq(self.N*2, d=d) * 2 * np.pi
-        # freqs2_r = np.fft.rfftfreq(self.N*2, d=d) * 2 * np.pi
-        # gx, gy, gz = np.meshgrid(freqs2, freqs2, freqs2_r, indexing='ij')
-
         g2 = gx**2 + gy**2 + gz**2
         g2[0, 0, 0] = 1  # to avoid division by zero
-        self.igx = 1j * gx
-        self.igy = 1j * gy
-        self.igz = 1j * gz
-        # self.g2 = g2
-        self.ig2 = 1 / g2
-        self.mig2 = - self.ig2
-        # self.ig2 *= 4*np.pi / self.h
-        self.ig2 *= 4*np.pi / self.h**3
-        del g2
 
-        self.fq = np.empty_like(self.q, dtype=np.float64)
-        self.qq = np.empty_like(self.phi_q, dtype=np.complex128)
+        self.q_const = 4 * np.pi / self.h**3
+        self.ig2 = self.q_const / g2
+        del g2, gx, gy, gz
+
+        self.phi_q_updated = False
+        self.phi_updated = False
+
+    def calculate_phi_q(self):
+        if not self.phi_q_updated:
+            c_api.rfft_3d(self.N, self.q, self.phi_q)
+            self.phi_q *= self.ig2
+            self.phi_q_updated = True
+            self.phi_updated = False
+        return self.phi_q
+
+    def calculate_phi(self):
+        if not self.phi_updated:
+            self.phi_updated = True
+            c_api.irfft_3d(self.N, self.phi_q, self.phi_r)
+        return self.phi_r
+        # self.phi = self.fq
+
     
     def RescaleVelocities(self):
         init_vel_Na = np.zeros(3)
@@ -256,6 +256,8 @@ class Grid:
   
         q_tot_expected = np.sum(self.particles.charges)
         q_tot = np.sum(self.q)
+
+        self.phi_q_updated = False
 
         if q_tot + 1e-6 < q_tot_expected:
             logger.error('Error: change initial position, charge is not preserved: q_tot ='+str(q_tot))

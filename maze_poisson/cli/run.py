@@ -39,7 +39,6 @@ def main_maze_md_q(filename):
     _main_maze_md_q(gs, os, ms)
 
 def _main_maze_md(*args):
-    raise
     from .runners.main_Maze_md import main as main_Maze_md
     main_Maze_md(*args)
 

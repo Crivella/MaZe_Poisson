@@ -12,8 +12,7 @@ from ...constants import a0, density, t_au
 from ...grid import *
 from ...loggers import logger
 from ...restart import generate_restart
-from ...verlet import (OVRVO_part1, OVRVO_part2,
-                       PrecondLinearConjGradPoisson_Q, VerletPoisson_Q,
+from ...verlet import (OVRVO_part1, OVRVO_part2, VerletPoisson_Q,
                        VerletSolutePart1, VerletSolutePart2)
 
 
@@ -86,7 +85,9 @@ def main(grid_setting, output_settings, md_variables):
     # initialize the electrostatic field with CG                  
     if preconditioning == "Yes":
         #logger.info('Preconditioning being done for elec field')
-        grid.phi_prev_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q / h**3, grid)
+        grid.calculate_phi_q()
+        # grid.phi_prev_q = np.copy(grid.qq)
+        # grid.phi_prev_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q / h**3, grid)
         # grid.phi_prev_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q, grid)
 
     if not_elec:
@@ -94,7 +95,7 @@ def main(grid_setting, output_settings, md_variables):
         #logger.info('Non_elec force being computed')
 
     if elec:
-        grid.particles.ComputeForce_FD_Q(prev=True) 
+        grid.particles.ComputeForce_FD_Q() 
         #logger.info('Elec force being computed')
     
     else:
@@ -121,7 +122,9 @@ def main(grid_setting, output_settings, md_variables):
     #logger.info("Charges set with weight function")
         
     if preconditioning == "Yes":
-        grid.phi_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q / h**3, grid)
+        grid.calculate_phi_q()
+        # grid.phi_q = np.copy(grid.qq)
+        # grid.phi_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q / h**3, grid)
         # grid.phi_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q, grid)
 
     if md_variables.integrator == 'OVRVO':
