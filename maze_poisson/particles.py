@@ -71,7 +71,6 @@ class Particles:
     # Currently using this one
     @profile 
     def ComputeForce_FD(self, prev):
-        raise
         h = self.grid.h
 
         # Choose the appropriate potential
@@ -99,31 +98,11 @@ class Particles:
         self.grid.q_tot = np.sum(q_neighbors)  # Scalar
 
     def ComputeForce_FD_Q(self, prev):
-        h = self.grid.h * a0 # h in angstrom
+        h = self.grid.h # h in angstrom
         N = self.grid.N
 
         # Choose the appropriate potential
         phi_v_q = self.grid.phi_prev_q if prev else self.grid.phi_q
-
-        #####################################################################################
-        # # Precompute electric field components (central difference approximation)
-        # E_x = (np.roll(phi_v, -1, axis=0) - np.roll(phi_v, 1, axis=0)) / (2 * h)
-        # E_y = (np.roll(phi_v, -1, axis=1) - np.roll(phi_v, 1, axis=1)) / (2 * h)
-        # E_z = (np.roll(phi_v, -1, axis=2) - np.roll(phi_v, 1, axis=2)) / (2 * h)
-
-        # # Electric field at neighbor points for all particles (Shape: (n_particles, 8, 3))
-        # neighbors = self.neighbors  # Shape: (n_particles, 8, 3)
-        # q_neighbors = self.grid.q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]  # Shape: (n_particles, 8)
-
-        # E_neighbors = np.stack([
-        #     E_x[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
-        #     E_y[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
-        #     E_z[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
-        # ], axis=-1)  # Shape: (n_particles, 8, 3)
-
-        # # Compute the forces (sum contributions from 8 neighbors)
-        # self.forces = -np.sum(q_neighbors[:, :, np.newaxis] * E_neighbors, axis=1) / a0  # Shape: (n_particles, 3)
-        #####################################################################################
 
         # Electric field at neighbor points for all particles (Shape: (n_particles, 8, 3))
         neighbors = self.neighbors  # Shape: (n_particles, 8, 3)
@@ -136,7 +115,6 @@ class Particles:
         #     self.forces[:,i] = -np.sum(
         #         q_neighbors * tmp[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]], axis=1
         #         ) # / a0
-        #### MAYBE problem due to grid being defined with endpoint???
 
         # E from finite difference on phi(r) (phi'_{n} = (phi_{n+1} - phi_{n-1}) / 2h)
         irfft_3d(N, phi_v_q, self.grid.fq)
@@ -145,7 +123,7 @@ class Particles:
             E = (np.roll(phi, -1, axis=i) - np.roll(phi, 1, axis=i)) / (2 * h)
             self.forces[:,i] = -np.sum(
                 q_neighbors * E[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]], axis=1
-                ) #/ a0 # a0 here for h -> h_ang
+                ) # / a0 # a0 here for h -> h_ang
 
         # Compute total charge contribution (optional)
         self.grid.q_tot = np.sum(q_neighbors)  # Scalar
@@ -239,38 +217,6 @@ class Particles:
 
     #     potential_energy /= 2
     #     self.grid.potential_notelec = potential_energy
-
-    # # Test with KDTree + sparse matrix WIP!!!
-    # def _ComputeTFForces(self):
-    #     tree = KDTree(self.pos, boxsize=self.grid.L)
-    #     r_mag = tree.sparse_distance_matrix(tree, self.r_cutoff, output_type='coo_matrix')
-    #     print(r_mag.row)
-    #     for i in range(self.N_p):
-    #         r_mag[i, i] = np.inf
-    #     # print((self.pos[r_mag.row] - self.pos[r_mag.col]).shape)
-    #     # print(r_mag.row.shape)
-    #     # print(r_mag.col.shape)
-    #     # exit()
-    #     r_diff = self.pos[r_mag.row] - self.pos[r_mag.col]
-    #     r_cap = r_diff / r_mag.data[:, np.newaxis]
-    #     # print(type(r_diff))
-    #     # get pair indexes from sparse matrix
-    #     # r_mag = r_diff.tocoo()
-    #     print(r_mag.shape)
-    #     print(r_diff.shape)
-    #     # exit()
-    #     r_mag = np.linalg.norm(r_diff, axis=2)
-
-
-    #     charges_sum = self.charges[:, np.newaxis] + self.charges
-    #     A = np.vectorize(lambda q: self.tf_params[q][0])(charges_sum)
-    #     C = np.vectorize(lambda q: self.tf_params[q][1])(charges_sum)
-    #     D = np.vectorize(lambda q: self.tf_params[q][2])(charges_sum)
-    #     sigma_TF = np.vectorize(lambda q: self.tf_params[q][3])(charges_sum)
-
-    #     V_shift = A * np.exp(self.B * (sigma_TF - self.r_cutoff)) - C / self.r_cutoff**6 - D / self
-
-
 
     def ComputeForce(self, grid, prev):
         raise

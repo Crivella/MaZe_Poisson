@@ -57,7 +57,11 @@ def main(grid_setting, output_settings, md_variables):
     logger.info(f'Simulation with N_p = {N_p}, N = {N} with N_steps = {N_steps} and tol = {md_variables.tol}')
     logger.info(f'Initialization is done with CG and preconditioning: {preconditioning}')
     logger.info(f'Parameters: h = {h}')
-    logger.info(f'Parameters: h [A] = {h_ang} A \ndt = {dt_fs} fs \nstride = {stride} \nL = {L_ang} A \ngamma = {md_variables.gamma}')
+    logger.info(f'Parameters: h [A] = {h_ang} A')
+    logger.info(f'dt = {dt_fs} fs')
+    logger.info(f'stride = {stride}')
+    logger.info(f'L = {L_ang} A')
+    logger.info(f'gamma = {md_variables.gamma}')
     logger.info(f'Potential: {md_variables.potential}')
     logger.info(f'Elec: {elec} \tNotElec: {not_elec}')
     logger.info(f'Temperature: {T} K \tDensity: {density} g/cm3.')
@@ -82,7 +86,7 @@ def main(grid_setting, output_settings, md_variables):
     # initialize the electrostatic field with CG                  
     if preconditioning == "Yes":
         #logger.info('Preconditioning being done for elec field')
-        grid.phi_prev_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q / h, grid)
+        grid.phi_prev_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q / h**3, grid)
         # grid.phi_prev_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q, grid)
 
     if not_elec:
@@ -117,7 +121,7 @@ def main(grid_setting, output_settings, md_variables):
     #logger.info("Charges set with weight function")
         
     if preconditioning == "Yes":
-        grid.phi_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q / h, grid)
+        grid.phi_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q / h**3, grid)
         # grid.phi_q = PrecondLinearConjGradPoisson_Q(- 4 * np.pi * grid.q, grid)
 
     if md_variables.integrator == 'OVRVO':

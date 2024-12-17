@@ -26,7 +26,7 @@ def VerletSolutePart1(grid, thermostat=False):
 
     particles.vel = particles.vel + 0.5 * dt * ((particles.forces + particles.forces_notelec) / particles.masses[:, np.newaxis])
     particles.pos = particles.pos + particles.vel * dt 
-    particles.pos = particles.pos - L * np.floor(particles.pos / L)  
+    particles.pos = particles.pos % L  
 
     return particles
 
@@ -53,9 +53,9 @@ def VerletSolutePart2(grid, prev=False):
 def O_block(N_p, v, m, gamma, dt, kBT):
     c1 = exp(-gamma*dt)
     rnd = np.random.multivariate_normal(
-    mean=[0.0, 0.0, 0.0],
-    cov=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-    size=N_p
+        mean=[0.0, 0.0, 0.0],
+        cov=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+        size=N_p
     )
 
     v_t_dt = np.sqrt(c1) * v + np.sqrt((1 - c1) * kBT / m[:, np.newaxis]) * rnd
@@ -78,7 +78,7 @@ def R_block(x,v, gamma, dt, L):
         c2 = np.sqrt(2 /(gamma * dt) * tanh(0.5 * gamma * dt)) 
 
     x_t_dt = x + c2 * dt * v
-    x_t_dt = x_t_dt - L * np.floor(x_t_dt / L)   
+    x_t_dt = x_t_dt % L  
     return x_t_dt
 
 @profile

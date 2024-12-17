@@ -83,46 +83,29 @@ class Grid:
         # d = grid_setting.L_ang / grid_setting.N
         d = self.h  # in a.u
         # d = self.h * a0  # in Angstrom
-# 
-
-        # freqs = np.fft.fftfreq(self.N, d=d) * 2 * np.pi
-        # freqs_r = np.fft.rfftfreq(self.N, d=d) * 2 * np.pi
-        # gx, gy, gz = np.meshgrid(freqs, freqs, freqs_r, indexing='ij')
-        # g2 = gx**2 + gy**2 + gz**2
-        # g2[0, 0, 0] = 1  # to avoid division by zero
-        # # g2 *= 4 * np.pi
-        # self.ig2_r = -1 / g2
-        # self.gx = gx
-        # self.gy = gy
-        # self.gz = gz
 
         freqs = np.fft.fftfreq(self.N, d=d) * 2 * np.pi
         freqs_r = np.fft.rfftfreq(self.N, d=d) * 2 * np.pi
         # n2 = self.N // 2
         # freqs = np.roll(np.arange(-n2, n2 + self.N % 2), -n2) * 2 * np.pi / self.L
         # freqs_r = np.arange(n2 + 1) * 2 * np.pi / self.L
-        print(freqs)
-        # print(2*np.pi*np.arange(N//2+1)/L)
+        # print(freqs)
         gx, gy, gz = np.meshgrid(freqs, freqs, freqs_r, indexing='ij')
-        g2 = gx**2 + gy**2 + gz**2
-        g2[0, 0, 0] = 1  # to avoid division by zero
-        # self.g2 = g2
-        # self.ig2 = 1 / g2
 
         # freqs2 = np.fft.fftfreq(self.N*2, d=d) * 2 * np.pi
         # freqs2_r = np.fft.rfftfreq(self.N*2, d=d) * 2 * np.pi
         # gx, gy, gz = np.meshgrid(freqs2, freqs2, freqs2_r, indexing='ij')
-        # g2 = gx**2 + gy**2 + gz**2
-        # g2[0, 0, 0] = 1  # to avoid division by zero
-        # self.ig2_r2 = -1 / g2
 
+        g2 = gx**2 + gy**2 + gz**2
+        g2[0, 0, 0] = 1  # to avoid division by zero
         self.igx = 1j * gx
         self.igy = 1j * gy
         self.igz = 1j * gz
         # self.g2 = g2
         self.ig2 = 1 / g2
         self.mig2 = - self.ig2
-        self.ig2 *= 4*np.pi / self.h
+        # self.ig2 *= 4*np.pi / self.h
+        self.ig2 *= 4*np.pi / self.h**3
         del g2
 
         self.fq = np.empty_like(self.q, dtype=np.float64)
