@@ -29,7 +29,6 @@ def main(grid_setting, output_settings, md_variables):
     N_p = grid_setting.N_p
     h_ang = L_ang/N
 
-    print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
     init_rfft(N)
 
     T = md_variables.T

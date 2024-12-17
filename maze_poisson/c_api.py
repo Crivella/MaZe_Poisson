@@ -27,7 +27,7 @@ try:
     c_init_fftw_omp.restype = None
     c_init_fftw_omp.argtypes = []
 except:
-    logger.warning("C +Interface to FFTW not available. Using numpy instead.")
+    logger.warning("C Interface to FFTW not available. Using numpy instead.")
     init_fftw_omp = lambda: None
     init_fft = lambda n: None
     init_rfft = lambda n: None

@@ -155,8 +155,8 @@ def MatrixVectorProduct_manual(v):
 
 MatrixVectorProduct = MatrixVectorProduct_C
 
-from .c_api import (fft_solve, init_fft, init_rfft,  # c_fftw_3d, c_ifftw_3d,
-                    rfft_solve)
+# from .c_api import (fft_solve, init_fft, init_rfft,  # c_fftw_3d, c_ifftw_3d,
+#                     rfft_solve)
 
 
 def VerletPoisson_Q(grid):
