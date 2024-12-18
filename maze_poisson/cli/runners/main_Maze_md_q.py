@@ -94,7 +94,7 @@ def main(grid_setting, output_settings, md_variables):
         #logger.info('Non_elec force being computed')
 
     if elec:
-        grid.particles.ComputeForce_FD_Q() 
+        grid.particles.ComputeForce_FD(prev=True)
         #logger.info('Elec force being computed')
     
     else:

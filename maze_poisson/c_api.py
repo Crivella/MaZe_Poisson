@@ -35,6 +35,8 @@ except:
     ifft_3d = lambda n, in_, out: np.fft.ifftn(in_, out=out)
     rfft_3d = lambda n, in_, out: np.fft.rfftn(in_, out=out)
     irfft_3d = lambda n, in_, out: np.fft.irfftn(in_, out=out)
+    fft_solve = lambda n, in_, ig2, out: np.fft.fftn(np.fft.ifftn(in_) * ig2, out=out, s=in_.shape)
+    rfft_solve = lambda n, in_, ig2, out: np.fft.irfftn(np.fft.rfftn(in_) * ig2, out=out, s=in_.shape)
 else:
     logger.info("C_API: Interface to FFTW available")
     c_init_fftw_omp()

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from ...c_api import init_rfft
 from ...constants import a0, density, t_au
 from ...grid import *
 from ...loggers import logger

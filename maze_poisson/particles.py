@@ -64,9 +64,9 @@ class Particles:
 
             self.neighbors[n] = neigh_indices
             
-    # Currently using this one
+
     @profile
-    def ComputeForce_FD(self, prev):
+    def ComputeForce_FD_R(self, prev):
         h = self.grid.h
 
         # Choose the appropriate potential
@@ -123,6 +123,61 @@ class Particles:
 
         # Compute total charge contribution (optional)
         self.grid.q_tot = np.sum(q_neighbors)  # Scalar
+
+    # def ComputeForce_FD_Q2(self, prev=False):
+    #     h = self.grid.h # h in angstrom
+    #     N = self.grid.N
+
+    #     # Choose the appropriate potential
+    #     # phi_v_q = self.grid.phi_q
+
+    #     # Electric field at neighbor points for all particles (Shape: (n_particles, 8, 3))
+    #     neighbors = self.neighbors  # Shape: (n_particles, 8, 3)
+    #     q_neighbors = self.grid.q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]  # Shape: (n_particles, 8)
+
+    #     phi_q = self.grid.phi_q
+    #     E_mid_x = np.fft.ifft(phi_q * self.grid.igx, axis=0)
+    #     E_mid_x = np.fft.ifft(E_mid_x, axis=1)
+        
+    #     E_mid_y = np.fft.ifft(phi_q * self.grid.igy, axis=0)
+    #     E_mid_y = np.fft.ifft(E_mid_y, axis=1)
+
+    #     E_mid_z = np.fft.ifft(phi_q * self.grid.igz, axis=0)
+    #     E_mid_z = np.fft.ifft(E_mid_z, axis=1)
+
+    #     E_x_mem = {}
+    #     E_y_mem = {}
+    #     E_z_mem = {}
+    #     for n_part, neigh in enumerate(neighbors):
+    #         self.forces[n_part,:] = 0
+    #         # print('#'*90)
+    #         # print(self.forces.shape)
+            
+    #         zeds = []
+    #         E = np.empty((0,3))
+    #         for idx_x, idx_y, idx_z in neigh:
+    #             key = (idx_x, idx_y)
+    #             zeds.append(idx_z)
+    #             if key not in E_x_mem:
+    #                 E_x_mem[key] = np.fft.irfft(E_mid_x[idx_x, idx_y, :], N)
+    #                 E_y_mem[key] = np.fft.irfft(E_mid_y[idx_x, idx_y, :], N)
+    #                 E_z_mem[key] = np.fft.irfft(E_mid_z[idx_x, idx_y, :], N)
+    #             E = np.vstack((
+    #                 E, [
+    #                     E_x_mem[key][idx_z],
+    #                     E_y_mem[key][idx_z],
+    #                     E_z_mem[key][idx_z]
+    #                 ]
+    #             ))
+
+    #         self.forces[n_part] += np.sum(q_neighbors[n_part].reshape(8,1) * E, axis=0)
+
+    #     # Compute total charge contribution (optional)
+    #     self.grid.q_tot = np.sum(q_neighbors)  # Scalar
+
+    # Currently using this one
+    ComputeForce_FD = ComputeForce_FD_R
+    # ComputeForce_FD = ComputeForce_FD_Q
     
 
     def ComputeTFForces(self):

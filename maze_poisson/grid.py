@@ -67,8 +67,8 @@ class Grid:
 
         self.shape = (self.N,)*3
         self.q = np.zeros(self.shape, dtype=float)          # charge vector - q for every grid point
-        # self.phi = np.zeros(self.shape, dtype=float)          # electrostatic field updated with MaZe
-        # self.phi_prev = np.zeros(self.shape, dtype=float)     # electrostatic field for step t - 1 Verlet
+        self.phi = np.zeros(self.shape, dtype=float)          # electrostatic field updated with MaZe
+        self.phi_prev = np.zeros(self.shape, dtype=float)     # electrostatic field for step t - 1 Verlet
         self.shape2 = (self.N, self.N, self.N//2 + 1)
         self.phi_r = np.zeros(self.shape, dtype=np.float64)          # electrostatic field updated with MaZe
         self.phi_q = np.zeros(self.shape2, dtype=np.complex128)          # electrostatic field updated with MaZe
@@ -89,6 +89,9 @@ class Grid:
         g2[0, 0, 0] = 1  # to avoid division by zero
 
         self.q_const = 4 * np.pi / self.h**3
+        # self.igx = 1j * gx
+        # self.igy = 1j * gy
+        # self.igz = 1j * gz
         self.ig2 = self.q_const / g2
         del g2, gx, gy, gz
 

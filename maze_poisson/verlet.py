@@ -41,8 +41,8 @@ def VerletSolutePart2(grid, prev=False):
         particles.ComputeForceNotElec()
 
     if elec:
-        particles.ComputeForce_FD_Q(prev=prev)
-        # particles.ComputeForce_FD(prev=prev)
+        # particles.ComputeForce_FD_Q(prev=prev)
+        particles.ComputeForce_FD(prev=prev)
 
     particles.vel = particles.vel + 0.5 * dt * (particles.forces + particles.forces_notelec) / particles.masses[:, np.newaxis]
     
@@ -115,8 +115,8 @@ def OVRVO_part2(grid, prev=False, thermostat=False):
         grid.particles.ComputeForceNotElec()
 
     if grid.elec:
-        grid.particles.ComputeForce_FD_Q(prev=prev)
-        # grid.particles.ComputeForce_FD(prev=prev)
+        # grid.particles.ComputeForce_FD_Q(prev=prev)
+        grid.particles.ComputeForce_FD(prev=prev)
 
     grid.particles.vel = V_block(grid.particles.vel, grid.particles.forces + grid.particles.forces_notelec, grid.particles.masses, gamma_sim, dt)
     grid.particles.vel = O_block(N_p, grid.particles.vel, grid.particles.masses, gamma_sim, dt, kBT)
@@ -155,127 +155,53 @@ def MatrixVectorProduct_manual(v):
 
 MatrixVectorProduct = MatrixVectorProduct_C
 
-# from .c_api import (fft_solve, init_fft, init_rfft,  # c_fftw_3d, c_ifftw_3d,
-#                     rfft_solve)
+from . import c_api
 
 
 def VerletPoisson_Q(grid):
     grid.calculate_phi_q()
 
-
 # apply Verlet algorithm to compute the updated value of the field phi, with LCG + SHAKE
 def VerletPoisson(grid, y):
-    tol = grid.md_variables.tol
-    h = grid.h
-
-    # compute provisional update for the field phi
-    tmp = np.copy(grid.phi)
-    grid.phi = 2 * grid.phi - grid.phi_prev
-    grid.phi_prev = tmp
-
-    # compute the constraint with the provisional value of the field phi
-    matrixmult = MatrixVectorProduct(grid.phi)
-    sigma_p = grid.q / h + matrixmult / (4 * np.pi) # M @ grid.phi for row-by-column product
-
-    # apply LCG
-    ### Using Padded ffts
-    # pad = 31
-    # inp = np.pad(sigma_p, pad, mode='wrap')
-    # app = np.fft.fftn(inp)
-    # freqs = np.fft.fftfreq(sigma_p.shape[0] + 2*pad, d=1) * 2 * np.pi
-    # gx, gy, gz = np.meshgrid(freqs, freqs, freqs, indexing='ij')
-    # g2 = gx**2 + gy**2 + gz**2
-    # g2[0,0,0] = 1
-    # app = app / (-g2)
-    # y_fft = -np.fft.ifftn(app).real #.flatten()
-    # y_fft_pad = y_fft[pad:-pad, pad:-pad, pad:-pad]
-
     ####################################################
-    ### Using real ffts
-    # y_fft = np.fft.irfftn(np.fft.rfftn(sigma_p) * grid.ig2_r, s=sigma_p.shape).real #.flatten()
-    ####################################################
-
-    ####################################################
-    ### Using real ffts with padded double grid
-    # N = sigma_p.shape[0]
-    # b = np.zeros((2*N, 2*N, 2*N))
-    # b[::2, ::2, ::2] = sigma_p
-
-    # # y_fft = np.fft.irfftn(np.fft.rfftn(b) * grid.ig2_r2, s=b.shape).real #.flatten()
-
-    # y_fft = np.empty_like(b)
-    # init_rfft(b.shape[0])
-    # fft_solve_r(b.shape[0], b, grid.ig2_r2, y_fft)
-
-    # y_fft = y_fft[::2, ::2, ::2]
-    ####################################################
-
-    ####################################################
-    # Using C implementation of fft
-    # y_fft = np.empty_like(sigma_p)
-
-    # # c_init_fftw_c(sigma_p.shape[0])
-    # # c_ffft_solve(sigma_p.shape[0], sigma_p, grid.ig2, y_fft)
-
-    # c_init_fftw_r(sigma_p.shape[0])
-    # c_ffft_solve_r(sigma_p.shape[0], sigma_p, grid.ig2_r, y_fft)
-    ####################################################
-
-
-    ####################################################
-    ### Using standard ffts
-    # app = np.fft.fftn(sigma_p) * grid.ig2
-    # y_fft = -np.abs(np.fft.ifftn(app, s=sigma_p.shape)).real #.flatten()
-    ####################################################
-
-    ####################################################
-    # Using results of fft (with possible mixing)
-    # beta = 0.05
-    # y_fft = y*beta + y_fft*(1-beta)
-    # y_new, iter_conv = y_fft, -1
-    ####################################################
-
-    ####################################################
-    # Using LCG on top of FFT
-    # y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=np.array(y_fft), tol=tol)
+    # Using Real FFT
+    c_api.init_rfft(grid.N)
+    c_api.rfft_solve(grid.N, grid.q, grid.ig2, grid.phi)
+    # grid.phi_prev = np.copy(grid.phi)
+    # grid.phi = np.fft.irfftn(np.fft.rfftn(grid.q) * grid.ig2, s=grid.q.shape)
+    # # if np.any(np.abs(grid.phi.imag) > 1E-8):
+    # #     raise ValueError('Imaginary part in phi')
+    # grid.phi = grid.phi.real
+    iter_conv = 1
+    y_new = 1
     ####################################################
 
     ####################################################
     # Using LCG only
-    y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
+    # tol = grid.md_variables.tol
+    # h = grid.h
+    # tmp = np.copy(grid.phi)
+    # grid.phi = 2 * grid.phi - grid.phi_prev
+    # grid.phi_prev = tmp
+
+    # compute the constraint with the provisional value of the field phi
+    # matrixmult = MatrixVectorProduct(grid.phi)
+    # sigma_p = grid.q / h + matrixmult / (4 * np.pi) # M @ grid.phi for row-by-column product
+
+    # y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
+    # scale the field with the constrained 'force' term
+    # grid.phi -= y_new * (4 * np.pi)
+
+    # if grid.debug:
+    #     matrixmult1 = MatrixVectorProduct(y_new)
+    #     print('LCG precision     :',np.max(np.abs(matrixmult1 - sigma_p)))
+        
+    #     matrixmult2 = MatrixVectorProduct(grid.phi)
+    #     sigma_p1 = grid.q / h + matrixmult2 / (4 * np.pi) # M @ grid.phi for row-by-column product
+    
+    #     print('max of constraint: ', np.max(np.abs(sigma_p1)),'\n')
     ####################################################
 
-    # prec = np.linalg.norm(MatrixVectorProduct_manual(y_fft) - sigma_p)
-    # if prec > 2:
-    #     y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y_fft, tol=tol)
-    # else:
-    #     # print('FFT precision: ' , prec)
-    #     iter_conv = -1
-    #     y_new = y_fft
-
-    # y_fft_rescale = np.copy(y_fft)
-    # y_fft_rescale -= np.min(y_fft_rescale)
-    # y_fft_rescale *= (np.max(y_new) - np.min(y_new)) / np.max(y_fft_rescale)
-    # y_fft_rescale += np.min(y_new)
-
-    # print('FFT-LCG:',        np.linalg.norm(y_new - y_fft))
-    # # print('FFT-pad precision: ', np.linalg.norm(MatrixVectorProduct_manual(y_fft_pad) - sigma_p))
-    # print('FFT precision: ', np.linalg.norm(MatrixVectorProduct_manual(y_fft) - sigma_p))
-    # print('FFT-rescale precision: ', np.linalg.norm(MatrixVectorProduct_manual(y_fft_rescale) - sigma_p))
-    # print('LCG precision: ', np.linalg.norm(MatrixVectorProduct(y_new) - sigma_p))
-    
-    # scale the field with the constrained 'force' term
-    grid.phi -= y_new * (4 * np.pi)
-
-    if grid.debug:
-        matrixmult1 = MatrixVectorProduct(y_new)
-        print('LCG precision     :',np.max(np.abs(matrixmult1 - sigma_p)))
-        
-        matrixmult2 = MatrixVectorProduct(grid.phi)
-        sigma_p1 = grid.q / h + matrixmult2 / (4 * np.pi) # M @ grid.phi for row-by-column product
-    
-        print('max of constraint: ', np.max(np.abs(sigma_p1)),'\n')
-    
     return grid, y_new, iter_conv
 
 def PrecondLinearConjGradPoisson_scipy(b, x0 = None, tol=1e-7):
