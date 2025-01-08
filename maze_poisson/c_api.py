@@ -166,6 +166,19 @@ c_conj_grad.argtypes = [
     ctypes.c_int
 ]
 
+# void compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, long int *neighbors, double *forces)
+c_compute_force_fd = library.compute_force_fd
+c_compute_force_fd.restype = None
+c_compute_force_fd.argtypes = [
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_double,
+    npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    npct.ndpointer(dtype=np.int64, ndim=3, flags='C_CONTIGUOUS'),
+    npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+]
+
 # Enable Ctrl-C to interrupt the C code
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 

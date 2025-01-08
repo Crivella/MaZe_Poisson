@@ -54,6 +54,7 @@ endif()
 # Create the shared library
 add_library(maze_poisson SHARED
     laplace.c
+    forces.c
     # fftw_wrap.c
 )
 
