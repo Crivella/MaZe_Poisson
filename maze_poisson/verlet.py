@@ -165,32 +165,32 @@ def VerletPoisson_Q(grid):
 def VerletPoisson(grid, y):
     ####################################################
     # Using Real FFT
-    c_api.init_rfft(grid.N)
-    c_api.rfft_solve(grid.N, grid.q, grid.ig2, grid.phi)
-    # grid.phi_prev = np.copy(grid.phi)
-    # grid.phi = np.fft.irfftn(np.fft.rfftn(grid.q) * grid.ig2, s=grid.q.shape)
-    # # if np.any(np.abs(grid.phi.imag) > 1E-8):
-    # #     raise ValueError('Imaginary part in phi')
-    # grid.phi = grid.phi.real
-    iter_conv = 1
-    y_new = 1
+    # c_api.init_rfft(grid.N)
+    # c_api.rfft_solve(grid.N, grid.q, grid.ig2, grid.phi)
+    # # grid.phi_prev = np.copy(grid.phi)
+    # # grid.phi = np.fft.irfftn(np.fft.rfftn(grid.q) * grid.ig2, s=grid.q.shape)
+    # # # if np.any(np.abs(grid.phi.imag) > 1E-8):
+    # # #     raise ValueError('Imaginary part in phi')
+    # # grid.phi = grid.phi.real
+    # iter_conv = 1
+    # y_new = 1
     ####################################################
 
     ####################################################
     # Using LCG only
-    # tol = grid.md_variables.tol
-    # h = grid.h
-    # tmp = np.copy(grid.phi)
-    # grid.phi = 2 * grid.phi - grid.phi_prev
-    # grid.phi_prev = tmp
+    tol = grid.md_variables.tol
+    h = grid.h
+    tmp = np.copy(grid.phi)
+    grid.phi = 2 * grid.phi - grid.phi_prev
+    grid.phi_prev = tmp
 
     # compute the constraint with the provisional value of the field phi
-    # matrixmult = MatrixVectorProduct(grid.phi)
-    # sigma_p = grid.q / h + matrixmult / (4 * np.pi) # M @ grid.phi for row-by-column product
+    matrixmult = MatrixVectorProduct(grid.phi)
+    sigma_p = grid.q / h + matrixmult / (4 * np.pi) # M @ grid.phi for row-by-column product
 
-    # y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
+    y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
     # scale the field with the constrained 'force' term
-    # grid.phi -= y_new * (4 * np.pi)
+    grid.phi -= y_new * (4 * np.pi)
 
     # if grid.debug:
     #     matrixmult1 = MatrixVectorProduct(y_new)
