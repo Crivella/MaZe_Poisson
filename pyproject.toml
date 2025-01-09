@@ -39,9 +39,9 @@ dependencies = [
 # Source = "https://github.com/XXX"
 
 [project.optional-dependencies]
-# fancy = [
-#     "tqdm",
-# ]
+fancy = [
+    "tqdm",
+]
 plotting = [
     "matplotlib",
     "PyQt5",

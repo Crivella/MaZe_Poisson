@@ -6,8 +6,8 @@ import time
 log_file_path = os.path.join(os.getcwd(), "all_logs.log")
 
 # Function to set up the logger
-def setup_logger():
-    logger = logging.getLogger("custom_logger")
+def setup_logger(name):
+    logger = logging.getLogger(name)
     
     # Avoid adding handlers multiple times
     if not logger.handlers:
@@ -40,4 +40,4 @@ def setup_logger():
     return logger
 
 # Instantiate the logger
-logger = setup_logger()
+logger = setup_logger("main")

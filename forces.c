@@ -24,6 +24,8 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
     long int j0, j1, j2;
     long int k0, k1, k2;
 
+    h *= 2.0;
+
     double *E = (double *)malloc(n3 * sizeof(double));
 
     double sum_q = 0.0;

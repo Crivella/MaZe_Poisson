@@ -4,127 +4,108 @@ from math import exp, tanh
 import numpy as np
 from scipy.sparse.linalg import LinearOperator, cg
 
-from .c_api import c_conj_grad, c_laplace, rfft_3d
+from .c_api import c_conj_grad, c_laplace
 from .constants import kB
-from .profiling import profile
+
+# def VerletSolutePart1(grid, thermostat=False):
+#     dt = grid.md_variables.dt
+#     N_p = grid.N_p
+#     L = grid.L
+
+#     if thermostat == True:
+#         mi_vi2 = grid.particles.masses * np.sum(grid.particles.vel**2, axis=1)
+#         T_exp = np.sum(mi_vi2) / (3 * N_p * kB)
+#         lambda_scaling = np.sqrt(grid.temperature / T_exp)
+
+#     particles = grid.particles
+
+#     if thermostat == True:
+#         particles.vel = particles.vel * lambda_scaling
+
+#     particles.vel = particles.vel + 0.5 * dt * ((particles.forces + particles.forces_notelec) / particles.masses[:, np.newaxis])
+#     particles.pos = particles.pos + particles.vel * dt 
+#     particles.pos = particles.pos % L  
+
+#     return particles
 
 
-def VerletSolutePart1(grid, thermostat=False):
-    dt = grid.md_variables.dt
-    N_p = grid.N_p
-    L = grid.L
-
-    if thermostat == True:
-        mi_vi2 = grid.particles.masses * np.sum(grid.particles.vel**2, axis=1)
-        T_exp = np.sum(mi_vi2) / (3 * N_p * kB)
-        lambda_scaling = np.sqrt(grid.temperature / T_exp)
-
-    particles = grid.particles
-
-    if thermostat == True:
-        particles.vel = particles.vel * lambda_scaling
-
-    particles.vel = particles.vel + 0.5 * dt * ((particles.forces + particles.forces_notelec) / particles.masses[:, np.newaxis])
-    particles.pos = particles.pos + particles.vel * dt 
-    particles.pos = particles.pos % L  
-
-    return particles
-
-
-def VerletSolutePart2(grid, prev=False):
-    not_elec = grid.not_elec
-    elec = grid.elec
-    particles = grid.particles
-    dt = grid.md_variables.dt
+# def VerletSolutePart2(grid, prev=False):
+#     not_elec = grid.not_elec
+#     elec = grid.elec
+#     particles = grid.particles
+#     dt = grid.md_variables.dt
     
-    if not_elec:
-        particles.ComputeForceNotElec()
+#     if not_elec:
+#         particles.ComputeForceNotElec()
 
-    if elec:
-        # particles.ComputeForce_FD_Q(prev=prev)
-        particles.ComputeForce_FD(prev=prev)
+#     if elec:
+#         # particles.ComputeForce_FD_Q(prev=prev)
+#         particles.ComputeForce_FD(prev=prev)
 
-    particles.vel = particles.vel + 0.5 * dt * (particles.forces + particles.forces_notelec) / particles.masses[:, np.newaxis]
+#     particles.vel = particles.vel + 0.5 * dt * (particles.forces + particles.forces_notelec) / particles.masses[:, np.newaxis]
     
-    return grid
+#     return grid
 
-### OVRVO ###
+# ### OVRVO ###
      
-### Solves the equations for the O-block ###
-def O_block(N_p, v, m, gamma, dt, kBT):
-    c1 = exp(-gamma*dt)
-    rnd = np.random.multivariate_normal(
-        mean=[0.0, 0.0, 0.0],
-        cov=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-        size=N_p
-    )
+# ### Solves the equations for the O-block ###
+# def O_block(N_p, v, m, gamma, dt, kBT):
+#     c1 = exp(-gamma*dt)
+#     rnd = np.random.multivariate_normal(
+#         mean=[0.0, 0.0, 0.0],
+#         cov=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+#         size=N_p
+#     )
 
-    v_t_dt = np.sqrt(c1) * v + np.sqrt((1 - c1) * kBT / m[:, np.newaxis]) * rnd
-    return v_t_dt
+#     v_t_dt = np.sqrt(c1) * v + np.sqrt((1 - c1) * kBT / m[:, np.newaxis]) * rnd
+#     return v_t_dt
 
-### Solves the equations for the V-block ###
-def V_block(v, F, m, gamma, dt):
-    if gamma == 0:
-        c2 = 1
-    else:
-        c2 = np.sqrt(2 /(gamma * dt) * tanh(0.5 * gamma * dt)) 
-    v_t_dt = v + 0.5 * c2 * dt * F / m[:, np.newaxis] #F is the force
-    return v_t_dt
+# ### Solves the equations for the V-block ###
+# def V_block(v, F, m, gamma, dt):
+#     if gamma == 0:
+#         c2 = 1
+#     else:
+#         c2 = np.sqrt(2 /(gamma * dt) * tanh(0.5 * gamma * dt)) 
+#     v_t_dt = v + 0.5 * c2 * dt * F / m[:, np.newaxis] #F is the force
+#     return v_t_dt
 
-### Solves the equations for the R-block ###
-def R_block(x,v, gamma, dt, L):
-    if gamma == 0:
-        c2 = 1
-    else:
-        c2 = np.sqrt(2 /(gamma * dt) * tanh(0.5 * gamma * dt)) 
+# ### Solves the equations for the R-block ###
+# def R_block(x,v, gamma, dt, L):
+#     if gamma == 0:
+#         c2 = 1
+#     else:
+#         c2 = np.sqrt(2 /(gamma * dt) * tanh(0.5 * gamma * dt)) 
 
-    x_t_dt = x + c2 * dt * v
-    x_t_dt = x_t_dt % L  
-    return x_t_dt
+#     x_t_dt = x + c2 * dt * v
+#     x_t_dt = x_t_dt % L  
+#     return x_t_dt
 
-@profile
-def OVRVO_part1(grid, thermostat=False):
-    if thermostat:
-        gamma_sim = grid.md_variables.gamma
-    else:
-        gamma_sim = 0
+# def OVRVO_part1(particles, dt, kBT, gamma_sim = 0):
+#     L = particles.L
+#     N_p = particles.N_p
 
-    dt = grid.md_variables.dt
-    kBT = grid.md_variables.kBT
-    L = grid.L
-    N_p = grid.N_p
-
-    grid.particles.vel = O_block(N_p, grid.particles.vel, grid.particles.masses, gamma_sim, dt, kBT)
-    grid.particles.vel = V_block(grid.particles.vel, grid.particles.forces + grid.particles.forces_notelec, grid.particles.masses, gamma_sim, dt)
-    grid.particles.pos = R_block(grid.particles.pos, grid.particles.vel, gamma_sim, dt, L)
+#     particles.vel = O_block(N_p, particles.vel, particles.masses, gamma_sim, dt, kBT)
+#     particles.vel = V_block(particles.vel, particles.forces + particles.forces_notelec, particles.masses, gamma_sim, dt)
+#     particles.pos = R_block(particles.pos, particles.vel, gamma_sim, dt, L)
     
-    return grid.particles
+#     return particles
 
-
-def OVRVO_part2(grid, prev=False, thermostat=False):
-    dt = grid.md_variables.dt
-    kBT = grid.md_variables.kBT
-    N_p = grid.N_p
-
-    if thermostat:
-        gamma_sim = grid.md_variables.gamma
-    else:
-        gamma_sim = 0
+# def OVRVO_part2(particles, dt, kBT, gamma_sim = 0, prev=False):
+#     N_p = particles.N_p
         
-    if grid.not_elec:
-        grid.particles.ComputeForceNotElec()
+#     if particles.not_elec:
+#         particles.ComputeForceNotElec()
 
-    if grid.elec:
-        # grid.particles.ComputeForce_FD_Q(prev=prev)
-        grid.particles.ComputeForce_FD(prev=prev)
+#     if particles.elec:
+#         # grid.particles.ComputeForce_FD_Q(prev=prev)
+#         particles.ComputeForce_FD(prev=prev)
 
-    grid.particles.vel = V_block(grid.particles.vel, grid.particles.forces + grid.particles.forces_notelec, grid.particles.masses, gamma_sim, dt)
-    grid.particles.vel = O_block(N_p, grid.particles.vel, grid.particles.masses, gamma_sim, dt, kBT)
+#     particles.vel = V_block(particles.vel, particles.forces + particles.forces_notelec, particles.masses, gamma_sim, dt)
+#     particles.vel = O_block(N_p, particles.vel, particles.masses, gamma_sim, dt, kBT)
     
-    return grid.particles
+#     return particles
 
 
-@profile
 def MatrixVectorProduct_C(v,):
     res = np.empty_like(v)
     c_laplace(v, res, v.shape[0])
@@ -186,11 +167,11 @@ def VerletPoisson(grid, y):
 
     # compute the constraint with the provisional value of the field phi
     matrixmult = MatrixVectorProduct(grid.phi)
-    sigma_p = grid.q / h + matrixmult / (4 * np.pi) # M @ grid.phi for row-by-column product
+    sigma_p = 4 * np.pi * grid.q / h + matrixmult # M @ grid.phi for row-by-column product
 
     y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
     # scale the field with the constrained 'force' term
-    grid.phi -= y_new * (4 * np.pi)
+    grid.phi -= y_new
 
     # if grid.debug:
     #     matrixmult1 = MatrixVectorProduct(y_new)

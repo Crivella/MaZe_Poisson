@@ -9,6 +9,8 @@ kB = 3.1668 * 1e-6 #E_h/K
 m_Na_amu = 22.99
 m_Cl_amu = 35.453
 
+Ha_to_eV = 27.21138602
+
 m_Na = m_Na_amu * amu_to_kg
 m_Cl = m_Cl_amu * amu_to_kg
 

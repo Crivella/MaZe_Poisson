@@ -1,0 +1,46 @@
+import numpy as np
+
+from .. import c_api
+from .base_grid import BaseGrid
+
+
+class FFTGrid(BaseGrid):
+    def init_grids(self):
+        """Initialize the grids."""
+        self.shape = (self.N,)*3
+        # self.shape2 = (self.N, self.N, self.N//2 + 1)
+        self.q = np.zeros(self.shape, dtype=float)
+        self.phi_r = np.zeros(self.shape, dtype=np.float64)
+        # self.phi_q = np.zeros(self.shape2, dtype=np.complex128)
+
+        # Grids for FFT
+        freqs = np.fft.fftfreq(self.N, d=self.h) * 2 * np.pi
+        freqs_r = np.fft.rfftfreq(self.N, d=self.h) * 2 * np.pi
+        gx, gy, gz = np.meshgrid(freqs, freqs, freqs_r, indexing='ij')
+        g2 = gx**2 + gy**2 + gz**2
+        g2[0, 0, 0] = 1  # to avoid division by zero
+
+        self.q_const = 4 * np.pi / self.h**3
+        self.ig2 = self.q_const / g2
+        del g2, gx, gy, gz
+
+    def calculate_phi(self):
+        """Calculate the field."""
+        c_api.rfft_solve(self.N, self.q, self.ig2, self.phi_r)
+
+    def initialize_field(self):
+        """Initialize the field."""
+        self.calculate_phi()
+
+    def update_field(self) -> int:
+        """Update the field."""
+        self.calculate_phi()
+        return 1
+
+    @property
+    def phi(self):
+        return self.phi_r
+
+    @property
+    def phi_prev(self):
+        return self.phi_r

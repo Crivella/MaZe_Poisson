@@ -19,6 +19,9 @@ class OutputSettings:
     print_tot_force = None # to move
     print_iters = False
     path = 'Outputs/'
+    format = 'csv'
+    stride = 1  # saves every stride steps
+    flushstride = 0 # flushes every stride * flushstride steps
     debug = False
     restart = None
     generate_restart_file = None # to move
@@ -97,14 +100,15 @@ class MDVariables:
         self.thermostat = None # to move
         self._dt_fs = None # dt in fs
         self._dt = None        # timestep for the solute evolution given in fs and converted in a.u. # to move
-        self.stride = 1              # saves every stride steps
-        self.initialization = 'CG'   # always CG
-        self.preconditioning = 'Yes' # Yes or No
+        # self.initialization = 'CG'   # always CG
+        self.preconditioning = True # Yes or No
         self.rescale = None # rescaling of the initial momenta to have tot momenta = 0
         self.elec = None # to move
         self.not_elec = None # to move
         self.potential = 'TF' # Tosi Fumi (TF) or Leonard Jones (LJ)
         self.integrator = 'OVRVO'
+        self.method = 'FFT' # Linear Conjugate Gradient (LCG) or Conjugate Gradient (CG)
+        self.tol = 1e-7
         self.gamma = 1e-3 # OVRVO parameter
     
     @property

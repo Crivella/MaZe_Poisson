@@ -73,7 +73,7 @@ def main(grid_setting, output_settings, md_variables):
 
     q_tot = 0
     #compute 8 nearest neighbors for any particle
-    grid.particles.NearestNeighbors()
+    grid.particles.get_nearest_neighbors()
     q_tot = np.sum(grid.particles.charges)
     logger.info('Total charge q = '+str(q_tot))
 
@@ -113,7 +113,7 @@ def main(grid_setting, output_settings, md_variables):
         #logger.info('Thermostat is not applied')
 
     # compute 8 nearest neighbors for any particle
-    grid.particles.NearestNeighbors()
+    grid.particles.get_nearest_neighbors()
     #logger.info('Nearest neighbours calculated')
 
     # set charges with the weight function
@@ -174,7 +174,7 @@ def main(grid_setting, output_settings, md_variables):
 
         if elec:
             # compute 8 nearest neighbors for any particle
-            grid.particles.NearestNeighbors()
+            grid.particles.get_nearest_neighbors()
         
             # set charges with the weight function
             grid.SetCharges()
@@ -193,7 +193,7 @@ def main(grid_setting, output_settings, md_variables):
             grid = VerletSolutePart2(grid)
 
         if output_settings.print_tot_force:
-            tot_force = np.sum(grid.particles.forces + grid.particles.forces_notelec, axis=0)
+            tot_force = np.sum(grid.particles.forces_elec + grid.particles.forces_notelec, axis=0)
             
             ofiles.file_output_tot_force.write(str(i) + ',' + str(tot_force[0]) + ',' + str(tot_force[1]) + ','+ str(tot_force[2]) + "\n") 
             ofiles.file_output_tot_force.flush()
@@ -206,9 +206,9 @@ def main(grid_setting, output_settings, md_variables):
             df['vx'] = grid.particles.vel[:, 0]
             df['vy'] = grid.particles.vel[:, 1]
             df['vz'] = grid.particles.vel[:, 2]
-            df['fx_elec'] = grid.particles.forces[:, 0]
-            df['fy_elec'] = grid.particles.forces[:, 1]
-            df['fz_elec'] = grid.particles.forces[:, 2]
+            df['fx_elec'] = grid.particles.forces_elec[:, 0]
+            df['fy_elec'] = grid.particles.forces_elec[:, 1]
+            df['fz_elec'] = grid.particles.forces_elec[:, 2]
             df['charge'] = grid.particles.charges
             df['iter'] = i - init_steps
             df['particle'] = np.arange(N_p)

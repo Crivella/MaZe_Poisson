@@ -8,7 +8,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from ...c_api import init_rfft
-from ...constants import a0, density, t_au
+from ...constants import Ha_to_eV, a0, density, t_au
 from ...grid import *
 from ...loggers import logger
 from ...restart import generate_restart
@@ -40,7 +40,6 @@ def main(grid_setting, output_settings, md_variables):
     preconditioning = md_variables.preconditioning
     rescale = md_variables.rescale
     elec = md_variables.elec
-    V = 27.211386245988
     tol = md_variables.tol
     iter_restart = output_settings.iter_restart
 
@@ -67,7 +66,7 @@ def main(grid_setting, output_settings, md_variables):
 
     q_tot = 0
     #compute 8 nearest neighbors for any particle
-    grid.particles.NearestNeighbors()
+    grid.particles.get_nearest_neighbors()
     q_tot = np.sum(grid.particles.charges)
     logger.info('Total charge q = '+str(q_tot))
 
@@ -104,7 +103,7 @@ def main(grid_setting, output_settings, md_variables):
         #logger.info('Thermostat is not applied')
 
     # compute 8 nearest neighbors for any particle
-    grid.particles.NearestNeighbors()
+    grid.particles.get_nearest_neighbors()
     #logger.info('Nearest neighbours calculated')
 
     # set charges with the weight function
@@ -152,8 +151,6 @@ def main(grid_setting, output_settings, md_variables):
 
     counter = 0 
 
-    tot_fft = 0
-  
     # iterate over the number of steps (i.e times I move the particle 1)
     for i in tqdm(range(N_steps)):
         #print('\nStep = ', i, ' t elapsed from init =', time.time() - end_initialization)
@@ -164,7 +161,7 @@ def main(grid_setting, output_settings, md_variables):
 
         if elec:
             # compute 8 nearest neighbors for any particle
-            grid.particles.NearestNeighbors()
+            grid.particles.get_nearest_neighbors()
         
             # set charges with the weight function
             grid.SetCharges()
@@ -174,8 +171,6 @@ def main(grid_setting, output_settings, md_variables):
             grid, y, iter_conv = VerletPoisson(grid, y=y)
             #grid, y, iter_conv = VerletPoissonBerendsen(grid, y)
             end_Verlet = time.time()
-            if iter_conv == -1:
-                tot_fft += 1
 
         if md_variables.integrator == 'OVRVO':
             grid.particles = OVRVO_part2(grid, thermostat = thermostat)
@@ -184,7 +179,7 @@ def main(grid_setting, output_settings, md_variables):
 
         if output_settings.print_tot_force:
             tot_force = np.zeros(3)
-            tot_force = np.sum(grid.particles.forces + grid.particles.forces_notelec, axis=0)
+            tot_force = np.sum(grid.particles.forces_elec + grid.particles.forces_notelec, axis=0)
             
             ofiles.file_output_tot_force.write(str(i) + ',' + str(tot_force[0]) + ',' + str(tot_force[1]) + ','+ str(tot_force[2]) + "\n") 
             ofiles.file_output_tot_force.flush()
@@ -197,9 +192,9 @@ def main(grid_setting, output_settings, md_variables):
             df['vx'] = grid.particles.vel[:, 0]
             df['vy'] = grid.particles.vel[:, 1]
             df['vz'] = grid.particles.vel[:, 2]
-            df['fx_elec'] = grid.particles.forces[:, 0]
-            df['fy_elec'] = grid.particles.forces[:, 1]
-            df['fz_elec'] = grid.particles.forces[:, 2]
+            df['fx_elec'] = grid.particles.forces_elec[:, 0]
+            df['fy_elec'] = grid.particles.forces_elec[:, 1]
+            df['fz_elec'] = grid.particles.forces_elec[:, 2]
             df['charge'] = grid.particles.charges
             df['iter'] = i - init_steps
             df['particle'] = np.arange(N_p)
@@ -221,9 +216,7 @@ def main(grid_setting, output_settings, md_variables):
             if output_settings.print_field and elec:
                 field_x_MaZe = np.array([grid.phi[l, j, k] for l in range(N)])
                 for n in range(N):
-                    ofiles.file_output_field.write(str(i - init_steps) + ',' + str(X[n] * a0) + ',' + str(field_x_MaZe[n] * V) + '\n')
-
-    print('Number of FFTs = ', tot_fft)
+                    ofiles.file_output_field.write(str(i - init_steps) + ',' + str(X[n] * a0) + ',' + str(field_x_MaZe[n] * Ha_to_eV) + '\n')
 
     if output_settings.generate_restart_file:
         ofiles.file_output_solute.flush()

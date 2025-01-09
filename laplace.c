@@ -133,7 +133,8 @@ Solve the system of linear equations Ax = b using the conjugate gradient method 
 EXTERN_C int conj_grad(double *b, double *x0, double *x, double tol, int n) {
     long int i;
     long int n3 = n * n * n;
-    long int iter = 0;
+    long int limit = n * n;
+    long int iter = 0, res = -1;
 
     // printf("Running conjugate gradient with %d elements\n", n3);
 
@@ -159,7 +160,7 @@ EXTERN_C int conj_grad(double *b, double *x0, double *x, double tol, int n) {
     //   r_dot_v and rn_dot_vn directly from the previous values
     r_dot_v = - ddot(r, r, n3) / 6.0;  // <r, v>
 
-    while(iter < n3) {
+    while(iter < limit) {
         laplace_filter(p, Ap, n);
 
         alpha = r_dot_v / ddot(p, Ap, n3);  // alpha = <r, v> / <p | A | p>
@@ -168,6 +169,7 @@ EXTERN_C int conj_grad(double *b, double *x0, double *x, double tol, int n) {
 
         rn_dot_rn = ddot(r, r, n3);  // <r_new, r_new>
         if (sqrt(rn_dot_rn) <= tol) {
+            res = iter;
             break;
         }
 
@@ -186,14 +188,9 @@ EXTERN_C int conj_grad(double *b, double *x0, double *x, double tol, int n) {
         // }
     }
 
-    if (iter >= n3) {
-        // printf("ERROR: Conjugate gradient did not converge %.10f (> %.10f): \n", norm(r, n3), tol);
-        iter = -1;
-    }
-
     free(r);
     free(p);
     free(Ap);
 
-    return iter;
+    return res;
 }
