@@ -2,8 +2,10 @@
 # N: [30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
 # At N_p=2, N_steps>10,000
 grid_setting:
-  N: 200
+  N: 100
   N_p: 250 # at N_p=2, rescale=False
+  input_file: "input_files/input_coord250.csv"
+  # restart_file: "restart_files/density_1.379/restart_N100_N_p_250_9999_iter1.csv"
 
 md_variables:
   N_steps: 2000
@@ -16,20 +18,22 @@ md_variables:
   thermostat: false
   elec: TRUE 
   not_elec: TRUE
-  method: LCG
+  method: FFT
   integrator: OVRVO
 
 output_settings: 
   restart: false
   print_tot_force: TRUE
   print_field: TRUE
-  print_performance: FALSE
+  print_performance: true
   print_solute: TRUE
   print_energy: TRUE 
   print_temperature: TRUE
-  generate_restart_file: false
+  print_restart: true
   stride: 1
-  # flushstride: 100
+  flushstride: 100
+  restart_stride: 20
+  # debug: true
 
   # for eqm: N_steps=6000, init_steps=5000, True, True, True, false, false, false, false, true, true, true, true (ignore rescale)
   # for restart: N_steps=200, init_steps=0, False, True, True, true, false, false, true, true, true, true, false (ignore rescale)

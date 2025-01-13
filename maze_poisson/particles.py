@@ -1,14 +1,20 @@
 from itertools import product
 
 import numpy as np
+import pandas as pd
 
-from .constants import a0, kB
+from .constants import a0, conv_mass, kB
 from .indices import GetDictTF
+from .input import GridSetting
+from .loggers import Logger
 
 
-class Particles:
+class Particles(Logger):
     # def __init__(self, grid, md_variables, charges, masses, positions):
-    def __init__(self, gset, pot, charges, masses, positions):
+    def __init__(
+            self, gset: GridSetting, pot: str, charges: np.ndarray, masses: np.ndarray, positions: np.ndarray
+        ):
+        super().__init__()
         self.N = gset.N
         self.h = gset.h
         self.L = gset.L
@@ -30,6 +36,35 @@ class Particles:
         # Pre-allocate for nearest neighbor indices
         self.neigh_diff = np.array(list(product([0, 1], repeat=3)))  # Shape: (8, 3)
         self.neighbors = np.empty((N_p, 8, 3), dtype=int)  # Shape: (N_p, 8, 3)
+
+    @classmethod
+    def from_file(cls, path: str, gset: GridSetting, pot: str, kBT: float = None) -> 'Particles':
+        df = pd.read_csv(path)
+        charges = df['charge']
+        mass = df['mass'] * conv_mass
+        pos = df[['x', 'y', 'z']].values / a0
+        particles = cls(
+            gset,
+            pot,
+            charges=charges,
+            masses=mass,
+            positions=pos
+            )
+        particles.logger.info(f"Loaded starting positions from file: {path}")
+        if 'vx' in df.columns:
+            particles.logger.info("Loading starting velocities from file.")
+            particles.vel = df[['vx', 'vy', 'vz']].values
+        else:
+            if kBT is None:
+                raise ValueError("kBT must be provided to generate random velocities.")
+            particles.logger.info("Generating random velocities.")
+            particles.vel = np.random.normal(
+                loc = 0.0,
+                scale = np.sqrt(kBT / particles.masses[:, np.newaxis]),
+                size=(len(df), 3)
+            )
+
+        return particles
 
 
     def init_potential(self, potential: str):
@@ -114,47 +149,6 @@ class Particles:
 
         return potential_energy
         # grid.potential_notelec = potential_energy  # Store the potential energy
-
-    # # Test with KDTree (might be faster with low particle density)
-    # # Should also be more memory efficient
-    # def _ComputeTFForces(self):
-    #     tree = KDTree(self.pos, boxsize=self.grid.L)
-    #     neigh_lst = tree.query_ball_tree(tree, self.r_cutoff)
-
-    #     potential_energy = 0
-    #     for i, neigh in enumerate(neigh_lst):
-    #         neigh.remove(i)
-    #         r_diff = self.pos[neigh] - self.pos[i]
-    #         r_diff = BoxScale(r_diff, self.grid.L)
-    #         r_mag = np.linalg.norm(r_diff, axis=1)
-    #         r_cap = r_diff / r_mag[:, np.newaxis]
-
-    #         # A = self.A[i, neigh]
-    #         # C = self.C[i, neigh]
-    #         # D = self.D[i, neigh]
-    #         # sigma_TF = self.sigma_TF[i, neigh]
-    #         # alpha = self.alpha[i, neigh]
-    #         # beta = self.beta[i, neigh]
-    #         A = np.vectorize(lambda q: self.tf_params[q][0])(self.charges[i] + self.charges[neigh])
-    #         C = np.vectorize(lambda q: self.tf_params[q][1])(self.charges[i] + self.charges[neigh])
-    #         D = np.vectorize(lambda q: self.tf_params[q][2])(self.charges[i] + self.charges[neigh])
-    #         sigma_TF = np.vectorize(lambda q: self.tf_params[q][3])(self.charges[i] + self.charges[neigh])
-    #         V_shift = A * np.exp(self.B * (sigma_TF - self.r_cutoff)) - C / self.r_cutoff**6 - D / self.r_cutoff**8
-    #         alpha = A * self.B * np.exp(self.B * (sigma_TF - self.r_cutoff)) - 6 * C / self.r_cutoff**7 - 8 * D / self.r_cutoff**9
-    #         beta = - V_shift - alpha * self.r_cutoff
-
-    #         f_mag = self.B * A * np.exp(self.B * (sigma_TF - r_mag)) - 6 * C / r_mag**7 - 8 * D / r_mag**9 - alpha
-    #         V_mag = A * np.exp(self.B * (sigma_TF - r_mag)) - C / r_mag**6 - D / r_mag**8 + alpha * r_mag + beta
-
-    #         pairwise_forces = f_mag[:, np.newaxis] * r_cap
-    #         net_forces = -np.sum(pairwise_forces, axis=0)
-
-    #         self.forces_notelec[i] = net_forces
-
-    #         potential_energy += np.sum(V_mag)
-
-    #     potential_energy /= 2
-    #     self.grid.potential_notelec = potential_energy
 
     def ComputeLJForce(self, grid):
         raise NotImplementedError("Lennard-Jones forces not implemented yet")

@@ -18,14 +18,15 @@ class OutputSettings:
     print_temperature = None # to move
     print_tot_force = None # to move
     print_iters = False
+    print_restart = False
     path = 'Outputs/'
     format = 'csv'
     stride = 1  # saves every stride steps
     flushstride = 0 # flushes every stride * flushstride steps
     debug = False
-    restart = None
+    # restart = None
     generate_restart_file = None # to move
-    iter_restart = None
+    restart_stride = None
 
 ###################################################################################
 
@@ -37,8 +38,10 @@ class GridSetting:
         self._N_p = None
         self._N_tot = None
         self._h = None
-        self._input_file = None
-        self._restart_file = None
+        # self._input_file = None
+        self.input_file = None
+        self.restart_file = None
+        # self._restart_file = None
         
     # uncomment this block if you want to change N on your own
     @property
@@ -73,20 +76,20 @@ class GridSetting:
             self._h = self.L / self.N
         return self._h
 
-    @property
-    def input_file(self):
-        if self._input_file is None:
-            self._input_file = 'input_files/input_coord'+str(self.N_p)+'.csv'
-        return self._input_file
+    # @property
+    # def input_file(self):
+    #     if self._input_file is None:
+    #         self._input_file = 'input_files/input_coord'+str(self.N_p)+'.csv'
+    #     return self._input_file
 
-    @property
-    def restart_file(self):
-        #if self.N!=100:
-           #raise NotImplementedError("Only restart file for N_100 is available")
-        if self._restart_file is None:
-            self._restart_file = 'restart_files/density_'+str(np.round(density, 3))+'/restart_N100'+'_N_p_'+str(self.N_p)+'_9999_iter1.csv'
-            #self._restart_file = 'restart_files/density_'+str(np.round(density, 3))+'/restart_N'+str(self.N)+'_N_p_'+str(self.N_p)+'_iter1.csv'
-        return self._restart_file
+    # @property
+    # def restart_file(self):
+    #     #if self.N!=100:
+    #        #raise NotImplementedError("Only restart file for N_100 is available")
+    #     if self._restart_file is None:
+    #         self._restart_file = 'restart_files/density_'+str(np.round(density, 3))+'/restart_N100'+'_N_p_'+str(self.N_p)+'_9999_iter1.csv'
+    #         #self._restart_file = 'restart_files/density_'+str(np.round(density, 3))+'/restart_N'+str(self.N)+'_N_p_'+str(self.N_p)+'_iter1.csv'
+    #     return self._restart_file
 
 ###################################################################################
 
@@ -172,12 +175,14 @@ def initialize_from_yaml(filename):
     if missing:
         raise ValueError(f'Missing required inputs: {", ".join(missing)}')
 
-    if output_settings.restart:
-        if not grid_setting.restart_file:
-            logger.error('restart_file must be provided if restart is True')
-            raise ValueError('restart_file must be provided if restart is True')
+    if grid_setting.restart_file:
+        if grid_setting.input_file:
+            logger.warning('input_file will be ignored if restart_file is provided')
         if not Path(grid_setting.restart_file).exists():
             logger.error(f'Restart file {grid_setting.restart_file} does not exist')
             raise FileNotFoundError(f'Restart file {grid_setting.restart_file} does not exist')
+    elif not grid_setting.input_file:
+        logger.error('Either input_file or restart_file must be provided')
+        raise ValueError('Either input_file or restart_file must be provided')
 
     return grid_setting, output_settings, md_variables

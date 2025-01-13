@@ -8,10 +8,8 @@ class FFTGrid(BaseGrid):
     def init_grids(self):
         """Initialize the grids."""
         self.shape = (self.N,)*3
-        # self.shape2 = (self.N, self.N, self.N//2 + 1)
         self.q = np.zeros(self.shape, dtype=float)
         self.phi_r = np.zeros(self.shape, dtype=np.float64)
-        # self.phi_q = np.zeros(self.shape2, dtype=np.complex128)
 
         # Grids for FFT
         freqs = np.fft.fftfreq(self.N, d=self.h) * 2 * np.pi
@@ -20,8 +18,7 @@ class FFTGrid(BaseGrid):
         g2 = gx**2 + gy**2 + gz**2
         g2[0, 0, 0] = 1  # to avoid division by zero
 
-        self.q_const = 4 * np.pi / self.h**3
-        self.ig2 = self.q_const / g2
+        self.ig2 = (4 * np.pi / self.h**3) / g2
         del g2, gx, gy, gz
 
     def calculate_phi(self):
@@ -32,10 +29,10 @@ class FFTGrid(BaseGrid):
         """Initialize the field."""
         self.calculate_phi()
 
-    def update_field(self) -> int:
+    @BaseGrid.timeit
+    def update_field(self):
         """Update the field."""
         self.calculate_phi()
-        return 1
 
     @property
     def phi(self):

@@ -11,8 +11,8 @@ from ..constants import Ha_to_eV, a0, conv_mass, kB
 from ..grid.base_grid import BaseGrid
 from ..input import GridSetting, MDVariables, OutputSettings
 from ..integrators import BaseIntegrator, OVRVOIntegrator, VerletIntegrator
-from ..loggers import setup_logger
-from ..output_md import generate_output_files
+from ..loggers import Logger, setup_logger
+from ..outputs import OutputFiles
 from ..particles import Particles, g
 
 try:
@@ -35,7 +35,7 @@ def time_report(func):
         return result
     return wrapper
 
-class BaseSolver(ABC):
+class BaseSolver(Logger, ABC):
     """Base class for all solver classes."""
 
     def __init__(self, gset: GridSetting, mdv: MDVariables, outset: OutputSettings):
@@ -53,9 +53,13 @@ class BaseSolver(ABC):
         self.integrator: BaseIntegrator = None
         self.grid: BaseGrid = None
 
-        self.ofiles = generate_output_files(outset)
+        self.ofiles = OutputFiles(self.outset)
         self.out_stride = outset.stride
         self.out_flushstride = outset.flushstride * outset.stride
+        if self.outset.debug:
+            for handler in self.logger.handlers:
+                handler.setLevel(0)
+            self.logger.debug("Set verbosity to DEBUG")
 
         self.q_tot = 0
         self.thermostat = self.mdv.thermostat
@@ -99,27 +103,8 @@ class BaseSolver(ABC):
 
     def initialize_particles(self):
         """Initialize the particles."""
-        start_file = self.gset.restart_file if self.outset.restart else self.gset.input_file
-        df = pd.read_csv(start_file)
-        charges = df['charge']
-        mass = df['mass'] * conv_mass
-        pos = df[['x', 'y', 'z']].values / a0
-        self.particles = Particles(
-            self.gset,
-            self.mdv.potential,
-            charges=charges,
-            masses=mass,
-            positions=pos
-            )
-        if self.outset.restart:
-            self.logger.info(f"Restarting from file: {start_file}")
-            self.particles.vel = df[['vx', 'vy', 'vz']].values
-        else:
-            self.particles.vel = np.random.normal(
-                loc = 0.0,
-                scale = np.sqrt(self.mdv.kBT / self.particles.masses[:, np.newaxis]),
-                size=(self.N_p, 3)
-            )
+        start_file = self.gset.restart_file or self.gset.input_file
+        self.particles = Particles.from_file(start_file, self.gset, self.mdv.potential, self.mdv.kBT)
 
     def initialize_integrator(self):
         """Initialize the MD integrator.
@@ -164,6 +149,9 @@ class BaseSolver(ABC):
         if self.mdv.rescale:
             self.particles.rescale_velocities()
 
+        self.grid.field_j = int(self.particles.pos[0,1] / self.h)
+        self.grid.field_k = int(self.particles.pos[0,2] / self.h)
+
     def compute_forces(self):
         """Compute the forces on the particles."""
         if self.mdv.elec:
@@ -175,25 +163,6 @@ class BaseSolver(ABC):
     def compute_forces_notelec(self):
         """Compute the forces on the particles due to non-electric interactions."""
         self.grid.potential_notelec = self.particles.ComputeTFForces()
-
-    def md_loop_output(self, i):
-        """Output the results of the molecular dynamics loop."""
-        if i % self.out_stride != 0:
-            return
-        # print(self.particles.pos[0])
-        self.ofiles.energy.write_data(i, self.grid, self.particles)
-        self.ofiles.tot_force.write_data(i, self.grid, self.particles)
-        self.ofiles.temperature.write_data(i, self.grid, self.particles)
-        #     raise NotImplementedError("Reimplement outputs in a more modular way")
-        #     # self.ofiles.output_field(i, self.grid)
-        #     # self.ofiles.output_iters(i, self.grid)
-        #     # self.ofiles.output_energy(i, self.particles)
-        #     # self.ofiles.output_temperature(i, self.particles)
-        #     # self.ofiles.output_solute(i, self.particles)
-        #     # self.ofiles.output_tot_force(i, self.particles)
-        if self.out_flushstride:
-            if i % self.out_flushstride == 0:
-                self.ofiles.flush()
 
     def md_loop_iter(self):
         """Run one iteration of the molecular dynamics loop."""
@@ -225,7 +194,7 @@ class BaseSolver(ABC):
         for i in tqdm(range(self.mdv.N_steps)):
             self.md_loop_iter()
             self.md_check_thermostat()
-            self.md_loop_output(i)
+            self.ofiles.output(i, self.grid, self.particles)
 
     def run(self):
         """Run the solver."""

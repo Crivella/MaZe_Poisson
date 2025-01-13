@@ -1,6 +1,8 @@
+import time
 from abc import ABC, abstractmethod
+from functools import wraps
 
-from ..particles import Particles
+import numpy as np
 
 
 class BaseGrid(ABC):
@@ -14,6 +16,13 @@ class BaseGrid(ABC):
 
         self.potential_notelec = 0
 
+        self.time = 0
+        self.n_iters = 0
+
+        self.X = np.arange(0, L, h)
+        self.field_j = 0
+        self.field_k = 0
+
         self.init_grids()
 
     @abstractmethod
@@ -25,14 +34,21 @@ class BaseGrid(ABC):
         """Initialize the field."""
 
     @abstractmethod
-    def update_field(self) -> int:
-        """Update the field.
-
-        Returns:
-            int: Number of iterations to convergence.
-        """
+    def update_field(self):
+        """Update the field."""
 
     @property
     @abstractmethod
     def phi(self):
         """Should return the field in REAL space."""
+
+    @staticmethod
+    def timeit(func):
+        """Decorator to measure the time of the function."""
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            start = time.time()
+            func(self, *args, **kwargs)
+            end = time.time()
+            self.time = end - start
+        return wrapper

@@ -31,7 +31,7 @@ def setup_logger(name):
         logger.addHandler(file_handler)
 
         # Add a stream handler to print to console
-        stream_formatter = logging.Formatter('%(message)s')
+        stream_formatter = logging.Formatter('{message}', style='{')
         stream_handler = logging.StreamHandler()
         stream_handler.setFormatter(stream_formatter)
         stream_handler.setLevel(logging.INFO)  # Ensure debug messages are not printed to the console
@@ -39,5 +39,10 @@ def setup_logger(name):
     
     return logger
 
-# Instantiate the logger
+class Logger:
+    def __init__(self, *args, **kwargs):
+        self.logger = setup_logger(self.__class__.__name__)
+        super().__init__(*args, **kwargs)
+
+# Instantiate the main logger
 logger = setup_logger("main")
