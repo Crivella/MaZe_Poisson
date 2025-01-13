@@ -142,7 +142,7 @@ class MDVariables:
 
 required_inputs = {
     'grid_setting': ['N', 'N_p'],
-    'output_settings': ['restart'],
+    'output_settings': [],
     'md_variables': ['N_steps', 'tol', 'rescale', 'T']
 }
 

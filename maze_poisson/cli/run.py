@@ -9,6 +9,7 @@ from .maze import maze
 
 method_map: dict[str, Type[BaseSolver]] = {
     'LCG': LCGSolver,
+    'LCG_MPI': LCGSolver,
     'FFT': FFTSolver,
 }
 

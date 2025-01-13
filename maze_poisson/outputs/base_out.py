@@ -9,8 +9,10 @@ import pandas as pd
 from ..grid.base_grid import BaseGrid
 from ..input import OutputSettings
 from ..loggers import logger
+from ..mpi import MPIBase
 from ..particles import Particles
 
+mpi = MPIBase()
 
 def ensure_enabled(func):
     @wraps(func)
@@ -24,6 +26,8 @@ class BaseOutputFile(ABC):
     name = None
     def __init__(self, *args, path: str, enabled: bool = True, overwrite: bool = True, **kwargs):
         self.path = os.path.abspath(path)
+        if mpi and mpi.rank != 0:
+            enabled = False
         self.enabled = enabled
         if not enabled:
             return

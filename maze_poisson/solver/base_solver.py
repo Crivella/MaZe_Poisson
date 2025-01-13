@@ -5,13 +5,12 @@ import time
 from abc import ABC, abstractmethod
 
 import numpy as np
-import pandas as pd
 
-from ..constants import Ha_to_eV, a0, conv_mass, kB
 from ..grid.base_grid import BaseGrid
 from ..input import GridSetting, MDVariables, OutputSettings
 from ..integrators import BaseIntegrator, OVRVOIntegrator, VerletIntegrator
 from ..loggers import Logger, setup_logger
+from ..mpi import MPIBase
 from ..outputs import OutputFiles
 from ..particles import Particles, g
 
@@ -21,6 +20,9 @@ except ImportError:
     def tqdm(x, *args, **kwargs):
         return x
 
+mpi = MPIBase()
+
+np.random.seed(42)
 
 def time_report(func):
     """Decorator to report the time taken by a function."""
@@ -134,7 +136,43 @@ class BaseSolver(Logger, ABC):
         self.update_charges()
         if self.mdv.preconditioning:
             self.grid.initialize_field()
-        self.compute_forces()
+
+        # self.grid.gather_q()
+        # if mpi.rank == 0:
+        #     np.save(f'q_0_{mpi.size}.npy', self.grid.gathered)
+
+        # ###############################################
+        # from .. import c_api
+        # from ..grid.lcg_grid import conj_grad_mpi, laplace_filter_mpi
+        # self.tmp = np.empty_like(self.grid.q)
+        # if mpi.size > 1:
+        #     laplace_filter_mpi(self.grid.q, self.tmp, self.grid.N)
+        #     self.grid.gather(self.tmp)
+        # else:
+        #     c_api.c_laplace(self.grid.q, self.tmp, self.grid.N)
+        #     self.grid.gathered = self.tmp
+        # if mpi.rank == 0:
+        #     np.save(f'field_0_{mpi.size}.npy', self.grid.gathered)
+
+        # ###############################################
+        # self.tmp2 = np.empty_like(self.grid.q)
+        # if mpi.size > 1:
+        #     conj_grad_mpi(self.tmp, np.zeros_like(self.tmp), self.tmp2, self.grid.tol, self.grid.N)
+        #     self.grid.gather(self.tmp2)
+        # else:
+        #     c_api.c_conj_grad(self.tmp, np.zeros_like(self.tmp), self.tmp2, self.grid.tol, self.grid.N)
+        #     self.grid.gathered = self.tmp2
+        # print(f'rank {mpi.rank} cg res: {np.allclose(self.tmp2, self.grid.q, rtol=1e-6)}')
+        # if mpi.rank == 0:
+        #     np.save(f'field_1_{mpi.size}.npy', self.grid.gathered)
+        # exit()
+        # self.grid.gather(self.grid.phi)
+        # if mpi.rank == 0:
+        #     np.save(f'field_0_{mpi.size}.npy', self.grid.gathered)
+        # self.compute_forces()
+        # if mpi.rank == 0:
+        #     np.save(f'forces_0_{mpi.size}.npy', self.particles.forces)
+        # exit()
 
         # STEP 1 Verlet
         self.integrator.part1(self.particles)
@@ -191,7 +229,11 @@ class BaseSolver(Logger, ABC):
                 self.md_loop_iter()
 
         self.logger.info("Running MD loop...")
-        for i in tqdm(range(self.mdv.N_steps)):
+        if mpi and mpi.rank > 1:
+            loop = range(self.mdv.N_steps)
+        else:
+            loop = tqdm(range(self.mdv.N_steps))
+        for i in loop:
             self.md_loop_iter()
             self.md_check_thermostat()
             self.ofiles.output(i, self.grid, self.particles)
@@ -201,6 +243,10 @@ class BaseSolver(Logger, ABC):
         self.initialize()
         self.init_info()
         self.initialize_md()
+        # self.grid.gather_field()
+        # if mpi.rank == 0:
+        #     np.save(f'field_0_{mpi.size}.npy', self.grid.gathered)
+        # exit()
         self.md_loop()
         self.finalize()
 
@@ -238,10 +284,18 @@ class BaseSolver(Logger, ABC):
         # Version that works for Python 3.8.15
         indices = tuple(self.particles.neighbors.reshape(-1, 3).T)
         updates = (self.particles.charges[:, np.newaxis] * np.prod(g(diff, L, h), axis=2)).flatten()
-        q[indices] += updates
+        if mpi and mpi.size > 1:
+            for i,j,k,upd in zip(*indices, updates):
+                if self.grid.N_loc_start <= i < self.grid.N_loc_end:
+                    q[i - self.grid.N_loc_start, j, k] += upd
+                    
+        else:
+            q[indices] += updates
   
         # q_tot_expected = np.sum(self.particles.charges)
         q_tot = np.sum(updates)
+        if mpi and mpi.size > 1:
+            q_tot = mpi.all_reduce(q_tot)
 
         # self.phi_q_updated = False
 

@@ -2,11 +2,23 @@ import logging
 import os
 import time
 
+from .mpi import MPIBase
+
+mpi = MPIBase()
+
+class VoidLogger:
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: None
+    def __call__(self, *args, **kwargs):
+        return None
+
 # Ensure logs are written to the script's directory
 log_file_path = os.path.join(os.getcwd(), "all_logs.log")
 
 # Function to set up the logger
 def setup_logger(name):
+    if mpi and mpi.rank != 0:
+        return VoidLogger()
     logger = logging.getLogger(name)
     
     # Avoid adding handlers multiple times

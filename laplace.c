@@ -148,7 +148,7 @@ EXTERN_C int conj_grad(double *b, double *x0, double *x, double tol, int n) {
         x[i] = x0[i];
     }
     laplace_filter(x, r, n);  // r = A . x
-    daxpy2(b, r, -1.0, n3);  // r = b - A . x
+    daxpy2(b, r, -1.0, n3);  // r = A . x - b
 
     #pragma omp parallel for
     for (i = 0; i < n3; i++) {

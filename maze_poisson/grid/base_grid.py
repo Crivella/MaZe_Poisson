@@ -4,11 +4,15 @@ from functools import wraps
 
 import numpy as np
 
+from ..mpi import MPIBase
+
 
 class BaseGrid(ABC):
     """Base class for all grid classes."""
 
     def __init__(self, L: float, h: float, N: int, tol: float = 1e-7):
+        self.mpi = MPIBase()
+
         self.N = N
         self.h = h
         self.L = L
