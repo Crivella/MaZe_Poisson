@@ -14,7 +14,7 @@ Compute the forces on each particle by computing the field from the potential us
 
 @return the sum of the charges on the neighbors
 */
-double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, long int *neighbors, double *forces) {
+double compute_force_fd_old(int n_grid, int n_p, double h, double *phi, double *q, long int *neighbors, double *forces) {
     long int n = n_grid;
     long int n2 = n * n;
     long int n3 = n * n * n;
@@ -137,6 +137,58 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
     }
 
     free(E);
+
+    return sum_q;
+}
+
+double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, long int *neighbors, double *forces) {
+    long int n = n_grid;
+    long int n2 = n * n;
+
+    int i, j, k;
+    long int i0, i1, i2;
+    long int j0, j1, j2;
+    long int k0, k1, k2;
+
+    h *= 2.0;
+
+    double E, qc;
+
+    double sum_q = 0.0;
+    #pragma omp parallel for private(i, j, k, i0, i1, i2, j0, j1, j2, k0, k1, k2, E, qc) reduction(+:sum_q)
+    for (int ip = 0; ip < n_p; ip++) {
+        i0 = ip*24;
+        j0 = ip*3;
+        forces[j0] = 0.0;
+        forces[j0+1] = 0.0;
+        forces[j0+2] = 0.0;
+        for (int in = 0; in < 8; in++) {
+            i1 = i0 + in*3;
+            i = neighbors[i1];
+            j = neighbors[i1 + 1];
+            k = neighbors[i1 + 2];
+
+            qc = q[i * n2 + j * n + k];
+            sum_q += qc;
+            // X
+            i1 = ((i+1) % n) * n2;
+            i2 = ((i-1 + n) % n) * n2;
+            E = (phi[i2 + j*n + k] - phi[i1 + j*n + k]) / h;
+            forces[j0] += qc * E;
+            // Y
+            i1 = i * n2;
+            j1 = ((j+1) % n) * n;
+            j2 = ((j-1 + n) % n) * n;
+            E = (phi[i1 + j2 + k] - phi[i1 + j1 + k]) / h;
+            forces[j0 + 1] += qc * E;
+            // Z
+            j1 = j * n;
+            k1 = ((k+1) % n);
+            k2 = ((k-1 + n) % n);
+            E = (phi[i1 + j1 + k2] - phi[i1 + j1 + k1]) / h;
+            forces[j0 + 2] += qc * E;
+        }
+    }
 
     return sum_q;
 }
