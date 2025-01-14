@@ -59,6 +59,7 @@ class BaseSolver(Logger, ABC):
         self.out_stride = outset.stride
         self.out_flushstride = outset.flushstride * outset.stride
         if self.outset.debug:
+            # print(self.logger.handlers())
             for handler in self.logger.handlers:
                 handler.setLevel(0)
             self.logger.debug("Set verbosity to DEBUG")
@@ -205,11 +206,21 @@ class BaseSolver(Logger, ABC):
     def md_loop_iter(self):
         """Run one iteration of the molecular dynamics loop."""
         self.integrator.part1(self.particles)
+        self.logger.debug('')
         if self.mdv.elec:
+            start = time.time()
             self.particles.get_nearest_neighbors()
             self.update_charges()
+            end = time.time()
+            self.logger.debug(f'Charges: {end - start}')
+            start = time.time()
             self.grid.update_field()
+            end = time.time()
+            self.logger.debug(f'Field: {end - start}')
+        start = time.time()
         self.compute_forces()
+        end = time.time()
+        self.logger.debug(f'Forces: {end - start}')
         self.integrator.part2(self.particles)
 
     def md_check_thermostat(self):

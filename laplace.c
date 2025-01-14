@@ -4,7 +4,7 @@
 #include <omp.h>
 
 #ifdef __cplusplus
-#define EXTERN_C extern "C"
+#define EXTERN_C extern "C"                                                           
 #else
 #define EXTERN_C
 #endif
@@ -193,4 +193,117 @@ EXTERN_C int conj_grad(double *b, double *x0, double *x, double tol, int n) {
     free(Ap);
 
     return res;
+}
+
+void laplace_filter_mpi(double *u, double *u_new, double *top, double *bot, int n_loc, int n) {
+    long int i, j, k;
+    long int i0, i1, i2;
+    long int j0, j1, j2;
+    long int n2 = n * n;
+    long int n3 = n * n * n;
+    #pragma omp parallel for private(i, j, k, i0, i1, i2, j0, j1, j2)
+    for (i = 1; i < n_loc-1; i++) {
+        i0 = i * n2;
+        i1 = (i+1) * n2;
+        i2 = (i-1) * n2;
+        for (j = 0; j < n; j++) {
+            j0 = j*n;
+            j1 = ((j+1) % n) * n;
+            j2 = ((j-1 + n) % n) * n;
+            for (k = 0; k < n; k++) {
+                u_new[i0 + j0 + k] = (
+                    u[i1 + j0 + k] +
+                    u[i2 + j0 + k] +
+                    u[i0 + j1 + k] +
+                    u[i0 + j2 + k] +
+                    u[i0 + j0 + ((k+1) % n)] +
+                    u[i0 + j0 + ((k-1 + n) % n)] -
+                    u[i0 + j0 + k] * 6.0
+                    );
+            }
+        }
+    }
+
+    // i0 = 0;  // Ignored because 0
+    i1 = 1 * n2;
+    // i2 = n_loc - 1; //Ignored in favor of bot
+    #pragma omp parallel for private(j, k, j0, j1, j2)
+    for (j = 0; j < n; j++) {
+        j0 = j * n;
+        j1 = ((j+1) % n) * n;
+        j2 = ((j-1 + n) % n) * n;
+        for (k = 0; k < n; k++) {
+            u_new[j0 + k] = (
+                bot[j0 + k] +
+                u[i1 + j0 + k] +
+                u[j1 + k] +
+                u[j2 + k] +
+                u[j0 + ((k+1) % n)] +
+                u[j0 + ((k-1 + n) % n)] -
+                u[j0 + k] * 6.0
+                );
+        }
+    }
+
+    i0 = (n_loc - 1) * n2;
+    // i1 = 0;  // Ignored in favor of top
+    i2 = (n_loc - 2) * n2;
+    #pragma omp parallel for private(j, k, j0, j1, j2)
+    for (j = 0; j < n; j++) {
+        j0 = j * n;
+        j1 = ((j+1) % n) * n;
+        j2 = ((j-1 + n) % n) * n;
+        for (k = 0; k < n; k++) {
+            u_new[i0 + j0 + k] = (
+                top[j0 + k] +
+                u[i2 + j0 + k] +
+                u[i0 + j1 + k] +
+                u[i0 + j2 + k] +
+                u[i0 + j0 + ((k+1) % n)] +
+                u[i0 + j0 + ((k-1 + n) % n)] -
+                u[i0 + j0 + k] * 6.0
+                );
+        }
+    }
+}
+
+// def c_conj_grad_mpi_iter1(Ap: np.ndarray, p: np.ndarray, n_loc: int, n: int) -> float:
+//     return np.sum(p * Ap)
+
+double conj_grad_mpi_iter1(double *Ap, double *p, int n_loc, int n) {
+    // printf("Iter1 N_loc: %d, N: %d, threads: %d\n", n_loc, n, omp_get_max_threads());
+    return ddot(p, Ap, n_loc * n * n);
+}
+
+// def c_conj_grad_mpi_iter2(Ap: np.ndarray, p: np.ndarray, r: np.ndarray, x: np.ndarray, alpha: float, n_loc: int, n: int) -> float:
+//     x[:] = x + alpha * p
+//     r[:] = r + alpha * Ap
+//     return np.sum(r * r)
+
+double conj_grad_mpi_iter2(double *Ap, double *p, double *r, double *x, double alpha, int n_loc, int n) {
+    long int ntot = n_loc * n * n;
+    daxpy2(p, x, alpha, ntot);
+    daxpy2(Ap, r, alpha, ntot);
+    return ddot(r, r, ntot);
+}
+
+// def c_conj_grad_mpi_iter3(r: np.ndarray, p: np.ndarray, r_dot: list, n_loc: int, n: int):
+//     rn_dot_vn = - r_dot[1] / 6.0
+//     beta = rn_dot_vn / r_dot[0]
+//     r_dot[0] = rn_dot_vn
+//     p[:] = r / 6.0 + beta * p
+
+void conj_grad_mpi_iter3(double *r, double *p, double *r_dot, int n_loc, int n) {
+    long int i;
+    long int ntot = n_loc * n * n;
+    double rn_dot_vn = - r_dot[1] / 6.0;
+    double beta = rn_dot_vn / r_dot[0];
+    r_dot[0] = rn_dot_vn;
+
+    // printf("beta: %f\n", beta);
+
+    #pragma omp parallel for
+    for (i = 0; i < ntot; i++) {
+        p[i] = beta * p[i] + r[i] / 6.0;  // p = -v + beta * p
+    }     
 }

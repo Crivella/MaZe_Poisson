@@ -75,9 +75,13 @@ else:
             self.comm.Recv(buffer, source=self.nxt_, tag=0)
             # print(f'RANK {self.rank} recv_nxt  FROM {self.nxt_} DATA {buffer[:5, :5]}')
 
-        def all_reduce(self, data: float, op=MPI.SUM):
+        def all_reduce(self, data, op=MPI.SUM):
             """Perform an all reduce operation."""
             return self.comm.allreduce(data, op)
+
+        def all_reduce_inplace(self, data: np.ndarray, op=MPI.SUM):
+            """Perform an all reduce operation in place."""
+            self.comm.Allreduce(MPI.IN_PLACE, [data, MPI.DOUBLE], op)
 
         def barrier(self):
             """Barrier synchronization."""

@@ -8,6 +8,8 @@ mpi = MPIBase()
 
 class VoidLogger:
     def __getattr__(self, name):
+        if name == 'handlers':
+            return []
         return lambda *args, **kwargs: None
     def __call__(self, *args, **kwargs):
         return None
