@@ -3,6 +3,7 @@ from itertools import product
 import numpy as np
 import pandas as pd
 
+from .c_api import c_compute_tf_forces
 from .constants import a0, conv_mass, kB
 from .indices import GetDictTF
 from .input import GridSetting
@@ -85,14 +86,16 @@ class Particles(Logger):
         # Compute pairwise TF parameters
         tf_params = GetDictTF()
         charges_sum = self.charges[:, np.newaxis] + self.charges[np.newaxis, :]  # Shape: (N_p, N_p)
-        A = self.A = np.vectorize(lambda q: tf_params[q][0])(charges_sum)
-        C = self.C = np.vectorize(lambda q: tf_params[q][1])(charges_sum)
-        D = self.D = np.vectorize(lambda q: tf_params[q][2])(charges_sum)
-        sigma_TF = self.sigma_TF = np.vectorize(lambda q: tf_params[q][3])(charges_sum)
+        A = np.vectorize(lambda q: tf_params[q][0])(charges_sum)
+        C = np.vectorize(lambda q: tf_params[q][1])(charges_sum)
+        D = np.vectorize(lambda q: tf_params[q][2])(charges_sum)
+        sigma_TF = np.vectorize(lambda q: tf_params[q][3])(charges_sum)
 
         V_shift = A * np.exp(self.B * (sigma_TF - self.r_cutoff)) - C / self.r_cutoff**6 - D / self.r_cutoff**8
-        alpha = self.alpha = A * self.B * np.exp(self.B * (sigma_TF - self.r_cutoff)) - 6 * C / self.r_cutoff**7 - 8 * D / self.r_cutoff**9
-        self.beta = - V_shift - alpha * self.r_cutoff
+        alpha = A * self.B * np.exp(self.B * (sigma_TF - self.r_cutoff)) - 6 * C / self.r_cutoff**7 - 8 * D / self.r_cutoff**9
+        beta = - V_shift - alpha * self.r_cutoff
+
+        self.tf_params = np.array([A, C, D, sigma_TF, alpha, beta])
 
     def _init_potential_lj(self):
         """Initialize the Lennard-Jones potential parameters."""
@@ -113,42 +116,7 @@ class Particles(Logger):
 
     def ComputeTFForces(self) -> float:
         # Get all pairwise differences
-        r_diff = self.pos[:, np.newaxis, :] - self.pos[np.newaxis, :, :]  # Shape: (N_p, N_p, 3)
-
-        # Compute pairwise distances and unit vectors
-        r_diff = BoxScale(r_diff, self.L)  # Apply periodic boundary conditions
-        r_mag = np.linalg.norm(r_diff, axis=2)  # Shape: (N_p, N_p)
-        np.fill_diagonal(r_mag, np.inf)  # Avoid self-interaction by setting diagonal to infinity
-
-        r_cap = np.divide(r_diff, r_mag[:, :, np.newaxis], where=r_mag[:, :, np.newaxis] != 0)  # Avoid division by zero
-
-        A = self.A
-        B = self.B
-        C = self.C
-        D = self.D
-        sigma_TF = self.sigma_TF
-        alpha = self.alpha
-        beta = self.beta
-
-        # Apply cutoff mask
-        within_cutoff = r_mag <= self.r_cutoff
-
-        # Compute force magnitudes and potentials only for particles within the cutoff
-        f_mag = np.where(within_cutoff, B * A * np.exp(B * (sigma_TF - r_mag)) - 6 * C / r_mag**7 - 8 * D / r_mag**9 - alpha, 0)
-        V_mag = np.where(within_cutoff, A * np.exp(B * (sigma_TF - r_mag)) - C / r_mag**6 - D / r_mag**8 + alpha * r_mag + beta, 0) #- V_shift
-
-        # Compute pairwise forces, now with the shift applied to the force magnitudes
-        pairwise_forces = f_mag[:, :, np.newaxis] * r_cap  # Shape: (N_p, N_p, 3)
-
-        # Sum forces to get the net force on each particle
-        net_forces = np.sum(pairwise_forces, axis=1)  # Sum forces acting on each particle (ignore NaN values)
-
-        # Update the instance variables
-        self.forces_notelec = net_forces  # Store net forces in the instance variable
-        potential_energy = np.sum(V_mag) / 2  # Avoid double-counting for potential energy
-
-        return potential_energy
-        # grid.potential_notelec = potential_energy  # Store the potential energy
+        return c_compute_tf_forces(self.N_p, self.L, self.pos, self.B, self.tf_params, self.r_cutoff, self.forces_notelec)
 
     def ComputeLJForce(self, grid):
         raise NotImplementedError("Lennard-Jones forces not implemented yet")

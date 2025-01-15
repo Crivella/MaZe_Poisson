@@ -36,6 +36,19 @@ try:
         npct.ndpointer(dtype=np.int64, ndim=3, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
     ]
+
+    # double compute_tf_forces(int n_p, double L, double *pos, double B, double *params, double r_cut, double *forces)
+    c_compute_tf_forces = library.compute_tf_forces
+    c_compute_tf_forces.restype = ctypes.c_double
+    c_compute_tf_forces.argtypes = [
+        ctypes.c_int,
+        ctypes.c_double,
+        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+        ctypes.c_double,
+        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+        ctypes.c_double,
+        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+    ]
 except:
     logger.warning("C_API: compute_force_fd not available. Using Python instead.")
 
@@ -101,6 +114,56 @@ except:
                 forces[i][2] -= qn * E_z[s, y, z]
 
         return q_tot
+
+    # double compute_tf_forces(int n_p, double L, double *pos, double B, double *params, double r_cut, double *forces)
+    def c_compute_tf_forces(
+            N_p: int, L: float, pos: np.ndarray, B: float, params: np.ndarray, r_cut: float,
+            forces: np.ndarray
+        ) -> float:
+        """Compute the forces from the field using finite differences.
+
+        Args:
+            N_p (int): Number of particles.
+            L (float): Grid size.
+            pos (np.ndarray): Particle positions. Shape (N_p, 3).
+            B (float): B parameter of TF forces.
+            params (np.ndarray): TF parameters per particle pair [A,C,D,sigma,alpha,beta]. Shape (6, N_p, N_p).
+            r_cut (float): Cutoff radius.
+            forces (np.ndarray): Output forces. Shape (N_p, 3).
+
+        Returns:
+            float: TF potential
+        """
+        r_diff = pos[:, np.newaxis, :] - pos[np.newaxis, :, :]  # Shape: (N_p, N_p, 3)
+
+        # Compute pairwise distances and unit vectors
+        r_diff -= L * np.rint(r_diff / L)  # Apply periodic boundary conditions
+        r_mag = np.linalg.norm(r_diff, axis=2)  # Shape: (N_p, N_p)
+        np.fill_diagonal(r_mag, np.inf)  # Avoid self-interaction by setting diagonal to infinity
+
+        r_cap = np.divide(r_diff, r_mag[:, :, np.newaxis], where=r_mag[:, :, np.newaxis] != 0)  # Avoid division by zero
+
+        # Unpack parameters
+        A, C, D, sigma, alpha, beta = params
+
+        # Apply cutoff mask
+        within_cutoff = r_mag <= r_cut
+
+        # Compute force magnitudes and potentials only for particles within the cutoff
+        f_mag = np.where(within_cutoff, B * A * np.exp(B * (sigma - r_mag)) - 6 * C / r_mag**7 - 8 * D / r_mag**9 - alpha, 0)
+        V_mag = np.where(within_cutoff, A * np.exp(B * (sigma - r_mag)) - C / r_mag**6 - D / r_mag**8 + alpha * r_mag + beta, 0) #- V_shift
+
+        # Compute pairwise forces, now with the shift applied to the force magnitudes
+        pairwise_forces = f_mag[:, :, np.newaxis] * r_cap  # Shape: (N_p, N_p, 3)
+
+        # Sum forces to get the net force on each particle
+        net_forces = np.sum(pairwise_forces, axis=1)  # Sum forces acting on each particle (ignore NaN values)
+
+        # Update the instance variables
+        forces[:] = net_forces  # Store net forces in the output array
+        potential_energy = np.sum(V_mag) / 2  # Avoid double-counting for potential energy
+
+        return potential_energy
 
 def c_compute_forces_fd_mpi(
         N: int, N_p: int, h: float,
