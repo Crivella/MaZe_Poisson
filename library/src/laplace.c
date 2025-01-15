@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <omp.h>
+
+#include "linalg.h"
 
 #ifdef __cplusplus
 #define EXTERN_C extern "C"                                                           
@@ -9,16 +10,6 @@
 #define EXTERN_C
 #endif
 
-/*
-Print information about the OpenMP number of threads
-*/
-EXTERN_C int get_omp_info(void) {
-#ifdef _OPENMP
-    return omp_get_max_threads();
-#else
-    return 0;
-#endif
-}
 
 /*
 Apply a 3-D Laplace filter to a 3-D array with cyclic boundary conditions
@@ -63,66 +54,6 @@ EXTERN_C void laplace_filter(double *u, double *u_new, int n) {
 }
 
 /*
-Compute the dot product of two vectors
-@param u: the first vector
-@param v: the second vector
-@param n: the size of the vectors
-@return the dot product of the two vectors
-*/
-EXTERN_C double ddot(double *u, double *v, long int n) {
-    long int i;
-    double result = 0.0;
-    #pragma omp parallel for reduction(+:result)
-    for (i = 0; i < n; i++) {
-        result += u[i] * v[i];
-    }
-    return result;
-}
-
-/*
-Compute the sum of two vectors scaled by a constant (res = u + alpha * v)
-and store the result in a third vector
-@param v: the first vector
-@param u: the second vector
-@param result: the vector to store the result
-@param alpha: the scaling constant
-@param n: the size of the vectors
-*/
-EXTERN_C void daxpy(double *v, double *u, double *result, double alpha, long int n) {
-    long int i;
-    #pragma omp parallel for
-    for (i = 0; i < n; i++) {
-        result[i] = u[i] + alpha * v[i];
-    }
-}
-
-/*
-Compute the sum of two vectors scaled by a constant (u += alpha * v)
-and store the result in the second vector
-@param v: the first vector
-@param u: the second vector
-@param alpha: the scaling constant
-@param n: the size of the vectors
-*/
-EXTERN_C void daxpy2(double *v, double *u, double alpha, long int n) {
-    long int i;
-    #pragma omp parallel for
-    for (i = 0; i < n; i++) {
-        u[i] += alpha * v[i];
-    }
-}
-
-/*
-Compute the Euclidean norm of a vector
-@param u: the vector
-@param n: the size of the vector
-@return the Euclidean norm of the vector
-*/
-EXTERN_C double norm(double *u, long int n) {
-    return sqrt(ddot(u, u, n));
-}
-
-/*
 Solve the system of linear equations Ax = b using the conjugate gradient method where A is the Laplace filter
 @param b: the right-hand side of the system of equations
 @param x0: the initial guess for the solution
@@ -148,7 +79,7 @@ EXTERN_C int conj_grad(double *b, double *x0, double *x, double tol, int n) {
         x[i] = x0[i];
     }
     laplace_filter(x, r, n);  // r = A . x
-    daxpy2(b, r, -1.0, n3);  // r = A . x - b
+    daxpy(b, r, -1.0, n3);  // r = A . x - b
 
     #pragma omp parallel for
     for (i = 0; i < n3; i++) {
@@ -164,8 +95,8 @@ EXTERN_C int conj_grad(double *b, double *x0, double *x, double tol, int n) {
         laplace_filter(p, Ap, n);
 
         alpha = r_dot_v / ddot(p, Ap, n3);  // alpha = <r, v> / <p | A | p>
-        daxpy2(p, x, alpha, n3);  // x_new = x + alpha * p
-        daxpy2(Ap, r, alpha, n3);  // r_new = r + alpha * Ap
+        daxpy(p, x, alpha, n3);  // x_new = x + alpha * p
+        daxpy(Ap, r, alpha, n3);  // r_new = r + alpha * Ap
 
         rn_dot_rn = ddot(r, r, n3);  // <r_new, r_new>
         if (sqrt(rn_dot_rn) <= tol) {
@@ -282,8 +213,8 @@ double conj_grad_mpi_iter1(double *Ap, double *p, int n_loc, int n) {
 
 double conj_grad_mpi_iter2(double *Ap, double *p, double *r, double *x, double alpha, int n_loc, int n) {
     long int ntot = n_loc * n * n;
-    daxpy2(p, x, alpha, ntot);
-    daxpy2(Ap, r, alpha, ntot);
+    daxpy(p, x, alpha, ntot);
+    daxpy(Ap, r, alpha, ntot);
     return ddot(r, r, ntot);
 }
 
