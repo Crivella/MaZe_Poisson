@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+from ..input import MDVariables
 from ..particles import Particles
 
 
@@ -33,3 +34,8 @@ class BaseIntegrator(ABC):
     @abstractmethod
     def stop_thermostat(self):
         """Stop the thermostat."""
+
+    @staticmethod
+    @abstractmethod
+    def get_thermostat_variables(mdv: MDVariables) -> list:
+        """Get the thermostat variables."""

@@ -1,3 +1,3 @@
-from .base_solver import BaseSolver
-from .fft_solver import FFTSolver
-from .lcg_solver import LCGSolver
+from .solver_md import SolverMD
+
+__all__ = ['SolverMD']

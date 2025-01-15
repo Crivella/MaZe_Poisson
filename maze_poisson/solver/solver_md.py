@@ -2,11 +2,10 @@
 
 import functools
 import time
-from abc import ABC, abstractmethod
 
 import numpy as np
 
-from ..grid.base_grid import BaseGrid
+from ..grid import BaseGrid, FFTGrid, LCGGrid, LCGGrid_MPI
 from ..input import GridSetting, MDVariables, OutputSettings
 from ..integrators import BaseIntegrator, OVRVOIntegrator, VerletIntegrator
 from ..loggers import Logger, setup_logger
@@ -37,7 +36,17 @@ def time_report(func):
         return result
     return wrapper
 
-class BaseSolver(Logger, ABC):
+method_grid_map: dict[str, tuple[BaseGrid, BaseGrid]] = {
+    'LCG': (LCGGrid, LCGGrid_MPI),
+    'FFT': (FFTGrid, None),
+}
+
+integrator_map: dict[str, BaseIntegrator] = {
+    'OVRVO': OVRVOIntegrator,
+    'VERLET': VerletIntegrator,
+}
+
+class SolverMD(Logger):
     """Base class for all solver classes."""
 
     def __init__(self, gset: GridSetting, mdv: MDVariables, outset: OutputSettings):
@@ -54,6 +63,7 @@ class BaseSolver(Logger, ABC):
 
         self.integrator: BaseIntegrator = None
         self.grid: BaseGrid = None
+        self.particles: Particles = None
 
         self.ofiles = OutputFiles(self.outset)
         self.out_stride = outset.stride
@@ -67,42 +77,32 @@ class BaseSolver(Logger, ABC):
         self.q_tot = 0
         self.thermostat = self.mdv.thermostat
 
-        self.to_init = []
-        self.to_finalize = []
-
-        self.register_init('grid', self.initialize_grid)
-        self.register_init('particles', self.initialize_particles)
-        self.register_init('integrator', self.initialize_integrator)
-
-    @abstractmethod
-    def initialize_grid(self):
-        """Initialize the grid."""
-
-    @abstractmethod
-    def compute_forces_field(self):
-        """Compute the forces on the particles due to the electric field."""
-
-    def register_init(self, name: str, func, args = None, kwargs = None):
-        """Register an initialization function."""
-        self.to_init.append((name, func, args or [], kwargs or {}))
-
-    def register_finalize(self, name: str, func, args = None, kwargs = None):
-        """Register a finalize function."""
-        self.to_finalize.append((name, func, args or [], kwargs or {}))
-
     @time_report
     def initialize(self):
         """Initialize the solver."""
-        for name, func, args, kwargs in self.to_init:
-            self.logger.info(f"Initializing {name}...")
-            func(*args, **kwargs)
+        self.initialize_grid()
+        self.initialize_particles()
+        self.initialize_integrator()
 
-    @time_report
     def finalize(self):
         """Finalize the solver."""
-        for name, func, args, kwargs in self.to_finalize:
-            self.logger.info(f"Finalizing {name}...")
-            func(*args, **kwargs)
+        self.particles.cleanup()
+        self.grid.cleanup()
+
+    def initialize_grid(self):
+        """Initialize the grid."""
+        method = self.mdv.method.upper()
+        if not method in method_grid_map:
+            raise ValueError(f"Method {method} not recognized.")
+        tpl = method_grid_map[method]
+        if mpi and mpi.size > 1:
+            grid_cls = tpl[1]
+        else:
+            grid_cls = tpl[0]
+        if grid_cls is None:
+            raise ValueError(f"Method {method} not supported with MPI.")
+
+        self.grid = grid_cls(self.L, self.h, self.N, self.mdv.tol)
 
     def initialize_particles(self):
         """Initialize the particles."""
@@ -116,16 +116,13 @@ class BaseSolver(Logger, ABC):
             ValueError: If the integrator is not recognized.
         """
         name = self.mdv.integrator.upper()
-        if name == 'OVRVO':
-            self.integrator = OVRVOIntegrator(self.mdv.dt, self.mdv.kBT, self.grid.L)
-            tstat_args = [self.mdv.gamma]
-        elif name == 'VERLET':
-            self.integrator = VerletIntegrator(self.mdv.dt, self.mdv.kBT, self.grid.L)
-            tstat_args = [self.mdv.T]
-        else:
-            raise ValueError(f"Integrator {name} not recognized.") 
+        if not name in integrator_map:
+            raise ValueError(f"Integrator {name} not recognized.")
+        cls = integrator_map[name]
+        self.integrator = cls(self.mdv.dt, self.mdv.kBT, self.grid.L)
 
         if self.thermostat:
+            tstat_args = cls.get_thermostat_variables(self.mdv)
             self.integrator.init_thermostat(*tstat_args)
 
     def initialize_md(self):
@@ -204,6 +201,10 @@ class BaseSolver(Logger, ABC):
             end = time.time()
             self.logger.debug(f'Forces NOEL: {end - start}')
         self.particles.forces = self.particles.forces_elec + self.particles.forces_notelec
+
+    def compute_forces_field(self):
+        """Compute the forces on the particles due to the electric field."""
+        self.q_tot = self.particles.compute_forces_field(self.grid.phi, self.grid.q)
 
     def compute_forces_notelec(self):
         """Compute the forces on the particles due to non-electric interactions."""

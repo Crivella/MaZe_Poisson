@@ -56,3 +56,7 @@ class BaseGrid(ABC):
             end = time.time()
             self.time = end - start
         return wrapper
+
+    def cleanup(self):
+        """Cleanup the grid."""
+        pass

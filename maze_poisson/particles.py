@@ -3,7 +3,7 @@ from itertools import product
 import numpy as np
 import pandas as pd
 
-from .c_api import c_compute_tf_forces
+from . import c_api
 from .constants import a0, conv_mass, kB
 from .indices import GetDictTF
 from .input import GridSetting
@@ -114,9 +114,25 @@ class Particles(Logger):
         self.neighbors = np.ascontiguousarray(indices[:, np.newaxis, :] + self.neigh_diff) % self.N
         return self.neighbors
 
+    def compute_forces_field(self, phi: np.ndarray, q: np.ndarray) -> float:
+        """Compute the forces from the field."""
+        h = self.h  # h in angstrom
+        N = self.N
+        N_p = self.N_p
+        # phi = grid.phi
+        # q = grid.q
+
+        neighbors = self.neighbors
+
+        q_tot = c_api.c_compute_force_fd(N, N_p, h, phi, q, neighbors, self.forces_elec)
+
+        return q_tot
+
     def ComputeTFForces(self) -> float:
         # Get all pairwise differences
-        return c_compute_tf_forces(self.N_p, self.L, self.pos, self.B, self.tf_params, self.r_cutoff, self.forces_notelec)
+        return c_api.c_compute_tf_forces(
+            self.N_p, self.L, self.pos, self.B, self.tf_params, self.r_cutoff, self.forces_notelec
+            )
 
     def ComputeLJForce(self, grid):
         raise NotImplementedError("Lennard-Jones forces not implemented yet")
@@ -187,6 +203,8 @@ class Particles(Logger):
 
         return self.temperature
 
+    def cleanup(self):
+        """Clean up the particle object."""
 
   
 # distance with periodic boundary conditions

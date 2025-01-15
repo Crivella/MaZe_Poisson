@@ -96,3 +96,7 @@ class OVRVOIntegrator(BaseIntegrator):
     def stop_thermostat(self):
         """Stop the thermostat."""
         self.gamma = 0
+
+    @staticmethod
+    def get_thermostat_variables(mdv) -> list:
+        return [mdv.gamma]

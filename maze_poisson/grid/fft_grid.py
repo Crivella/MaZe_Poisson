@@ -21,6 +21,17 @@ class FFTGrid(BaseGrid):
         self.ig2 = (4 * np.pi / self.h**3) / g2
         del g2, gx, gy, gz
 
+        self.init_fftw()
+
+    def init_fftw(self):
+        """Initialize the FFTW."""
+        c_api.init_fftw_omp()
+        c_api.init_rfft(self.N)
+
+    def cleanup_fftw(self):
+        """Cleanup the FFTW."""
+        c_api.cleanup_fftw()
+
     def calculate_phi(self):
         """Calculate the field."""
         c_api.rfft_solve(self.N, self.q, self.ig2, self.phi_r)
@@ -41,3 +52,7 @@ class FFTGrid(BaseGrid):
     @property
     def phi_prev(self):
         return self.phi_r
+
+    def cleanup(self):
+        self.cleanup_fftw()
+        return super().cleanup()

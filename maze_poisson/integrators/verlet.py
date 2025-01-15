@@ -23,6 +23,7 @@ class VerletIntegrator(BaseIntegrator):
         particles.vel += 0.5 * self.dt * particles.forces / particles.masses[:, np.newaxis]
         particles.pos += self.dt * particles.vel
         particles.pos %= self.L
+        particles.pos = np.ascontiguousarray(particles.pos)
 
     def part2(self, particles: Particles):
         """Update the velocity of the particles."""
@@ -39,4 +40,9 @@ class VerletIntegrator(BaseIntegrator):
     def stop_thermostat(self):
         """Stop the thermostat."""
         self.temp = None
+
+    @staticmethod
+    def get_thermostat_variables(mdv) -> list:
+        """Get the thermostat variables."""
+        return [mdv.T]
 
