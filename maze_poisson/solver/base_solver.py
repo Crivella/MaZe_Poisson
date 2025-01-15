@@ -194,9 +194,15 @@ class BaseSolver(Logger, ABC):
     def compute_forces(self):
         """Compute the forces on the particles."""
         if self.mdv.elec:
+            start = time.time()
             self.compute_forces_field()
+            end = time.time()
+            self.logger.debug(f'Forces ELEC: {end - start}')
         if self.mdv.not_elec:
+            start = time.time()
             self.compute_forces_notelec()
+            end = time.time()
+            self.logger.debug(f'Forces NOEL: {end - start}')
         self.particles.forces = self.particles.forces_elec + self.particles.forces_notelec
 
     def compute_forces_notelec(self):
