@@ -5,6 +5,7 @@ import time
 
 import numpy as np
 
+from ..clocks import Clock
 from ..grid import BaseGrid, FFTGrid, LCGGrid, LCGGrid_MPI
 from ..input import GridSetting, MDVariables, OutputSettings
 from ..integrators import BaseIntegrator, OVRVOIntegrator, VerletIntegrator
@@ -51,7 +52,7 @@ class SolverMD(Logger):
 
     def __init__(self, gset: GridSetting, mdv: MDVariables, outset: OutputSettings):
         super().__init__()
-        
+
         self.gset = gset
         self.mdv = mdv
         self.outset = outset
@@ -77,7 +78,7 @@ class SolverMD(Logger):
         self.q_tot = 0
         self.thermostat = self.mdv.thermostat
 
-    @time_report
+    @Clock('initialize')
     def initialize(self):
         """Initialize the solver."""
         self.initialize_grid()
@@ -132,13 +133,13 @@ class SolverMD(Logger):
         # STEP 0 Verlet
         self.update_charges()
         if self.mdv.preconditioning:
-            self.grid.initialize_field()
+            self.initialize_field()
 
         # STEP 1 Verlet
         self.integrator.part1(self.particles)
         self.update_charges()
         if self.mdv.preconditioning:
-            self.grid.initialize_field()
+            self.initialize_field()
         self.compute_forces()
         self.integrator.part2(self.particles)
 
@@ -148,6 +149,17 @@ class SolverMD(Logger):
         self.grid.field_j = int(self.particles.pos[0,1] / self.h)
         self.grid.field_k = int(self.particles.pos[0,2] / self.h)
 
+    @Clock('field')
+    def initialize_field(self):
+        """Initialize the field."""
+        self.grid.initialize_field()
+
+    @Clock('field')
+    def update_field(self):
+        """Update the field."""
+        self.grid.update_field()
+
+    @Clock('forces')
     def compute_forces(self):
         """Compute the forces on the particles."""
         if self.mdv.elec:
@@ -162,31 +174,42 @@ class SolverMD(Logger):
             self.logger.debug(f'Forces NOEL: {end - start}')
         self.particles.forces = self.particles.forces_elec + self.particles.forces_notelec
 
+    @Clock('forces_field')
     def compute_forces_field(self):
         """Compute the forces on the particles due to the electric field."""
         self.q_tot = self.particles.compute_forces_field(self.grid.phi, self.grid.q)
 
+    @Clock('forces_notelec')
     def compute_forces_notelec(self):
         """Compute the forces on the particles due to non-electric interactions."""
         self.grid.potential_notelec = self.particles.ComputeTFForces()
 
+    @Clock('file_output')
+    def md_loop_output(self, i: int):
+        """Output the data for the MD loop."""
+        self.ofiles.output(i, self.grid, self.particles)
+
+    @Clock('charges')
+    def update_charges(self):
+        """Update the charge grid based on the particles position with function g to spread them on the grid."""
+        # raise NotImplementedError("Need to move this in the Grid class")
+        self.particles.get_nearest_neighbors()
+        q_tot = self.grid.update_charges(self.particles)
+
+        if np.abs(self.q_tot - q_tot) > 1e-6:
+            self.logger.error('Error: change initial position, charge is not preserved: q_tot = %.4f', q_tot)
+            exit() # exits runinning otherwise it hangs the code
+
+        # print(q_tot)
+        self.q_tot = q_tot
+
     def md_loop_iter(self):
         """Run one iteration of the molecular dynamics loop."""
         self.integrator.part1(self.particles)
-        self.logger.debug('')
         if self.mdv.elec:
-            start = time.time()
             self.update_charges()
-            end = time.time()
-            self.logger.debug(f'Charges: {end - start}')
-            start = time.time()
-            self.grid.update_field()
-            end = time.time()
-            self.logger.debug(f'Field: {end - start}')
-        start = time.time()
+            self.update_field()
         self.compute_forces()
-        end = time.time()
-        self.logger.debug(f'Forces: {end - start}')
         self.integrator.part2(self.particles)
 
     def md_check_thermostat(self, i: int):
@@ -197,7 +220,6 @@ class SolverMD(Logger):
                 self.thermostat = False
                 self.integrator.stop_thermostat()
 
-    @time_report
     def md_loop(self):
         """Run the molecular dynamics loop."""
         if self.mdv.init_steps:
@@ -217,8 +239,9 @@ class SolverMD(Logger):
         for i in loop:
             self.md_loop_iter()
             self.md_check_thermostat(i)
-            self.ofiles.output(i, self.grid, self.particles)
+            self.md_loop_output(i)
 
+    @Clock('total')
     def run(self):
         """Run the solver."""
         self.initialize()
@@ -226,6 +249,7 @@ class SolverMD(Logger):
         self.initialize_md()
         self.md_loop()
         self.finalize()
+        Clock.report_all()
 
     def init_info(self):
         """Print information about the initialization."""
@@ -238,16 +262,3 @@ class SolverMD(Logger):
         self.logger.info(f'  Elec: {self.mdv.elec}    NotElec: {self.mdv.not_elec}')
         self.logger.info(f'  Temperature: {self.mdv.T} K,  Thermostat: {self.thermostat},  Gamma: {self.mdv.gamma}')
         self.logger.info(f'  Velocity rescaling: {self.mdv.rescale}')
-
-    def update_charges(self):
-        """Update the charge grid based on the particles position with function g to spread them on the grid."""
-        # raise NotImplementedError("Need to move this in the Grid class")
-        self.particles.get_nearest_neighbors()
-        q_tot = self.grid.update_charges(self.particles)
-
-        if np.abs(self.q_tot - q_tot) > 1e-6:
-            self.logger.error('Error: change initial position, charge is not preserved: q_tot = %.4f', q_tot)
-            exit() # exits runinning otherwise it hangs the code
-
-        # print(q_tot)
-        self.q_tot = q_tot

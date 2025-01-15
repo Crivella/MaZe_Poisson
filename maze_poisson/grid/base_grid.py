@@ -87,17 +87,6 @@ class BaseGrid(ABC):
 
         return q_tot
 
-    @staticmethod
-    def timeit(func):
-        """Decorator to measure the time of the function."""
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            start = time.time()
-            func(self, *args, **kwargs)
-            end = time.time()
-            self.time = end - start
-        return wrapper
-
     def cleanup(self):
         """Cleanup the grid."""
         pass

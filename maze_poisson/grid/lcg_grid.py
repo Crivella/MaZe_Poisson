@@ -23,7 +23,6 @@ class LCGGrid(BaseGrid):
         c_api.c_conj_grad(- 4 * np.pi * self.q / self.h, self.phi, self.tmp, self.tol, self.N)
         self._phi.append(np.copy(self.tmp))
 
-    @BaseGrid.timeit
     def update_field(self):
         """Update the field."""
         phi = 2 * self.phi - self.phi_prev
@@ -77,7 +76,6 @@ class LCGGrid_MPI(BaseGrid):
         c_api.c_conj_grad(- 4 * np.pi * self.q / self.h, self.phi, self.tmp, self.tol, self.N)
         self._phi.append(np.copy(self.tmp))
 
-    @BaseGrid.timeit
     def update_field(self):
         """Update the field."""
         phi = 2 * self.phi - self.phi_prev

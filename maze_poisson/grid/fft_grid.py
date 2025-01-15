@@ -40,7 +40,6 @@ class FFTGrid(BaseGrid):
         """Initialize the field."""
         self.calculate_phi()
 
-    @BaseGrid.timeit
     def update_field(self):
         """Update the field."""
         self.calculate_phi()

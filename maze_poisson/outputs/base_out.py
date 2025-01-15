@@ -63,14 +63,14 @@ class BaseOutputFile(ABC):
 
 class OutputFiles:
     field = None
-    performance = None
+    # performance = None
     energy = None
     temperature = None
     solute = None
     tot_force = None
     restart = None
 
-    files = ['field', 'performance', 'energy', 'temperature', 'solute', 'tot_force', 'restart']
+    files = ['field', 'energy', 'temperature', 'solute', 'tot_force', 'restart']
 
     format_classes = {}
 
@@ -110,7 +110,7 @@ class OutputFiles:
             self.tot_force.write_data(iter, grid, particles)
             self.temperature.write_data(iter, grid, particles)
             self.solute.write_data(iter, grid, particles)
-            self.performance.write_data(iter, grid, particles)
+            # self.performance.write_data(iter, grid, particles)
             self.field.write_data(iter, grid, particles)
             if self.out_flushstride and iter % self.out_flushstride == 0:
                 self.flush()
