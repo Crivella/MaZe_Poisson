@@ -2,9 +2,9 @@ from abc import abstractmethod
 
 import pandas as pd
 
-from ..constants import Ha_to_eV, a0, conv_mass
-from ..grid.base_grid import BaseGrid
-from ..particles import Particles
+from ...constants import Ha_to_eV, a0, conv_mass
+from ...grid.base_grid import BaseGrid
+from ...particles import Particles
 from .base_out import BaseOutputFile, OutputFiles, ensure_enabled
 
 

@@ -73,7 +73,6 @@ try:
         ctypes.c_int,
         ctypes.c_int,
     ]
-    # print('c_api.py: c_conj_grad_mpi_iter3 is available')
 except:
     logger.warning("C_API: laplace_filter not available. Using Python instead.")
     def c_laplace_single(u_in: np.ndarray, u_out: np.ndarray, n: int) -> None:
@@ -208,11 +207,9 @@ def c_laplace_mpi(u_in: np.ndarray, u_out: np.ndarray, n: int):
     tmp_top = np.empty_like(u_in[0, :, :])
     tmp_bot = np.empty_like(u_in[-1, :, :])
 
-    # print(f'Rank {mpi.rank}: SENDING')
     mpi.send_previous(u_in[0, :, :])
     mpi.send_next(u_in[-1, :, :])
 
-    # print(f'Rank {mpi.rank}: RECEIVING')
     mpi.recv_previous(tmp_bot)
     mpi.recv_next(tmp_top)
 

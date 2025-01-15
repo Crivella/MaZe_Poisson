@@ -5,7 +5,7 @@ from .base_grid import BaseGrid
 
 
 class FFTGrid(BaseGrid):
-    def init_grids(self):
+    def init_grids_single(self):
         """Initialize the grids."""
         self.shape = (self.N,)*3
         self.q = np.zeros(self.shape, dtype=float)

@@ -5,14 +5,15 @@ from functools import wraps
 import numpy as np
 
 from ..mpi import MPIBase
+from ..myio import Logger
 from ..particles import Particles, g
 
-mpi = MPIBase()
 
-class BaseGrid(ABC):
+class BaseGrid(Logger, ABC):
     """Base class for all grid classes."""
 
-    def __init__(self, L: float, h: float, N: int, tol: float = 1e-7):
+    def __init__(self, L: float, h: float, N: int, tol: float = 1e-7, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.mpi = MPIBase()
 
         self.N = N
@@ -34,9 +35,15 @@ class BaseGrid(ABC):
 
         self.init_grids()
 
+
     @abstractmethod
-    def init_grids(self):
+    def init_grids_single(self):
         """Initialize the grids."""
+
+    def init_grids_mpi(self):
+        """Initialize the grids MPI aware."""
+        self.logger.error(f"MPI not implemented for {self.__class__.__name__}")
+        exit()
 
     @abstractmethod
     def initialize_field(self):
@@ -51,7 +58,13 @@ class BaseGrid(ABC):
     def phi(self):
         """Should return the field in REAL space."""
 
-    # def update_charges(self, pos: np.ndarray, neighbors: np.ndarray, charges: np.ndarray) -> float:
+    def init_grids(self):
+        """Initialize the grids."""
+        if self.mpi:
+            self.init_grids_mpi()
+        else:
+            self.init_grids_single()
+
     def update_charges(self, particles: Particles) -> float:
         """Update the charges on the grid.
         
@@ -72,7 +85,7 @@ class BaseGrid(ABC):
         indices = tuple(neighbors.reshape(-1, 3).T)
 
         updates = (charges[:, np.newaxis] * np.prod(g(diff, self.L, self.h), axis=2)).flatten()
-        if mpi and mpi.size > 1:
+        if self.mpi:
             for i,j,k,upd in zip(*indices, updates):
                 i -= self.N_loc_start
                 if 0 <= i < self.N_loc:
@@ -82,8 +95,8 @@ class BaseGrid(ABC):
             q[indices] += updates
   
         q_tot = np.sum(updates)
-        if mpi and mpi.size > 1:
-            q_tot = mpi.all_reduce(q_tot)
+        if self.mpi:
+            q_tot = self.mpi.all_reduce(q_tot)
 
         return q_tot
 

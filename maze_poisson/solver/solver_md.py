@@ -1,45 +1,18 @@
 """Implement a base solver Class for maze_poisson."""
-
-import functools
-import time
-
 import numpy as np
 
 from ..clocks import Clock
-from ..grid import BaseGrid, FFTGrid, LCGGrid, LCGGrid_MPI
+from ..grid import BaseGrid, FFTGrid, LCGGrid
 from ..input import GridSetting, MDVariables, OutputSettings
 from ..integrators import BaseIntegrator, OVRVOIntegrator, VerletIntegrator
-from ..loggers import Logger
-from ..mpi import MPIBase
-from ..outputs import OutputFiles
+from ..myio import Logger, OutputFiles, ProgressBar
 from ..particles import Particles
-
-try:
-    from tqdm import tqdm
-except ImportError:
-    def tqdm(x, *args, **kwargs):
-        return x
-
-mpi = MPIBase()
 
 np.random.seed(42)
 
-def time_report(func):
-    """Decorator to report the time taken by a function."""
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        start = time.time()
-        result = func(*args, **kwargs)
-        end = time.time()
-        dt = end - start
-        if dt > 1:
-            print(f"Time taken by {func.__name__}: {dt:.2f} s")
-        return result
-    return wrapper
-
 method_grid_map: dict[str, tuple[BaseGrid, BaseGrid]] = {
-    'LCG': (LCGGrid, LCGGrid_MPI),
-    'FFT': (FFTGrid, None),
+    'LCG': LCGGrid,
+    'FFT': FFTGrid,
 }
 
 integrator_map: dict[str, BaseIntegrator] = {
@@ -95,14 +68,8 @@ class SolverMD(Logger):
         method = self.mdv.method.upper()
         if not method in method_grid_map:
             raise ValueError(f"Method {method} not recognized.")
-        tpl = method_grid_map[method]
-        if mpi and mpi.size > 1:
-            grid_cls = tpl[1]
-        else:
-            grid_cls = tpl[0]
-        if grid_cls is None:
-            raise ValueError(f"Method {method} not supported with MPI.")
 
+        grid_cls = method_grid_map[method]
         self.grid = grid_cls(self.L, self.h, self.N, self.mdv.tol)
 
     def initialize_particles(self):
@@ -111,11 +78,7 @@ class SolverMD(Logger):
         self.particles = Particles.from_file(start_file, self.gset, self.mdv.potential, self.mdv.kBT)
 
     def initialize_integrator(self):
-        """Initialize the MD integrator.
-
-        Raises:
-            ValueError: If the integrator is not recognized.
-        """
+        """Initialize the MD integrator."""
         name = self.mdv.integrator.upper()
         if not name in integrator_map:
             raise ValueError(f"Integrator {name} not recognized.")
@@ -163,21 +126,15 @@ class SolverMD(Logger):
     def compute_forces(self):
         """Compute the forces on the particles."""
         if self.mdv.elec:
-            start = time.time()
             self.compute_forces_field()
-            end = time.time()
-            self.logger.debug(f'Forces ELEC: {end - start}')
         if self.mdv.not_elec:
-            start = time.time()
             self.compute_forces_notelec()
-            end = time.time()
-            self.logger.debug(f'Forces NOEL: {end - start}')
         self.particles.forces = self.particles.forces_elec + self.particles.forces_notelec
 
     @Clock('forces_field')
     def compute_forces_field(self):
         """Compute the forces on the particles due to the electric field."""
-        self.q_tot = self.particles.compute_forces_field(self.grid.phi, self.grid.q)
+        self.q_tot = self.particles.compute_forces_field(self.grid)
 
     @Clock('forces_notelec')
     def compute_forces_notelec(self):
@@ -192,15 +149,13 @@ class SolverMD(Logger):
     @Clock('charges')
     def update_charges(self):
         """Update the charge grid based on the particles position with function g to spread them on the grid."""
-        # raise NotImplementedError("Need to move this in the Grid class")
         self.particles.get_nearest_neighbors()
         q_tot = self.grid.update_charges(self.particles)
 
         if np.abs(self.q_tot - q_tot) > 1e-6:
             self.logger.error('Error: change initial position, charge is not preserved: q_tot = %.4f', q_tot)
-            exit() # exits runinning otherwise it hangs the code
+            exit()
 
-        # print(q_tot)
         self.q_tot = q_tot
 
     def md_loop_iter(self):
@@ -212,11 +167,11 @@ class SolverMD(Logger):
         self.compute_forces()
         self.integrator.part2(self.particles)
 
-    def md_check_thermostat(self, i: int):
+    def md_check_thermostat(self, iter: int):
         if self.thermostat:
             temperature = self.particles.get_temperature()
             if np.abs(temperature - self.mdv.T) <= 100:
-                self.logger.info(f'End thermostating iteration {i}')
+                self.logger.info(f'End thermostating iteration {iter}')
                 self.thermostat = False
                 self.integrator.stop_thermostat()
 
@@ -224,30 +179,22 @@ class SolverMD(Logger):
         """Run the molecular dynamics loop."""
         if self.mdv.init_steps:
             self.logger.info("Running MD loop initialization steps...")
-            if mpi and mpi.rank > 1:
-                loop = range(self.mdv.init_steps)
-            else:
-                loop = tqdm(range(self.mdv.init_steps))
-            for i in loop:
+            for i in ProgressBar(self.mdv.init_steps):
                 self.md_loop_iter()
 
         self.logger.info("Running MD loop...")
-        if mpi and mpi.rank > 1:
-            loop = range(self.mdv.N_steps)
-        else:
-            loop = tqdm(range(self.mdv.N_steps))
-        for i in loop:
+        for i in ProgressBar(self.mdv.N_steps):
             self.md_loop_iter()
             self.md_check_thermostat(i)
             self.md_loop_output(i)
 
-    @Clock('total')
     def run(self):
-        """Run the solver."""
+        """Run the MD calculation."""
         self.initialize()
         self.init_info()
         self.initialize_md()
         self.md_loop()
+        self.md_loop_output(self.mdv.N_steps)
         self.finalize()
         Clock.report_all()
 

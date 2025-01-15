@@ -4,7 +4,7 @@ import numpy as np
 import yaml
 
 from .constants import a0, density, kB, m_Cl, m_Na, ref_L, ref_N, t_au
-from .loggers import logger
+from .myio.loggers import logger
 
 ###################################################################################
 

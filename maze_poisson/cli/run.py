@@ -1,6 +1,7 @@
 import click
 
-from ..input import initialize_from_yaml
+# from ..input import initialize_from_yaml
+from ..myio.input import load_file
 from ..solver import SolverMD
 from .maze import maze
 
@@ -23,7 +24,11 @@ def run():
     help='Enable verbose logging',
     )
 def md(filename, verbose):
-    gs, os, ms = initialize_from_yaml(filename)
+    try:
+        gs, os, ms = load_file(filename)
+    except ValueError as e:
+        click.echo(e)
+        return
     if verbose:
         os.debug = True
 

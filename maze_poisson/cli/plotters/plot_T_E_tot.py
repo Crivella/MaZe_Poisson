@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from ...constants import a0, density, m_Cl, m_Na, t_au
-from ...loggers import logger
+from ...myio.loggers import logger
 from . import get_N, get_Np, get_Np_input
 
 path = 'Outputs/'

@@ -2,8 +2,8 @@ import ctypes
 import os
 import signal
 
-from ..loggers import logger
 from ..mpi import MPIBase
+from ..myio.loggers import logger
 
 mpi = MPIBase()
 
@@ -26,6 +26,11 @@ except:
 from .fftw import cleanup_fftw, init_fftw_omp, init_rfft, rfft_solve
 from .forces import c_compute_force_fd, c_compute_tf_forces
 from .laplace import c_conj_grad, c_laplace
+
+__all__ = [
+    'c_compute_force_fd', 'c_compute_tf_forces', 'c_conj_grad', 'c_laplace',
+    'cleanup_fftw', 'init_fftw_omp', 'init_rfft', 'rfft_solve'
+]
 
 # Enable Ctrl-C to interrupt the C code
 signal.signal(signal.SIGINT, signal.SIG_DFL)

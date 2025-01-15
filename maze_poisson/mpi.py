@@ -14,7 +14,6 @@ class Singleton(type):
 try:
     from mpi4py import MPI
 except ImportError:
-    MPI = None
     class MPIBase(metaclass=Singleton):
         """Dummy class for MPI."""
         def __init__(self):
@@ -24,6 +23,8 @@ except ImportError:
             self.master = True
             self.prev = 0
             self.nxt_ = 0
+        def __bool__(self):
+            return False
         def send_previous(self, *args):
             pass
         def recv_previous(self, *args):
@@ -35,6 +36,8 @@ except ImportError:
         def all_reduce(self, data, *args, **kwargs):
             return data
         def all_reduce_inplace(self, data, *args, **kwargs):
+            return data
+        def broadcast(self, *args, **kwargs):
             pass
         def barrier(self):
             pass
@@ -47,12 +50,16 @@ else:
             self.comm = MPI.COMM_WORLD
             self.rank = self.comm.Get_rank()
             self.size = self.comm.Get_size()
+            self.__bool = self.size > 1
             self.master = self.rank == 0
 
             self.prev = (self.rank - 1) % self.size
             self.nxt_ = (self.rank + 1) % self.size
 
-            # atexit.register(self.finalize)
+            atexit.register(self.finalize)
+
+        def __bool__(self):
+            return self.__bool
 
         def send_previous(self, data: np.ndarray):
             """Send data to the previous rank."""
@@ -77,6 +84,10 @@ else:
         def all_reduce_inplace(self, data: np.ndarray, op=MPI.SUM):
             """Perform an all reduce operation in place."""
             self.comm.Allreduce(MPI.IN_PLACE, [data, MPI.DOUBLE], op)
+
+        def broadcast(self, data, root=0):
+            """Broadcast data from the root rank."""
+            self.comm.bcast(data, root=root)
 
         def barrier(self):
             """Barrier synchronization."""

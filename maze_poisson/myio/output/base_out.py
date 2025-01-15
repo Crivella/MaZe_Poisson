@@ -6,13 +6,12 @@ from io import StringIO
 
 import pandas as pd
 
-from ..grid.base_grid import BaseGrid
+from ...grid.base_grid import BaseGrid
+from ...myio.loggers import Logger
+from ...particles import Particles
+from .. import mpi
 from ..input import OutputSettings
-from ..loggers import logger
-from ..mpi import MPIBase
-from ..particles import Particles
 
-mpi = MPIBase()
 
 def ensure_enabled(func):
     @wraps(func)
@@ -22,9 +21,10 @@ def ensure_enabled(func):
         return func(self, *args, **kwargs)
     return wrapper
 
-class BaseOutputFile(ABC):
+class BaseOutputFile(Logger, ABC):
     name = None
     def __init__(self, *args, path: str, enabled: bool = True, overwrite: bool = True, **kwargs):
+        super().__init__(*args, **kwargs)
         self.path = os.path.abspath(path)
         if mpi and mpi.rank != 0:
             enabled = False
@@ -32,7 +32,7 @@ class BaseOutputFile(ABC):
         if not enabled:
             return
 
-        logger.info("Saving %s to '%s'", self.name, self.path)
+        self.logger.info("Saving %s to '%s'", self.name, self.path)
 
         if os.path.exists(path):
             if overwrite:

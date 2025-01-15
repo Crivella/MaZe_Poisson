@@ -2,9 +2,8 @@ import logging
 import os
 import time
 
-from .mpi import MPIBase
+from . import mpi
 
-mpi = MPIBase()
 
 class VoidLogger:
     def __getattr__(self, name):

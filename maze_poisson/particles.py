@@ -7,7 +7,7 @@ from . import c_api
 from .constants import a0, conv_mass, kB
 from .indices import GetDictTF
 from .input import GridSetting
-from .loggers import Logger
+from .myio.loggers import Logger
 
 
 class Particles(Logger):
@@ -114,17 +114,19 @@ class Particles(Logger):
         self.neighbors = np.ascontiguousarray(indices[:, np.newaxis, :] + self.neigh_diff) % self.N
         return self.neighbors
 
-    def compute_forces_field(self, phi: np.ndarray, q: np.ndarray) -> float:
+    def compute_forces_field(self, grid) -> float:
         """Compute the forces from the field."""
         h = self.h  # h in angstrom
         N = self.N
         N_p = self.N_p
-        # phi = grid.phi
-        # q = grid.q
+        phi = grid.phi
+        q = grid.q
+        N_loc = grid.N_loc
+        N_start = grid.N_loc_start
 
         neighbors = self.neighbors
 
-        q_tot = c_api.c_compute_force_fd(N, N_p, h, phi, q, neighbors, self.forces_elec)
+        q_tot = c_api.c_compute_force_fd(N, N_p, h, phi, q, neighbors, self.forces_elec, N_loc, N_start)
 
         return q_tot
 

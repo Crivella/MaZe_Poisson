@@ -4,8 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
-from ...loggers import logger
+
 from ...constants import a0
+from ...myio.loggers import logger
 
 N_vector = [30,40,50,60,70,80,90,100, 110, 120] # will change from 10 to 100 once the CG works for 10,20
 N_vector = np.array(N_vector)

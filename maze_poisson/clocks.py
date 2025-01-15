@@ -1,10 +1,11 @@
 """Implement clock to time the execution of functions."""
 
 import time
+from functools import wraps
 
 clocks: dict[str, 'Clock'] = {}
 
-from .loggers import Logger
+from .myio.loggers import Logger
 
 
 class Clock(Logger):
@@ -22,6 +23,7 @@ class Clock(Logger):
         self.num_calls = 0
 
     def __call__(self, func):
+        @wraps(func)
         def wrapper(*args, **kwargs):
             start = time.time()
             result = func(*args, **kwargs)
@@ -32,16 +34,19 @@ class Clock(Logger):
         return wrapper
 
     def report(self):
+        if self.num_calls == 0:
+            return
         tot_time = self.cumul
         avg_time = tot_time / self.num_calls
-        unit_tot = 's'
-        unit_avg = 's'
 
         self.logger.info(
-            f"{self.name:>20s}: {tot_time:>11.5f} {unit_tot:>2s} ({self.num_calls:>6d} calls)  Avg: {avg_time:>11.5f} {unit_avg:>2s}"
+            f"{self.name:>20s} ({self.num_calls:>6d} calls): {tot_time:>13.4f} s  -  Avg: {avg_time:>13.4f} s"
             )
 
     @staticmethod
     def report_all():
+        total = Clock('total')
         for clock in clocks.values():
             clock.report()
+            total.cumul += clock.cumul
+            total.num_calls += clock.num_calls
