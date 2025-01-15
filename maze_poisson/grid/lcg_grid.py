@@ -11,8 +11,6 @@ mpi = MPIBase()
 class LCGGrid(BaseGrid):
     def init_grids(self):
         """Initialize the grids."""
-        self.N_loc = self.N
-        self.N_loc_start = 0
         self.shape = (self.N,)*3
         self.y = np.zeros(self.shape, dtype=float)  # right-hand side of the preconditioned Poisson equation
         self.q = np.zeros(self.shape, dtype=float)  # charge vector - q for every grid point

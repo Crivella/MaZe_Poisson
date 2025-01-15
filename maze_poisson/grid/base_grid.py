@@ -5,7 +5,9 @@ from functools import wraps
 import numpy as np
 
 from ..mpi import MPIBase
+from ..particles import Particles, g
 
+mpi = MPIBase()
 
 class BaseGrid(ABC):
     """Base class for all grid classes."""
@@ -27,6 +29,9 @@ class BaseGrid(ABC):
         self.field_j = 0
         self.field_k = 0
 
+        self.N_loc = self.N
+        self.N_loc_start = 0
+
         self.init_grids()
 
     @abstractmethod
@@ -45,6 +50,42 @@ class BaseGrid(ABC):
     @abstractmethod
     def phi(self):
         """Should return the field in REAL space."""
+
+    # def update_charges(self, pos: np.ndarray, neighbors: np.ndarray, charges: np.ndarray) -> float:
+    def update_charges(self, particles: Particles) -> float:
+        """Update the charges on the grid.
+        
+        Args:
+            particles (Particles): Particles object.
+
+        Returns:
+            float: Total charge contribution.
+        """
+        pos = particles.pos
+        neighbors = particles.neighbors
+        charges = particles.charges
+
+        q = self.q
+        q.fill(0)
+        diff = pos[:, np.newaxis, :] - neighbors * self.h
+
+        indices = tuple(neighbors.reshape(-1, 3).T)
+
+        updates = (charges[:, np.newaxis] * np.prod(g(diff, self.L, self.h), axis=2)).flatten()
+        if mpi and mpi.size > 1:
+            for i,j,k,upd in zip(*indices, updates):
+                i -= self.N_loc_start
+                if 0 <= i < self.N_loc:
+                    q[i, j, k] += upd
+                    
+        else:
+            q[indices] += updates
+  
+        q_tot = np.sum(updates)
+        if mpi and mpi.size > 1:
+            q_tot = mpi.all_reduce(q_tot)
+
+        return q_tot
 
     @staticmethod
     def timeit(func):

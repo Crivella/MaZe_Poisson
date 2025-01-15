@@ -8,10 +8,10 @@ import numpy as np
 from ..grid import BaseGrid, FFTGrid, LCGGrid, LCGGrid_MPI
 from ..input import GridSetting, MDVariables, OutputSettings
 from ..integrators import BaseIntegrator, OVRVOIntegrator, VerletIntegrator
-from ..loggers import Logger, setup_logger
+from ..loggers import Logger
 from ..mpi import MPIBase
 from ..outputs import OutputFiles
-from ..particles import Particles, g
+from ..particles import Particles
 
 try:
     from tqdm import tqdm
@@ -50,8 +50,6 @@ class SolverMD(Logger):
     """Base class for all solver classes."""
 
     def __init__(self, gset: GridSetting, mdv: MDVariables, outset: OutputSettings):
-        self.logger = setup_logger(self.__class__.__name__)
-
         self.gset = gset
         self.mdv = mdv
         self.outset = outset
@@ -130,53 +128,13 @@ class SolverMD(Logger):
         self.q_tot = np.sum(self.particles.charges)
         self.logger.info(f"Total charge: {self.q_tot}")
         # STEP 0 Verlet
-        self.particles.get_nearest_neighbors()
         self.update_charges()
         if self.mdv.preconditioning:
             self.grid.initialize_field()
 
-        # self.grid.gather_q()
-        # if mpi.rank == 0:
-        #     np.save(f'q_0_{mpi.size}.npy', self.grid.gathered)
-
-        # ###############################################
-        # from .. import c_api
-        # from ..grid.lcg_grid import conj_grad_mpi, laplace_filter_mpi
-        # self.tmp = np.empty_like(self.grid.q)
-        # if mpi.size > 1:
-        #     laplace_filter_mpi(self.grid.q, self.tmp, self.grid.N)
-        #     self.grid.gather(self.tmp)
-        # else:
-        #     c_api.c_laplace(self.grid.q, self.tmp, self.grid.N)
-        #     self.grid.gathered = self.tmp
-        # if mpi.rank == 0:
-        #     np.save(f'field_0_{mpi.size}.npy', self.grid.gathered)
-
-        # ###############################################
-        # self.tmp2 = np.empty_like(self.grid.q)
-        # if mpi.size > 1:
-        #     conj_grad_mpi(self.tmp, np.zeros_like(self.tmp), self.tmp2, self.grid.tol, self.grid.N)
-        #     self.grid.gather(self.tmp2)
-        # else:
-        #     c_api.c_conj_grad(self.tmp, np.zeros_like(self.tmp), self.tmp2, self.grid.tol, self.grid.N)
-        #     self.grid.gathered = self.tmp2
-        # print(f'rank {mpi.rank} cg res: {np.allclose(self.tmp2, self.grid.q, rtol=1e-6)}')
-        # if mpi.rank == 0:
-        #     np.save(f'field_1_{mpi.size}.npy', self.grid.gathered)
-        # exit()
-        # self.grid.gather(self.grid.phi)
-        # if mpi.rank == 0:
-        #     np.save(f'field_0_{mpi.size}.npy', self.grid.gathered)
-        # self.compute_forces()
-        # if mpi.rank == 0:
-        #     np.save(f'forces_0_{mpi.size}.npy', self.particles.forces)
-        # exit()
-
         # STEP 1 Verlet
         self.integrator.part1(self.particles)
-        self.particles.get_nearest_neighbors()
         self.update_charges()
-
         if self.mdv.preconditioning:
             self.grid.initialize_field()
         self.compute_forces()
@@ -216,7 +174,6 @@ class SolverMD(Logger):
         self.logger.debug('')
         if self.mdv.elec:
             start = time.time()
-            self.particles.get_nearest_neighbors()
             self.update_charges()
             end = time.time()
             self.logger.debug(f'Charges: {end - start}')
@@ -230,11 +187,11 @@ class SolverMD(Logger):
         self.logger.debug(f'Forces: {end - start}')
         self.integrator.part2(self.particles)
 
-    def md_check_thermostat(self):
+    def md_check_thermostat(self, i: int):
         if self.thermostat:
             temperature = self.particles.get_temperature()
             if np.abs(temperature - self.mdv.T) <= 100:
-                self.logger.info('End thermostating')
+                self.logger.info(f'End thermostating iteration {i}')
                 self.thermostat = False
                 self.integrator.stop_thermostat()
 
@@ -243,7 +200,11 @@ class SolverMD(Logger):
         """Run the molecular dynamics loop."""
         if self.mdv.init_steps:
             self.logger.info("Running MD loop initialization steps...")
-            for i in tqdm(range(self.mdv.init_steps)):
+            if mpi and mpi.rank > 1:
+                loop = range(self.mdv.init_steps)
+            else:
+                loop = tqdm(range(self.mdv.init_steps))
+            for i in loop:
                 self.md_loop_iter()
 
         self.logger.info("Running MD loop...")
@@ -253,7 +214,7 @@ class SolverMD(Logger):
             loop = tqdm(range(self.mdv.N_steps))
         for i in loop:
             self.md_loop_iter()
-            self.md_check_thermostat()
+            self.md_check_thermostat(i)
             self.ofiles.output(i, self.grid, self.particles)
 
     def run(self):
@@ -261,10 +222,6 @@ class SolverMD(Logger):
         self.initialize()
         self.init_info()
         self.initialize_md()
-        # self.grid.gather_field()
-        # if mpi.rank == 0:
-        #     np.save(f'field_0_{mpi.size}.npy', self.grid.gathered)
-        # exit()
         self.md_loop()
         self.finalize()
 
@@ -283,39 +240,8 @@ class SolverMD(Logger):
     def update_charges(self):
         """Update the charge grid based on the particles position with function g to spread them on the grid."""
         # raise NotImplementedError("Need to move this in the Grid class")
-        L = self.L
-        h = self.h
-        q = self.grid.q
-        q.fill(0)
-
-        # for m in range(len(self.particles.charges)):
-        #     for i, j, k in self.particles.neighbors[m, :, :]:
-        #         diff = self.particles.pos[m] - np.array([i,j, k]) * h
-        #         self.q[i, j, k] += self.particles.charges[m] * g(diff[0], L, h) * g(diff[1], L, h) * g(diff[2], L, h)
-
-        # Same as above using broadcasting
-        diff = self.particles.pos[:, np.newaxis, :] - self.particles.neighbors * h
-        
-        # if Python 3.11 or newer uncomment below and comment lines 217-219
-        #self.q[*self.particles.neighbors.reshape(-1, 3).T] += (self.particles.charges[:, np.newaxis] * np.prod(g(diff, L, h), axis=2)).flatten()
-        
-        # Version that works for Python 3.8.15
-        indices = tuple(self.particles.neighbors.reshape(-1, 3).T)
-        updates = (self.particles.charges[:, np.newaxis] * np.prod(g(diff, L, h), axis=2)).flatten()
-        if mpi and mpi.size > 1:
-            for i,j,k,upd in zip(*indices, updates):
-                if self.grid.N_loc_start <= i < self.grid.N_loc_end:
-                    q[i - self.grid.N_loc_start, j, k] += upd
-                    
-        else:
-            q[indices] += updates
-  
-        # q_tot_expected = np.sum(self.particles.charges)
-        q_tot = np.sum(updates)
-        if mpi and mpi.size > 1:
-            q_tot = mpi.all_reduce(q_tot)
-
-        # self.phi_q_updated = False
+        self.particles.get_nearest_neighbors()
+        q_tot = self.grid.update_charges(self.particles)
 
         if np.abs(self.q_tot - q_tot) > 1e-6:
             self.logger.error('Error: change initial position, charge is not preserved: q_tot = %.4f', q_tot)
