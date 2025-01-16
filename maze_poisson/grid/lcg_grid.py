@@ -7,28 +7,12 @@ from .base_grid import BaseGrid
 
 
 class LCGGrid(BaseGrid):
-    def init_grids_single(self):
+    mpi_enabled = True
+
+    def init_grids(self):
         """Initialize the grids."""
-        self.shape = (self.N,)*3
-        self._init_grids()
-
-    def init_grids_mpi(self):
-        """Initialize the grids. MPI aware."""
-        div = self.N // self.mpi.size
-        rem = self.N % self.mpi.size
-        self.N_loc = div + (1 if self.mpi.rank < rem else 0)
-        self.N_loc_start = div * self.mpi.rank + min(self.mpi.rank, rem)
-        self.N_loc_end = self.N_loc_start + self.N_loc
-
         self.shape = (self.N_loc, self.N, self.N)
-        self._init_grids()
-        self.tmp_top = np.empty((self.N, self.N), dtype=float)
-        self.tmp_bot = np.empty((self.N, self.N), dtype=float)
 
-        self.mpi.barrier()
-
-    def _init_grids(self):
-        """Initialize the grids. Common for single and MPI."""
         self.y = np.zeros(self.shape, dtype=float)  # right-hand side of the preconditioned Poisson equation
         self.q = np.zeros(self.shape, dtype=float)  # charge vector - q for every grid point
         self.tmp = np.empty(self.shape, dtype=float)  # temporary array for the Poisson equation
@@ -46,13 +30,13 @@ class LCGGrid(BaseGrid):
         c_api.c_laplace(phi, self.tmp, self.N)
         sigma_p = 4 * np.pi * self.q / self.h + self.tmp
 
-        y_new = np.empty_like(self.y)
-        self.n_iters = c_api.c_conj_grad(sigma_p, self.y, y_new, self.tol, self.N)
+        self.n_iters = c_api.c_conj_grad(sigma_p, self.y, self.tmp, self.tol, self.N)
         if self.n_iters == -1:
-            raise ValueError(f'Conjugate gradient did not converge {self.n_iters} iterations')
+            self.logger.error(f'Conjugate gradient did not converge!!!')
+            exit()
 
-        phi -= y_new
-        self.y = y_new
+        phi -= self.tmp
+        self.y = self.tmp
         self._phi.append(phi)
 
     def gather(self, vec):

@@ -1,5 +1,9 @@
 #include <math.h>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
+
+#include "mympi.h"
 
 #ifdef __cplusplus
 #define EXTERN_C extern "C"                                                           
@@ -29,25 +33,9 @@ EXTERN_C double ddot(double *u, double *v, long int n) {
     for (i = 0; i < n; i++) {
         result += u[i] * v[i];
     }
+    allreduce_double(&result);
     return result;
 }
-
-// /*
-// Compute the sum of two vectors scaled by a constant (res = u + alpha * v)
-// and store the result in a third vector
-// @param v: the first vector
-// @param u: the second vector
-// @param result: the vector to store the result
-// @param alpha: the scaling constant
-// @param n: the size of the vectors
-// */
-// EXTERN_C void daxpy(double *v, double *u, double *result, double alpha, long int n) {
-//     long int i;
-//     #pragma omp parallel for
-//     for (i = 0; i < n; i++) {
-//         result[i] = u[i] + alpha * v[i];
-//     }
-// }
 
 /*
 Compute the sum of two vectors scaled by a constant (u += alpha * v)

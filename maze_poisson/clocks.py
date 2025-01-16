@@ -40,7 +40,7 @@ class Clock(Logger):
         avg_time = tot_time / self.num_calls
 
         self.logger.info(
-            f"{self.name:>20s} ({self.num_calls:>6d} calls): {tot_time:>13.4f} s  -  Avg: {avg_time:>13.4f} s"
+            f"{self.name:>20s}   ({self.num_calls:>7d} CALLs): {tot_time:>13.4f} s  ({avg_time:>13.4f} s/CALL)"
             )
 
     @staticmethod

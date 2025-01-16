@@ -1,43 +1,33 @@
+""""Fallback implementations of the force computation functions."""
 import numpy as np
 
+from . import mpi
 
-def c_compute_force_fd_single(
+
+def compute_force_fd_single(
         N: int, N_p: int, h: float,
-        phi_v: np.ndarray, q: np.ndarray, neighbors: np.ndarray,
+        phi: np.ndarray, q: np.ndarray, neighbors: np.ndarray,
         forces: np.ndarray,
-        N_loc: int = None, N_start: int = None
     ) -> float:
-    """Compute the forces from the field using finite differences.
-
-    Args:
-        N (int): Grid size. (Not used only to match the signature)
-        N_p (int): Number of particles. (Not used only to match the signature)
-        h (float): Grid spacing.
-        phi_v (np.ndarray): Electrostatic potential. Shape (N, N, N).
-        q (np.ndarray): 3D Charge. Shape (N, N, N).
-        neighbors (np.ndarray): Indices of the neighbors. Shape (N_p, 8, 3).
-        forces (np.ndarray): Output forces. Shape (N_p, 3).
-
-    Returns:
-        float: Total charge contribution.
-    """
     h *= 2  # Double the grid spacing
     q_neighbors = q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]
     for axis in range(3):
-        E_ax = (np.roll(phi_v, -1, axis=axis) - np.roll(phi_v, 1, axis=axis)) / h
+        E_ax = (np.roll(phi, -1, axis=axis) - np.roll(phi, 1, axis=axis)) / h
         E_neighbors = E_ax[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]
         forces[:, axis] = -np.sum(q_neighbors * E_neighbors, axis=1)
 
     q_tot = np.sum(q_neighbors)
     return q_tot
 
-# double compute_force_fd_mpi(int n_grid, int n_loc, int n_start, int n_p, double h, double *phi, double *bot, double *top, double *q, long int *neighbors, double *forces)
-def _c_compute_forces_fd_mpi(
-        N: int, N_loc: int, N_start: int, N_p: int, h: float,
-        phi: np.ndarray, bot: np.ndarray, top: np.ndarray, q: np.ndarray, neighbors: np.ndarray,
-        forces: np.ndarray
+def compute_force_fd_mpi(
+        N: int, N_p: int, h: float,
+        phi: np.ndarray, q: np.ndarray, neighbors: np.ndarray,
+        forces: np.ndarray,
     ) -> float:
-    N_end = N_start + N_loc
+    N_loc = mpi.get_n_loc(N)
+    N_start = mpi.get_n_start(N)
+    bot, top = mpi.get_bot_top(phi)
+
     h *= 2
     E_x = np.zeros_like(phi)
     E_x[:-1] += phi[1:]
@@ -53,18 +43,41 @@ def _c_compute_forces_fd_mpi(
     q_tot = 0
     for i,neigh in enumerate(neighbors):
         for x,y,z in neigh:
-            if x < N_start or x >= N_end:
+            x -= N_start
+            if x < 0 or x >= N_loc:
                 continue
-            s = x - N_start
-            qn = q[s, y, z]
+            qn = q[x, y, z]
             q_tot += qn
-            forces[i][0] -= qn * E_x[s, y, z]
-            forces[i][1] -= qn * E_y[s, y, z]
-            forces[i][2] -= qn * E_z[s, y, z]
+            forces[i][0] -= qn * E_x[x, y, z]
+            forces[i][1] -= qn * E_y[x, y, z]
+            forces[i][2] -= qn * E_z[x, y, z]
 
+    q_tot = mpi.all_reduce(q_tot)
+    mpi.all_reduce_inplace(forces)
     return q_tot
 
-# double compute_tf_forces(int n_p, double L, double *pos, double B, double *params, double r_cut, double *forces)
+def c_compute_force_fd(
+        N: int, N_p: int, h: float, phi: np.ndarray, q: np.ndarray, neighbors: np.ndarray, forces: np.ndarray,
+    ) -> float:
+    """Compute the forces from the field using finite differences.
+
+    Args:
+        N (int): Grid size. (Not used only to match the signature)
+        N_p (int): Number of particles. (Not used only to match the signature)
+        h (float): Grid spacing.
+        phi_v (np.ndarray): Electrostatic potential. Shape (N, N, N).
+        q (np.ndarray): 3D Charge. Shape (N, N, N).
+        neighbors (np.ndarray): Indices of the neighbors. Shape (N_p, 8, 3).
+        forces (np.ndarray): Output forces. Shape (N_p, 3).
+
+    Returns:
+        float: Total charge contribution.
+    """
+    if not mpi:
+        return compute_force_fd_single(N, N_p, h, phi, q, neighbors, forces)
+    else:
+        return compute_force_fd_mpi(N, N_p, h, phi, q, neighbors, forces)
+
 def c_compute_tf_forces(
         N_p: int, L: float, pos: np.ndarray, B: float, params: np.ndarray, r_cut: float,
         forces: np.ndarray

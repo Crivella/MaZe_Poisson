@@ -27,6 +27,13 @@ from .fftw import cleanup_fftw, init_fftw_omp, init_rfft, rfft_solve
 from .forces import c_compute_force_fd, c_compute_tf_forces
 from .laplace import c_conj_grad, c_laplace
 
+# from .mympy import c_get_mpi_data, c_init_mpi
+
+# c_init_mpi(100, mpi.comm_address)
+# data = c_get_mpi_data()
+# print(data)
+
+
 __all__ = [
     'c_compute_force_fd', 'c_compute_tf_forces', 'c_conj_grad', 'c_laplace',
     'cleanup_fftw', 'init_fftw_omp', 'init_rfft', 'rfft_solve'

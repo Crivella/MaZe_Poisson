@@ -4,20 +4,13 @@ import ctypes
 import numpy as np
 import numpy.ctypeslib as npct
 
-from . import library, logger, mpi
+from . import library, logger
 
 try:
     init_fftw_omp = library.init_fftw_omp
     init_fftw_omp.restype = None
     init_fftw_omp.argtypes = []
-except:
-    logger.warning("C_API: Interface to FFTW not available. Using numpy instead.")
-    init_fftw_omp = lambda: None
-    cleanup_fftw = lambda: None
-    init_rfft = lambda n: None
-    rfft_solve = lambda n, in_, ig2, out: np.fft.irfftn(np.fft.rfftn(in_) * ig2, out=out, s=in_.shape)
-else:
-    logger.info("C_API: Interface to FFTW available")
+
     # void cleanup_fftw()
     cleanup_fftw = library.cleanup_fftw
     cleanup_fftw.restype = None
@@ -37,3 +30,9 @@ else:
         npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
     ]
+except:
+    logger.warning("C_API: Interface to FFTW not available. Using numpy instead.")
+    from .fftw_fallbacks import (cleanup_fftw, init_fftw_omp, init_rfft,
+                                 rfft_solve)
+else:
+    logger.info("C_API: Interface to FFTW available")

@@ -121,12 +121,10 @@ class Particles(Logger):
         N_p = self.N_p
         phi = grid.phi
         q = grid.q
-        N_loc = grid.N_loc
-        N_start = grid.N_loc_start
 
         neighbors = self.neighbors
 
-        q_tot = c_api.c_compute_force_fd(N, N_p, h, phi, q, neighbors, self.forces_elec, N_loc, N_start)
+        q_tot = c_api.c_compute_force_fd(N, N_p, h, phi, q, neighbors, self.forces_elec)
 
         return q_tot
 

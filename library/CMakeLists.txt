@@ -22,6 +22,7 @@ option(MP_AVX "Enable AVX" ON)
 
 # Find the required packages
 find_package(OpenMP REQUIRED C)
+find_package(MPI REQUIRED COMPONENTS C)
 find_package(FFTW3 REQUIRED COMPONENTS DOUBLE_OPENMP DOUBLE)
 
 # Set the compiler flags
@@ -62,6 +63,13 @@ target_include_directories(maze_poisson PRIVATE include)
 # Set OpenMP flags 
 if (OpenMP_C_FOUND)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+endif()
+# Set MPI flags
+if (MPI_C_FOUND)
+    add_compile_definitions(__MPI)
+    target_include_directories(maze_poisson PRIVATE ${MPI_C_INCLUDE_PATH})
+    target_link_libraries(maze_poisson PRIVATE ${MPI_C_LIBRARIES})
+    target_sources(maze_poisson PRIVATE src/mympi.c)
 endif()
 # Set FFTW flags
 if (FFTW3_FOUND)
