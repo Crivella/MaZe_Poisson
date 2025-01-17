@@ -7,8 +7,6 @@ from .base_grid import BaseGrid
 
 
 class LCGGrid(BaseGrid):
-    mpi_enabled = True
-
     def init_grids(self):
         """Initialize the grids."""
         self.shape = (self.N_loc, self.N, self.N)

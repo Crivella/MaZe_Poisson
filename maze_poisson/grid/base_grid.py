@@ -10,13 +10,8 @@ from ..particles import Particles
 
 class BaseGrid(Logger, ABC):
     """Base class for all grid classes."""
-    mpi_enabled = False
-
     def __init__(self, L: float, h: float, N: int, tol: float = 1e-7, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if mpi.MPIBase.mpi and not self.mpi_enabled:
-            self.logger.error(f"MPI not implemented for {self.__class__.__name__}")
-            exit()
 
         self.N = N
         self.h = h
@@ -51,13 +46,6 @@ class BaseGrid(Logger, ABC):
     @abstractmethod 
     def phi(self):
         """Should return the field in REAL space."""
-
-    def init_grids(self):
-        """Initialize the grids."""
-        if mpi.MPIBase.mpi:
-            self.init_grids_mpi()
-        else:
-            self.init_grids_single()
 
     def update_charges(self, particles: Particles) -> float:
         """Update the charges on the grid.

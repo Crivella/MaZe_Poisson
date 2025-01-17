@@ -4,7 +4,6 @@ from functools import wraps
 import numpy as np
 
 from ...constants import a0, density, kB, m_Cl, m_Na, t_au
-# from .. import MPIBase
 from ..loggers import logger
 
 

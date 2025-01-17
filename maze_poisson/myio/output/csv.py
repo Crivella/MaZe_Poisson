@@ -23,8 +23,6 @@ class CSVOutputFile(BaseOutputFile):
         if mode == 'w':
             self.buffer.truncate(0)
             self.buffer.seek(0)
-            self.file.seek(0)
-            self.file.truncate(0)
             header = True
         df = self.get_data(iter, grid, particles)
         df.to_csv(self.buffer, columns=self.headers, header=header, index=False, mode=mode)

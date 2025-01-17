@@ -10,8 +10,6 @@ from ...grid.base_grid import BaseGrid
 from ...myio.loggers import Logger
 from ...particles import Particles
 from .. import get_enabled
-# from .. import MPIBase
-# from .. import mpi
 from ..input import OutputSettings
 
 
@@ -28,9 +26,8 @@ class BaseOutputFile(Logger, ABC):
     def __init__(self, *args, path: str, enabled: bool = True, overwrite: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self.path = os.path.abspath(path)
-        # if not MPIBase.master:
-        #     enabled = False
         self.enabled = enabled and get_enabled()
+
         if not enabled:
             return
 
@@ -43,7 +40,6 @@ class BaseOutputFile(Logger, ABC):
                 raise ValueError(f"File {path} already exists")
 
         self.buffer = StringIO()
-        self.file = open(path, 'w')
         atexit.register(self.close)
 
     @abstractmethod
@@ -52,15 +48,14 @@ class BaseOutputFile(Logger, ABC):
 
     @ensure_enabled
     def flush(self):
-        self.file.write(self.buffer.getvalue())
+        with open(self.path, 'a', encoding='utf-8') as f:
+            f.write(self.buffer.getvalue())
         self.buffer.truncate(0)
         self.buffer.seek(0)
-        self.file.flush()
 
     @ensure_enabled
     def close(self):
         self.flush()
-        self.file.close()
 
 
 class OutputFiles:
