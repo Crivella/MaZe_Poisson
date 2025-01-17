@@ -1,22 +1,20 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <math.h>
 
 #include "mympi.h"
 
 
 double g(double x, double L, double h) {
-    x = abs(x - round(x / L) * L);
+    x = fabs(x - round(x / L) * L);
     return 1.0 - x / h;
 }
 
-double update_charges_(
+double update_charges(
     int n_grid, int n_p, double h,
     double *pos, long int *neighbors, double *charges, double *q
 ) {
     int n_loc = get_n_loc();
     int n_loc_start = get_n_start();
-    printf("chargs.c: N: %d, N_p: %d, h: %f, n_loc: %d, n_loc_start: %d\n", n_grid, n_p, h, n_loc, n_loc_start);
 
     int ni, nj, nk, ni_loc;
     long int i1, i2;
@@ -29,7 +27,6 @@ double update_charges_(
     double q_tot = 0.0;
     double app, upd, chg;
 
-    // printf("---------- n3: %ld\n", n3);
     // // #pragma omp parallel for
     for (long int i=0; i < n3; i++) {
         q[i] = 0.0;
@@ -51,11 +48,10 @@ double update_charges_(
             }
             nj = neighbors[i2 + j + 1];
             nk = neighbors[i2 + j + 2];
-            printf("px: %f, ni: %d, hn: %f, diff: %f\n", px, ni, h, px - ni*h);;
             app = g(px - ni*h, L, h) * g(py - nj*h, L, h) * g(pz - nk*h, L, h);
             upd = chg * app;
-            q[ni_loc * n2 + nj * n_grid + nk] += upd;
             q_tot += upd;
+            q[ni_loc * n2 + nj * n_grid + nk] += upd;
         }
     }
 

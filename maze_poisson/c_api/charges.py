@@ -27,11 +27,20 @@ except:
         x = np.abs(x - L * np.rint(x / L))
         return 1 - x / h
 
-    def c_update_charges(n_grid, n_p, h, pos, neighbors, charges, q):
+    def c_update_charges(
+            n_grid: int, n_p: int, h: float,
+            pos: np.ndarray, neighbors: np.ndarray, charges: np.ndarray, q: np.ndarray
+        ) -> float:
         """Update the charges on the grid.
-        
+
         Args:
-            particles (Particles): Particles object.
+            n_grid (int): The size of the grid.
+            n_p (int): The number of particles.
+            h (float): The grid spacing.
+            pos (np.ndarray): Particle positions. shape (N_p, 3)
+            neighbors (np.ndarray): Particle neighbor indexes. shape (N_p, 8, 3)
+            charges (np.ndarray): Particle charges. shape (N_p,)
+            q (np.ndarray): Output charge grid. shape (n_grid, n_grid, n_grid)
 
         Returns:
             float: Total charge contribution.
