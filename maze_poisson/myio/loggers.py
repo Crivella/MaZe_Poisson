@@ -56,6 +56,8 @@ class Logger:
     def __init__(self, *args, **kwargs):
         self.logger = setup_logger(self.__class__.__name__)
         super().__init__(*args, **kwargs)
+    def __getattr__(self, name):
+        return super().__getattribute__(name)
 
 # Instantiate the main logger
 logger = setup_logger("main")

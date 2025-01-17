@@ -1,46 +1,84 @@
+import atexit
 import ctypes
 import os
 import signal
 
 from ..myio import logger
 
-try:
-    library = ctypes.cdll.LoadLibrary(os.path.join(os.path.dirname(__file__), '..', 'libmaze_poisson.so'))
-except:
-    logger.warning("C_API: Could not load shared library.")
-    library = None
-else:
-    logger.info("C_API: Loaded successfully")
 
-try:
-    c_get_omp_info = library.get_omp_info
-    c_get_omp_info.restype = ctypes.c_int
-    c_get_omp_info.argtypes = []
-except:
-    c_get_omp_info = lambda: 0
+class CAPI:
+    def __init__(self):
+        super().__init__()
+        self.library = None
+
+        self.functions = {}
+        self.toinit = []
+        self.tofina = []
+        self.toregister = []
+
+        atexit.register(self.finalize)
+
+    def __getattr__(self, name):
+        if name in self.functions:
+            return self.functions[name]
+        return super().__getattr__(name)
+
+    def initialize(self):
+        if self.library is not None:
+            return
+        try:
+            self.library = ctypes.cdll.LoadLibrary(os.path.join(os.path.dirname(__file__), '..', 'libmaze_poisson.so'))
+        except:
+            self.library = None
+            logger.warning("C_API: Could not load shared library.")
+        else:
+            logger.debug("C_API: Loaded successfully")
+
+        for fname, restype, argtypes, fallback in self.toregister:
+            try:
+                func = getattr(self.library, fname)
+                func.restype = restype
+                func.argtypes = argtypes
+                self.functions[fname] = func
+                logger.debug(f"C_API: Registered function {fname}")
+            except:
+                logger.warning(f"C_API: Could not register function {fname}, using fallback")
+                self.functions[fname] = fallback
+
+        for fname, args, kwargs in self.toinit:
+            if isinstance(fname, str):
+                func = self.functions[fname]
+            else:
+                func = fname
+            func(*args, **kwargs)
 
 
-from .charges import c_update_charges
-from .fftw import cleanup_fftw, init_fftw_omp, init_rfft, rfft_solve
-from .forces import c_compute_force_fd, c_compute_tf_forces
-from .laplace import c_conj_grad, c_laplace
-from .mympi import c_collect_grid_buffer, c_init_mpi_grid
+    def finalize(self):
+        for fname, args, kwargs in self.tofina:
+            if isinstance(fname, str):
+                func = self.functions[fname]
+            else:
+                func = fname
+            func(*args, **kwargs)
 
-__all__ = [
-    'c_update_charges',
-    'c_compute_force_fd', 'c_compute_tf_forces',
-    'c_conj_grad', 'c_laplace',
-    'c_init_mpi_grid', 'c_collect_grid_buffer',
-    'cleanup_fftw', 'init_fftw_omp', 'init_rfft', 'rfft_solve'
-]
+    def register_function(self, name, restype, argtypes, fallback = None):
+        self.toregister.append((name, restype, argtypes, fallback))
 
-# Enable Ctrl-C to interrupt the C code
-signal.signal(signal.SIGINT, signal.SIG_DFL)
+    def register_init(self, fname, args = None, kwargs = None):
+        self.toinit.append((fname, args or [], kwargs or {}))
 
-if library:
-    # Check if OpenMP is enabled
-    num_threads = c_get_omp_info()
-    if num_threads > 0:
-        logger.info("C_API: Number of OpenMP threads: %d", c_get_omp_info())
-    else:
-        logger.warning("C_API: OpenMP not enabled")
+    def register_finalize(self, fname, args = None, kwargs = None):
+        self.tofina.append((fname, args or [], kwargs or {}))
+
+
+capi = CAPI()
+capi.register_function('get_omp_info', ctypes.c_int, [], lambda: 0)
+capi.register_init('get_omp_info')
+capi.register_init(signal.signal, (signal.SIGINT, signal.SIG_DFL))
+
+# Needed to register functions from other modules
+from . import charges, fftw, forces, laplace, mympi
+
+__all__ = ['capi']
+
+capi.initialize()

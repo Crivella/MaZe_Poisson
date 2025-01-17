@@ -2,7 +2,7 @@
 import numpy as np
 
 
-def c_laplace(u_in: np.ndarray, u_out: np.ndarray, n: int) -> None:
+def laplace(u_in: np.ndarray, u_out: np.ndarray, n: int) -> None:
     """Apply the Laplace filter."""
     bot, top = u_in[-1], u_in[0]
 
@@ -28,7 +28,7 @@ def ddot(u: np.ndarray, v: np.ndarray) -> float:
     res = np.sum(u * v)
     return res
 
-def c_conj_grad(b: np.ndarray, x0: np.ndarray, x: np.ndarray, tol: float, n: int) -> int:
+def conj_grad(b: np.ndarray, x0: np.ndarray, x: np.ndarray, tol: float, n: int) -> int:
     limit = n * n // 2
     Ap = np.empty_like(b)
     if x0 is None:
@@ -36,7 +36,7 @@ def c_conj_grad(b: np.ndarray, x0: np.ndarray, x: np.ndarray, tol: float, n: int
         r = -b
     else:
         r = np.empty_like(b)
-        c_laplace(x0, r, n)
+        laplace(x0, r, n)
         r -= b
     x[:] = x0
 
@@ -47,7 +47,7 @@ def c_conj_grad(b: np.ndarray, x0: np.ndarray, x: np.ndarray, tol: float, n: int
     res = -1
     iter_ = 1
     while iter_ < limit:
-        c_laplace(p, Ap, n)
+        laplace(p, Ap, n)
 
         alpha = r_dot_v / ddot(p, Ap)
         x[:] = x + alpha * p

@@ -173,6 +173,8 @@ void collect_grid_buffer(double *data, double *recv, int n) {
             MPI_Send(&global_mpi_data->n_loc, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
             MPI_Send(data, n3_loc, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
         }
+    } else {
+        memcpy(recv, data, n3_loc * sizeof(double));
     }
 }
 

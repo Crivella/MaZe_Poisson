@@ -124,13 +124,13 @@ class Particles(Logger):
 
         neighbors = self.neighbors
 
-        q_tot = c_api.c_compute_force_fd(N, N_p, h, phi, q, neighbors, self.forces_elec)
+        q_tot = c_api.capi.compute_force_fd(N, N_p, h, phi, q, neighbors, self.forces_elec)
 
         return q_tot
 
     def ComputeTFForces(self) -> float:
         # Get all pairwise differences
-        return c_api.c_compute_tf_forces(
+        return c_api.capi.compute_tf_forces(
             self.N_p, self.L, self.pos, self.B, self.tf_params, self.r_cutoff, self.forces_notelec
             )
 

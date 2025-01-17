@@ -1,6 +1,6 @@
 import numpy as np
 
-from .. import c_api
+from ..c_api import capi
 from .base_grid import BaseGrid
 
 
@@ -25,16 +25,16 @@ class FFTGrid(BaseGrid):
 
     def init_fftw(self):
         """Initialize the FFTW."""
-        c_api.init_fftw_omp()
-        c_api.init_rfft(self.N)
+        capi.init_fftw_omp()
+        capi.init_rfft(self.N)
 
     def cleanup_fftw(self):
         """Cleanup the FFTW."""
-        c_api.cleanup_fftw()
+        capi.cleanup_fftw()
 
     def calculate_phi(self):
         """Calculate the field."""
-        c_api.rfft_solve(self.N, self.q, self.ig2, self.phi_r)
+        capi.rfft_solve(self.N, self.q, self.ig2, self.phi_r)
 
     def initialize_field(self):
         """Initialize the field."""

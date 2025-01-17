@@ -2,7 +2,7 @@
 import numpy as np
 
 
-def c_compute_force_fd(
+def compute_force_fd(
         N: int, N_p: int, h: float,
         phi: np.ndarray, q: np.ndarray, neighbors: np.ndarray,
         forces: np.ndarray,
@@ -32,7 +32,7 @@ def c_compute_force_fd(
     return q_tot
 
 
-def c_compute_tf_forces(
+def compute_tf_forces(
         N_p: int, L: float, pos: np.ndarray, B: float, params: np.ndarray, r_cut: float,
         forces: np.ndarray
     ) -> float:

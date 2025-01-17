@@ -2,8 +2,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from .. import c_api
-from ..c_api import mympi as mpi
+from ..c_api import capi
 from ..myio import Logger
 from ..particles import Particles
 
@@ -27,7 +26,6 @@ class BaseGrid(Logger, ABC):
         self.field_j = 0
         self.field_k = 0
 
-        self.N_loc = mpi.c_init_mpi_grid(N)
         self.init_grids()
 
     @abstractmethod
@@ -61,7 +59,7 @@ class BaseGrid(Logger, ABC):
         neighbors = particles.neighbors
         charges = particles.charges
 
-        q_tot = c_api.c_update_charges(self.N, N_p, self.h, pos, neighbors, charges, self.q)
+        q_tot = capi.update_charges(self.N, N_p, self.h, pos, neighbors, charges, self.q)
 
         return q_tot
 

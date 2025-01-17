@@ -26,7 +26,6 @@ class SolverMD(Logger):
     def __init__(self, gset: GridSetting, mdv: MDVariables, outset: OutputSettings):
         super().__init__()
 
-
         self.gset = gset
         self.mdv = mdv
         self.outset = outset

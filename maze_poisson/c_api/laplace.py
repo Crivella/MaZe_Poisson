@@ -4,30 +4,25 @@ import ctypes
 import numpy as np
 import numpy.ctypeslib as npct
 
-from . import library
+from . import capi
+from .laplace_fallbacks import conj_grad, laplace
 
-try:
-    # void laplace_filter(double *u, double *u_new, int n)
-    c_laplace = library.laplace_filter
-    c_laplace.restype = None
-    c_laplace.argtypes = [
+capi.register_function(
+    'laplace_filter', None, [
         npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
         ctypes.c_int,
-    ]
-except:
-    from .laplace_fallbacks import c_laplace
+    ],
+    laplace
+)
 
-try:
-    # int conj_grad(double *b, double *x0, double *x, double tol, nt n) {
-    c_conj_grad = library.conj_grad
-    c_conj_grad.restype = ctypes.c_int
-    c_conj_grad.argtypes = [
+capi.register_function(
+    'conj_grad', ctypes.c_int, [
         npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
         ctypes.c_double,
         ctypes.c_int
-    ]
-except:
-    from .laplace_fallbacks import c_conj_grad
+    ],
+    conj_grad
+)
