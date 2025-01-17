@@ -16,8 +16,9 @@ class MPIBase:
     n_loc = 0
     n_loc_start = 0
 
-def init_mpi_grid(n: int) -> None:
+def init_mpi_grid(n: int):
     MPIBase.n_loc = n
+    return n
 
 def _collect_grid_buffer(data: np.ndarray, recv: np.ndarray, n: int):
     recv[:] = data

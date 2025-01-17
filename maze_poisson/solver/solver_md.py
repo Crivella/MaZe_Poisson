@@ -1,4 +1,6 @@
 """Implement a base solver Class for maze_poisson."""
+from typing import Dict, Tuple
+
 import numpy as np
 
 from ..clocks import Clock
@@ -10,12 +12,12 @@ from ..particles import Particles
 
 np.random.seed(42)
 
-method_grid_map: dict[str, tuple[BaseGrid, BaseGrid]] = {
+method_grid_map: Dict[str, Tuple[BaseGrid, BaseGrid]] = {
     'LCG': LCGGrid,
     'FFT': FFTGrid,
 }
 
-integrator_map: dict[str, BaseIntegrator] = {
+integrator_map: Dict[str, BaseIntegrator] = {
     'OVRVO': OVRVOIntegrator,
     'VERLET': VerletIntegrator,
 }

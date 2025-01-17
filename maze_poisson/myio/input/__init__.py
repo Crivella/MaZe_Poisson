@@ -1,4 +1,5 @@
 import os
+from typing import Tuple
 
 from .base_file_input import GridSetting, MDVariables, OutputSettings
 from .yaml import initialize_from_yaml
@@ -10,7 +11,7 @@ initializer_map = {
     '.yml': initialize_from_yaml,
 }
 
-def load_file(file_path: str) -> tuple[GridSetting, OutputSettings, MDVariables]:
+def load_file(file_path: str) -> Tuple[GridSetting, OutputSettings, MDVariables]:
     """Get the initializer for the file based on the extension."""
     ext = os.path.splitext(file_path)[1]
 

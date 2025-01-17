@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import yaml
 
 from .base_file_input import (GridSetting, MDVariables, OutputSettings,
@@ -5,7 +7,7 @@ from .base_file_input import (GridSetting, MDVariables, OutputSettings,
 
 
 @mpi_file_loader
-def initialize_from_yaml(filename: str) -> tuple[GridSetting, OutputSettings, MDVariables]:
+def initialize_from_yaml(filename: str) -> Tuple[GridSetting, OutputSettings, MDVariables]:
     with open(filename, 'r', encoding='utf-8') as file:
         data = yaml.load(file, Loader=yaml.FullLoader)
 
