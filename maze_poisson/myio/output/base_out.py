@@ -9,7 +9,9 @@ import pandas as pd
 from ...grid.base_grid import BaseGrid
 from ...myio.loggers import Logger
 from ...particles import Particles
-from .. import mpi
+from .. import get_enabled
+# from .. import MPIBase
+# from .. import mpi
 from ..input import OutputSettings
 
 
@@ -26,9 +28,9 @@ class BaseOutputFile(Logger, ABC):
     def __init__(self, *args, path: str, enabled: bool = True, overwrite: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self.path = os.path.abspath(path)
-        if mpi and mpi.rank != 0:
-            enabled = False
-        self.enabled = enabled
+        # if not MPIBase.master:
+        #     enabled = False
+        self.enabled = enabled and get_enabled()
         if not enabled:
             return
 

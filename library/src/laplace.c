@@ -12,6 +12,7 @@
 #endif
 
 
+#ifdef __MPI
 // /*
 // Apply a 3-D Laplace filter to a 3-D array with cyclic boundary conditions
 // @param u: the input array
@@ -94,6 +95,45 @@ void laplace_filter(double *u, double *u_new, int n) {
         }
     }
 }
+
+#else
+// /*
+// Apply a 3-D Laplace filter to a 3-D array with cyclic boundary conditions
+// @param u: the input array
+// @param u_new: the output array
+// @param n: the size of the array in each dimension
+// */
+void laplace_filter(double *u, double *u_new, int n) {
+    long int i, j, k;
+    long int i0, i1, i2;
+    long int j0, j1, j2;
+    long int n2 = n * n;
+
+    #pragma omp parallel for private(i, j, k, i0, i1, i2, j0, j1, j2)
+    for (i = 0; i < n; i++) {
+        i0 = i * n2;
+        i1 = ((i+1) % n) * n2;
+        i2 = ((i-1 + n) % n) * n2;
+        for (j = 0; j < n; j++) {
+            j0 = j*n;
+            j1 = ((j+1) % n) * n;
+            j2 = ((j-1 + n) % n) * n;
+            for (k = 0; k < n; k++) {
+                u_new[i0 + j0 + k] = (
+                    u[i1 + j0 + k] +
+                    u[i2 + j0 + k] +
+                    u[i0 + j1 + k] +
+                    u[i0 + j2 + k] +
+                    u[i0 + j0 + ((k+1) % n)] +
+                    u[i0 + j0 + ((k-1 + n) % n)] -
+                    u[i0 + j0 + k] * 6.0
+                    );
+            }
+        }
+    }
+}
+
+#endif
 
 // /*
 // Solve the system of linear equations Ax = b using the conjugate gradient method where A is the Laplace filter

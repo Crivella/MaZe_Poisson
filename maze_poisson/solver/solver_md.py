@@ -26,6 +26,7 @@ class SolverMD(Logger):
     def __init__(self, gset: GridSetting, mdv: MDVariables, outset: OutputSettings):
         super().__init__()
 
+
         self.gset = gset
         self.mdv = mdv
         self.outset = outset
@@ -43,7 +44,6 @@ class SolverMD(Logger):
         self.out_stride = outset.stride
         self.out_flushstride = outset.flushstride * outset.stride
         if self.outset.debug:
-            # print(self.logger.handlers())
             for handler in self.logger.handlers:
                 handler.setLevel(0)
             self.logger.debug("Set verbosity to DEBUG")
@@ -57,6 +57,7 @@ class SolverMD(Logger):
         self.initialize_grid()
         self.initialize_particles()
         self.initialize_integrator()
+        self.initialize_md()
 
     def finalize(self):
         """Finalize the solver."""
@@ -90,7 +91,7 @@ class SolverMD(Logger):
             self.integrator.init_thermostat(*tstat_args)
 
     def initialize_md(self):
-        """Initialize the molecular dynamics."""
+        """Initialize the first 2 steps for the MD and forces."""
         self.q_tot = np.sum(self.particles.charges)
         self.logger.info(f"Total charge: {self.q_tot}")
         # STEP 0 Verlet
@@ -134,7 +135,7 @@ class SolverMD(Logger):
     @Clock('forces_field')
     def compute_forces_field(self):
         """Compute the forces on the particles due to the electric field."""
-        self.q_tot = self.particles.compute_forces_field(self.grid)
+        self.particles.compute_forces_field(self.grid)
 
     @Clock('forces_notelec')
     def compute_forces_notelec(self):
@@ -153,7 +154,7 @@ class SolverMD(Logger):
         q_tot = self.grid.update_charges(self.particles)
 
         if np.abs(self.q_tot - q_tot) > 1e-6:
-            self.logger.error('Error: change initial position, charge is not preserved: q_tot = %.4f', q_tot)
+            self.logger.error('Error: change initial position, charge is not preserved: q_tot = %.6f, %.6f', q_tot, self.q_tot)
             exit()
 
         self.q_tot = q_tot
@@ -192,7 +193,8 @@ class SolverMD(Logger):
         """Run the MD calculation."""
         self.initialize()
         self.init_info()
-        self.initialize_md()
+        # self.grid.gather(self.grid.phi)
+        # exit()
         self.md_loop()
         self.md_loop_output(self.mdv.N_steps)
         self.finalize()

@@ -4,7 +4,7 @@ from functools import wraps
 import numpy as np
 
 from ...constants import a0, density, kB, m_Cl, m_Na, t_au
-from .. import mpi
+# from .. import MPIBase
 from ..loggers import logger
 
 
@@ -137,10 +137,11 @@ class MDVariables(BaseSettings):
 def mpi_file_loader(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        obj = None
-        if mpi.master:
-            obj = func(*args, **kwargs)
-        obj = mpi.comm.bcast(obj, root=0)
+        # obj = None
+        # if MPIBase.master:
+        #     obj = func(*args, **kwargs)
+        # obj = mpi.comm.bcast(obj, root=0)
+        obj = func(*args, **kwargs)
         return obj
     return wrapper
 

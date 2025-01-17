@@ -4,7 +4,7 @@ import ctypes
 import numpy as np
 import numpy.ctypeslib as npct
 
-from . import library, logger
+from . import library
 
 try:
     # double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, long int *neighbors, double *forces)
@@ -34,6 +34,6 @@ try:
     ]
 except:
     from .forces_fallbacks import c_compute_force_fd, c_compute_tf_forces
-    logger.warning("C_API: compute_force_fd not available. Using Python instead.")
-else:
-    logger.info("C_API: compute_force_fd loaded successfully")
+#     logger.warning("C_API: compute_force_fd not available. Using Python instead.")
+# else:
+#     logger.info("C_API: compute_force_fd loaded successfully")

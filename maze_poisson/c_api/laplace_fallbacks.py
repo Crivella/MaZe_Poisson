@@ -1,12 +1,10 @@
 """Fallback implementations of the Laplace filter and conjugate gradient functions."""
 import numpy as np
 
-from . import mpi
-
 
 def c_laplace(u_in: np.ndarray, u_out: np.ndarray, n: int) -> None:
     """Apply the Laplace filter."""
-    bot, top = mpi.get_bot_top(u_in)
+    bot, top = u_in[-1], u_in[0]
 
     u_out[:] = -6 * u_in
 
@@ -28,7 +26,7 @@ def c_laplace(u_in: np.ndarray, u_out: np.ndarray, n: int) -> None:
 
 def ddot(u: np.ndarray, v: np.ndarray) -> float:
     res = np.sum(u * v)
-    return mpi.all_reduce(res)
+    return res
 
 def c_conj_grad(b: np.ndarray, x0: np.ndarray, x: np.ndarray, tol: float, n: int) -> int:
     limit = n * n // 2

@@ -40,22 +40,7 @@ class LCGGrid(BaseGrid):
         self._phi.append(phi)
 
     def gather(self, vec):
-        if not self.mpi:
-            self.gathered = vec
-        else:
-            if self.mpi.rank == 0:
-                app = np.empty((self.N, self.N, self.N), dtype=float)
-                app[:self.N_loc] = vec
-                for i in range(1, self.mpi.size):
-                    N_start = self.mpi.comm.recv(source=i)
-                    N_loc = self.mpi.comm.recv(source=i)
-                    self.mpi.comm.Recv(app[N_start:N_start+N_loc], source=i)
-            else:
-                app = None
-                self.mpi.comm.send(self.N_loc_start, dest=0)
-                self.mpi.comm.send(self.N_loc, dest=0)
-                self.mpi.comm.Send(vec, dest=0)
-            self.gathered = app
+        self.gathered = c_api.c_collect_grid_buffer(vec, self.N)
 
     @property
     def phi(self):

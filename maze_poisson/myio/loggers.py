@@ -2,7 +2,7 @@ import logging
 import os
 import time
 
-from . import mpi
+from . import get_enabled
 
 
 class VoidLogger:
@@ -18,7 +18,7 @@ log_file_path = os.path.join(os.getcwd(), "all_logs.log")
 
 # Function to set up the logger
 def setup_logger(name):
-    if mpi and mpi.rank != 0:
+    if not get_enabled():
         return VoidLogger()
     logger = logging.getLogger(name)
     

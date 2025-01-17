@@ -4,7 +4,7 @@ import ctypes
 import numpy as np
 import numpy.ctypeslib as npct
 
-from . import library, logger
+from . import library
 
 try:
     init_fftw_omp = library.init_fftw_omp
@@ -31,8 +31,8 @@ try:
         npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
     ]
 except:
-    logger.warning("C_API: Interface to FFTW not available. Using numpy instead.")
+    # logger.warning("C_API: Interface to FFTW not available. Using numpy instead.")
     from .fftw_fallbacks import (cleanup_fftw, init_fftw_omp, init_rfft,
                                  rfft_solve)
-else:
-    logger.info("C_API: Interface to FFTW available")
+# else:
+#     logger.info("C_API: Interface to FFTW available")

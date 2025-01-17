@@ -56,20 +56,21 @@ add_library(maze_poisson SHARED
     src/linalg.c
     src/laplace.c
     src/forces.c
+    src/mympi.c
+    src/charges.c
 )
 
 target_include_directories(maze_poisson PRIVATE include)
 
 # Set OpenMP flags 
 if (OpenMP_C_FOUND)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    target_compile_options(maze_poisson PRIVATE ${OpenMP_C_FLAGS})
 endif()
 # Set MPI flags
 if (MPI_C_FOUND)
-    add_compile_definitions(__MPI)
+    target_compile_definitions(maze_poisson PRIVATE __MPI)
     target_include_directories(maze_poisson PRIVATE ${MPI_C_INCLUDE_PATH})
     target_link_libraries(maze_poisson PRIVATE ${MPI_C_LIBRARIES})
-    target_sources(maze_poisson PRIVATE src/mympi.c)
 endif()
 # Set FFTW flags
 if (FFTW3_FOUND)

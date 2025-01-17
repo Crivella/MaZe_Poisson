@@ -1,4 +1,4 @@
-from . import mpi
+from . import get_enabled
 
 try:
     from tqdm import tqdm
@@ -11,6 +11,6 @@ class ProgressBar:
         self.n = n
         
     def __iter__(self):
-        if mpi.master:
+        if get_enabled():
             return iter(tqdm(range(self.n)))
         return iter(range(self.n))

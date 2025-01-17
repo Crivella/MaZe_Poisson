@@ -1,63 +1,11 @@
 """"Fallback implementations of the force computation functions."""
 import numpy as np
 
-from . import mpi
-
-
-def compute_force_fd_single(
-        N: int, N_p: int, h: float,
-        phi: np.ndarray, q: np.ndarray, neighbors: np.ndarray,
-        forces: np.ndarray,
-    ) -> float:
-    h *= 2  # Double the grid spacing
-    q_neighbors = q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]
-    for axis in range(3):
-        E_ax = (np.roll(phi, -1, axis=axis) - np.roll(phi, 1, axis=axis)) / h
-        E_neighbors = E_ax[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]
-        forces[:, axis] = -np.sum(q_neighbors * E_neighbors, axis=1)
-
-    q_tot = np.sum(q_neighbors)
-    return q_tot
-
-def compute_force_fd_mpi(
-        N: int, N_p: int, h: float,
-        phi: np.ndarray, q: np.ndarray, neighbors: np.ndarray,
-        forces: np.ndarray,
-    ) -> float:
-    N_loc = mpi.get_n_loc(N)
-    N_start = mpi.get_n_start(N)
-    bot, top = mpi.get_bot_top(phi)
-
-    h *= 2
-    E_x = np.zeros_like(phi)
-    E_x[:-1] += phi[1:]
-    E_x[-1] += top
-    E_x[1:] -= phi[:-1]
-    E_x[0] -= bot
-    E_x /= h
-    E_y = (np.roll(phi, -1, axis=1) - np.roll(phi, 1, axis=1)) / h
-    E_z = (np.roll(phi, -1, axis=2) - np.roll(phi, 1, axis=2)) / h
-
-    # forces = self.particles.forces_elec
-    forces.fill(0)
-    q_tot = 0
-    for i,neigh in enumerate(neighbors):
-        for x,y,z in neigh:
-            x -= N_start
-            if x < 0 or x >= N_loc:
-                continue
-            qn = q[x, y, z]
-            q_tot += qn
-            forces[i][0] -= qn * E_x[x, y, z]
-            forces[i][1] -= qn * E_y[x, y, z]
-            forces[i][2] -= qn * E_z[x, y, z]
-
-    q_tot = mpi.all_reduce(q_tot)
-    mpi.all_reduce_inplace(forces)
-    return q_tot
 
 def c_compute_force_fd(
-        N: int, N_p: int, h: float, phi: np.ndarray, q: np.ndarray, neighbors: np.ndarray, forces: np.ndarray,
+        N: int, N_p: int, h: float,
+        phi: np.ndarray, q: np.ndarray, neighbors: np.ndarray,
+        forces: np.ndarray,
     ) -> float:
     """Compute the forces from the field using finite differences.
 
@@ -73,10 +21,16 @@ def c_compute_force_fd(
     Returns:
         float: Total charge contribution.
     """
-    if not mpi:
-        return compute_force_fd_single(N, N_p, h, phi, q, neighbors, forces)
-    else:
-        return compute_force_fd_mpi(N, N_p, h, phi, q, neighbors, forces)
+    h *= 2  # Double the grid spacing
+    q_neighbors = q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]
+    for axis in range(3):
+        E_ax = (np.roll(phi, -1, axis=axis) - np.roll(phi, 1, axis=axis)) / h
+        E_neighbors = E_ax[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]
+        forces[:, axis] = -np.sum(q_neighbors * E_neighbors, axis=1)
+
+    q_tot = np.sum(q_neighbors)
+    return q_tot
+
 
 def c_compute_tf_forces(
         N_p: int, L: float, pos: np.ndarray, B: float, params: np.ndarray, r_cut: float,
