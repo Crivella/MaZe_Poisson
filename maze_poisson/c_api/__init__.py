@@ -26,11 +26,13 @@ class CAPI:
     def initialize(self):
         if self.library is not None:
             return
+        self.path = os.path.join(os.path.dirname(__file__), '..', 'libmaze_poisson.so')
         try:
-            self.library = ctypes.cdll.LoadLibrary(os.path.join(os.path.dirname(__file__), '..', 'libmaze_poisson.so'))
-        except:
+            self.library = ctypes.cdll.LoadLibrary(self.path)
+        except Exception as e:
             self.library = None
-            logger.warning("C_API: Could not load shared library.")
+            logger.warning(f"C_API: Could not load shared library. {self.path}")
+            logger.warning(f"C_API: {e}")
         else:
             logger.debug("C_API: Loaded successfully")
 

@@ -144,9 +144,9 @@ class SolverMD(Logger):
         self.grid.potential_notelec = self.particles.ComputeTFForces()
 
     @Clock('file_output')
-    def md_loop_output(self, i: int):
+    def md_loop_output(self, i: int, force: bool = False):
         """Output the data for the MD loop."""
-        self.ofiles.output(i, self.grid, self.particles)
+        self.ofiles.output(i, self.grid, self.particles, force)
 
     @Clock('charges')
     def update_charges(self):
@@ -197,7 +197,7 @@ class SolverMD(Logger):
         # self.grid.gather(self.grid.phi)
         # exit()
         self.md_loop()
-        self.md_loop_output(self.mdv.N_steps)
+        self.md_loop_output(self.mdv.N_steps, force=True)
         self.finalize()
         Clock.report_all()
 

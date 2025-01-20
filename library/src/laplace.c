@@ -156,7 +156,7 @@ int conj_grad(double *b, double *x0, double *x, double tol, int n) {
     double *r = (double *)malloc(n3 * sizeof(double));
     double *p = (double *)malloc(n3 * sizeof(double));
     double *Ap = (double *)malloc(n3 * sizeof(double));
-    double alpha, beta, r_dot_v, rn_dot_rn, rn_dot_vn, pAp;
+    double alpha, beta, r_dot_v, rn_dot_rn, rn_dot_vn;
 
     #pragma omp parallel for
     for (i = 0; i < n3; i++) {
@@ -178,9 +178,7 @@ int conj_grad(double *b, double *x0, double *x, double tol, int n) {
     while(iter < limit) {
         laplace_filter(p, Ap, n);
 
-        pAp = ddot(p, Ap, n3);  // <p, Ap>
-
-        alpha = r_dot_v / pAp;  // alpha = <r, v> / <p | A | p>
+        alpha = r_dot_v / ddot(p, Ap, n3);  // alpha = <r, v> / <p | A | p>
         daxpy(p, x, alpha, n3);  // x_new = x + alpha * p
         daxpy(Ap, r, alpha, n3);  // r_new = r + alpha * Ap
 

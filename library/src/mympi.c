@@ -130,23 +130,23 @@ void allreduce_buffer(double *buffer, long int size) {
     }
 }
 
-void broadcast_int(long int *value) {
-    if (global_mpi_data->size > 1) {
-        MPI_Bcast(value, 1, MPI_LONG, 0, global_mpi_data->comm);
-    }
-}
+// void broadcast_int(long int *value) {
+//     if (global_mpi_data->size > 1) {
+//         MPI_Bcast(value, 1, MPI_LONG, 0, global_mpi_data->comm);
+//     }
+// }
 
-double *broadcast_buffer(double *data, long int size) {
-    double *result = data;
-    if (global_mpi_data->size > 1) {
-        broadcast_int(&size);
-        if (global_mpi_data->rank > 0) {
-            result = (double *)malloc(size * sizeof(double));
-        }
-        MPI_Bcast(result, size, MPI_DOUBLE, 0, global_mpi_data->comm);
-    }
-    return result;
-}
+// double *broadcast_buffer(double *data, long int size) {
+//     double *result = data;
+//     if (global_mpi_data->size > 1) {
+//         broadcast_int(&size);
+//         if (global_mpi_data->rank > 0) {
+//             result = (double *)malloc(size * sizeof(double));
+//         }
+//         MPI_Bcast(result, size, MPI_DOUBLE, 0, global_mpi_data->comm);
+//     }
+//     return result;
+// }
 
 void collect_grid_buffer(double *data, double *recv, int n) {
     int n_loc = global_mpi_data->n_loc;
@@ -159,14 +159,13 @@ void collect_grid_buffer(double *data, double *recv, int n) {
 
     if (size > 1) {
         if (rank == 0) {
-            double *app = malloc(n3 * sizeof(double));
             memcpy(recv, data, n3_loc * sizeof(double));
             for (int i=1; i<size; i++) {
                 int n_loc_start = 0;
                 int n_loc = 0;
                 MPI_Recv(&n_loc_start, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 MPI_Recv(&n_loc, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                MPI_Recv(recv + n_loc_start * n2, n3_loc, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(recv + n_loc_start * n2, n_loc * n2, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
         } else {
             MPI_Send(&global_mpi_data->n_start, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
@@ -213,8 +212,10 @@ void allreduce_buffer(double *buffer, long int size) {
     // Do nothing
 }
 
-double *collect_grid_buffer(double *data, int n) {
-    return data;
+void collect_grid_buffer(double *data, double *recv, int n) {
+    if (data != recv) {
+        memcpy(recv, data, n * n * n * sizeof(double));
+    }
 }
 
 #endif

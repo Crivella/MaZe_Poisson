@@ -2,8 +2,9 @@
 
 import time
 from functools import wraps
+from typing import Dict
 
-clocks: dict[str, 'Clock'] = {}
+clocks: Dict[str, 'Clock'] = {}
 
 from .myio.loggers import Logger
 

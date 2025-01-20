@@ -35,7 +35,10 @@ class BaseOutputFile(Logger, ABC):
 
         if os.path.exists(path):
             if overwrite:
-                os.remove(path)
+                try:  # When running with MPI file could be locked
+                    os.remove(path)
+                except:
+                    pass
             else:
                 raise ValueError(f"File {path} already exists")
 
@@ -100,18 +103,18 @@ class OutputFiles:
             if file:
                 file.flush()
 
-    def output(self, iter: int, grid: BaseGrid, particles: Particles):
+    def output(self, iter: int, grid: BaseGrid, particles: Particles, force: bool = False):
         """Output the results of the molecular dynamics loop."""
-        if iter % self.out_stride == 0:
+        if force or iter % self.out_stride == 0:
             self.energy.write_data(iter, grid, particles)
             self.tot_force.write_data(iter, grid, particles)
             self.temperature.write_data(iter, grid, particles)
             self.solute.write_data(iter, grid, particles)
             # self.performance.write_data(iter, grid, particles)
             self.field.write_data(iter, grid, particles)
-            if self.out_flushstride and iter % self.out_flushstride == 0:
+            if force or (self.out_flushstride and iter % self.out_flushstride == 0):
                 self.flush()
-        if self.restart_stride and iter % self.restart_stride == 0:
+        if force or (self.restart_stride and iter % self.restart_stride == 0):
             self.restart.write_data(iter, grid, particles, mode='w')
             self.restart.flush()
 
