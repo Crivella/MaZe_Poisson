@@ -5,7 +5,7 @@ import numpy as np
 
 def g(x, L, h):
     x = np.abs(x - L * np.rint(x / L))
-    return 1 - x / h
+    return np.where(x < h, 1 - x / h, 0)
 
 def update_charges(
         n_grid: int, n_p: int, h: float,

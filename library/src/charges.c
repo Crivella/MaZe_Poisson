@@ -6,6 +6,9 @@
 
 double g(double x, double L, double h) {
     x = fabs(x - round(x / L) * L);
+    if (x >= h) {
+        return 0.0;
+    }
     return 1.0 - x / h;
 }
 

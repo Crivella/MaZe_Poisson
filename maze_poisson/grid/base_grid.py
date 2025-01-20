@@ -26,6 +26,8 @@ class BaseGrid(Logger, ABC):
         self.field_j = 0
         self.field_k = 0
 
+        self.n_loc = capi.init_mpi_grid(self.N)
+
         self.init_grids()
 
     @abstractmethod

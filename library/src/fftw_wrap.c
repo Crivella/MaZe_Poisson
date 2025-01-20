@@ -201,7 +201,7 @@ void rfft_solve(int n, double *b, double *ig2, double *x) {
     int nh = n / 2 + 1;
     long int size = n * n * nh;
     long int n3r = n * n * n;
-    
+
     #pragma omp parallel for
     for (long int i = 0; i < n3r; i++) {
         r_real[i] = b[i];

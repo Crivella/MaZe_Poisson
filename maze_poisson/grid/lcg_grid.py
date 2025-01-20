@@ -10,8 +10,7 @@ from .base_grid import BaseGrid
 class LCGGrid(BaseGrid):
     def init_grids(self):
         """Initialize the grids."""
-        n_loc = capi.init_mpi_grid(self.N)
-        self.shape = (n_loc, self.N, self.N)
+        self.shape = (self.n_loc, self.N, self.N)
 
         self.y = np.zeros(self.shape, dtype=float)  # right-hand side of the preconditioned Poisson equation
         self.q = np.zeros(self.shape, dtype=float)  # charge vector - q for every grid point
