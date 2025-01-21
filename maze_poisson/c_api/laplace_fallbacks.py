@@ -43,7 +43,8 @@ def conj_grad(b: np.ndarray, x0: np.ndarray, x: np.ndarray, tol: float, n: int) 
         r = np.empty_like(b)
         laplace(x0, r, n)
         r -= b
-    x[:] = x0
+    if x is not x0:
+        x[:] = x0
 
     p = r / 6.0
 

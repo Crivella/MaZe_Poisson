@@ -159,9 +159,12 @@ int conj_grad(double *b, double *x0, double *x, double tol, int n) {
     // Allow for inplace computation by having b == x
     laplace_filter(x0, r, n);  // r = A . x
     daxpy(b, r, -1.0, n3);  // r = A . x - b
-    #pragma omp parallel for
-    for (i = 0; i < n3; i++) {
-        x[i] = x0[i];
+    if (x != x0)
+    {
+        #pragma omp parallel for
+        for (i = 0; i < n3; i++) {
+            x[i] = x0[i];
+        }
     }
 
     #pragma omp parallel for
