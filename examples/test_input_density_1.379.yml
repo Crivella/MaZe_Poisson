@@ -10,7 +10,7 @@ grid_setting:
   # restart_field_file: "restart_field.csv"
 
 md_variables:
-  N_steps: 2000
+  N_steps: 200
   T: 1550 # Kelvin
   dt_fs: 0.25 # in fs
   rescale: true # rescaling of the initial momenta to have tot momenta = 0, always true 
@@ -20,19 +20,21 @@ md_variables:
   thermostat: false
   elec: TRUE 
   not_elec: TRUE
-  method: FFT
+  method: LCG
   integrator: OVRVO
 
 output_settings: 
-  # restart: true
+  path: 'Outputs/'
+
   print_tot_force: TRUE
   print_field: false
-  # print_performance: true
   print_solute: TRUE
   print_energy: TRUE 
   print_temperature: TRUE
+
   # print_restart: true
   # print_restart_field: true
+
   stride: 20
   flushstride: 5
   restart_step: 199
