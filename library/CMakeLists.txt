@@ -22,9 +22,9 @@ option(MP_MTUNE "Enable -mtune=native" ON)
 option(MP_AVX "Enable AVX" ON)
 
 # Find the required packages
-find_package(OpenMP REQUIRED C)
-find_package(MPI REQUIRED COMPONENTS C)
-find_package(FFTW3 REQUIRED COMPONENTS DOUBLE_OPENMP DOUBLE)
+find_package(OpenMP COMPONENTS C)
+find_package(MPI COMPONENTS C)
+find_package(FFTW3 COMPONENTS DOUBLE_OPENMP DOUBLE)
 
 # Set the compiler flags
 set(CMAKE_C_FLAGS_DEBUG "-g")
