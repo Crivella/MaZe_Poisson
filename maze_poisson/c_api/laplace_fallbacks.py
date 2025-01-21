@@ -1,6 +1,8 @@
 """Fallback implementations of the Laplace filter and conjugate gradient functions."""
 import numpy as np
 
+from .mympi import MPIBase
+
 
 def laplace(u_in: np.ndarray, u_out: np.ndarray, n: int) -> None:
     """Apply the Laplace filter."""
@@ -29,6 +31,9 @@ def ddot(u: np.ndarray, v: np.ndarray) -> float:
     return res
 
 def conj_grad(b: np.ndarray, x0: np.ndarray, x: np.ndarray, tol: float, n: int) -> int:
+    if MPIBase.size > 1:
+        print('conj_grad fallback not implemented for MPI')
+        exit()
     limit = n * n // 2
     Ap = np.empty_like(b)
     if x0 is None:
@@ -66,3 +71,30 @@ def conj_grad(b: np.ndarray, x0: np.ndarray, x: np.ndarray, tol: float, n: int) 
         iter_ += 1
 
     return res
+
+def verlet_poisson(
+        tol: float,
+        h: float,
+        phi: np.ndarray,
+        phi_prev: np.ndarray,
+        q: np.ndarray,
+        y: np.ndarray,
+        n_grid: int,
+    ) -> int:
+    if MPIBase.size > 1:
+        print('verlet_poisson fallback not implemented for MPI')
+        exit()
+    tmp = np.empty_like(phi)
+    phi[:] = 2 * phi - phi_prev
+    phi_prev[:] = phi
+    laplace(phi, tmp, n_grid)
+    tmp += 4 * np.pi * q / h
+
+    n_iters = conj_grad(tmp, y, tmp, tol, n_grid)
+    if n_iters == -1:
+        return -1
+
+    phi[:] -= tmp
+    y[:] = tmp
+
+    return n_iters

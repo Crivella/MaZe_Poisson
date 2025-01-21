@@ -25,18 +25,11 @@ class LCGGrid(BaseGrid):
 
     def update_field(self):
         """Update the field."""
-        phi = 2 * self.phi - self.phi_prev
-        capi.laplace_filter(phi, self.tmp, self.N)
-        sigma_p = 4 * np.pi * self.q / self.h + self.tmp
+        self.n_iters = capi.verlet_poisson(self.tol, self.h, self.phi, self.phi_prev, self.q, self.y, self.N)
 
-        self.n_iters = capi.conj_grad(sigma_p, self.y, self.tmp, self.tol, self.N)
         if self.n_iters == -1:
             self.logger.error(f'Conjugate gradient did not converge!!!')
             exit()
-
-        phi -= self.tmp
-        self.y = self.tmp
-        self._phi.append(phi)
 
     def gather(self, vec):
         return collect_grid_buffer(vec, self.N)

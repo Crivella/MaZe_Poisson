@@ -13,12 +13,12 @@
 
 
 #ifdef __MPI
-// /*
-// Apply a 3-D Laplace filter to a 3-D array with cyclic boundary conditions
-// @param u: the input array
-// @param u_new: the output array
-// @param n: the size of the array in each dimension
-// */
+/*
+Apply a 3-D Laplace filter to a 3-D array with cyclic boundary conditions
+@param u: the input array
+@param u_new: the output array
+@param n: the size of the array in each dimension
+*/
 void laplace_filter(double *u, double *u_new, int n) {
     long int i, j, k;
     long int i0, i1, i2;
@@ -97,12 +97,12 @@ void laplace_filter(double *u, double *u_new, int n) {
 }
 
 #else
-// /*
-// Apply a 3-D Laplace filter to a 3-D array with cyclic boundary conditions
-// @param u: the input array
-// @param u_new: the output array
-// @param n: the size of the array in each dimension
-// */
+/*
+Apply a 3-D Laplace filter to a 3-D array with cyclic boundary conditions
+@param u: the input array
+@param u_new: the output array
+@param n: the size of the array in each dimension
+*/
 void laplace_filter(double *u, double *u_new, int n) {
     long int i, j, k;
     long int i0, i1, i2;
@@ -135,19 +135,17 @@ void laplace_filter(double *u, double *u_new, int n) {
 
 #endif
 
-// /*
-// Solve the system of linear equations Ax = b using the conjugate gradient method where A is the Laplace filter
-// @param b: the right-hand side of the system of equations
-// @param x0: the initial guess for the solution
-// @param x: the solution to the system of equations
-// @param tol: the tolerance for the solution
-// @param n: the size of the arrays (n_tot = n * n * n)
-// */
+/*
+Solve the system of linear equations Ax = b using the conjugate gradient method where A is the Laplace filter
+@param b: the right-hand side of the system of equations
+@param x0: the initial guess for the solution
+@param x: the solution to the system of equations
+@param tol: the tolerance for the solution
+@param n: the size of the arrays (n_tot = n * n * n)
+*/
 int conj_grad(double *b, double *x0, double *x, double tol, int n) {
-    int n_loc = get_n_loc();
-
     long int i;
-    long int n3 = n_loc * n * n;
+    long int n3 = get_n_loc() * n * n;
     long int limit = n * n;
     long int iter = 0, res = -1;
 
@@ -158,12 +156,13 @@ int conj_grad(double *b, double *x0, double *x, double tol, int n) {
     double *Ap = (double *)malloc(n3 * sizeof(double));
     double alpha, beta, r_dot_v, rn_dot_rn, rn_dot_vn;
 
+    // Allow for inplace computation by having b == x
+    laplace_filter(x0, r, n);  // r = A . x
+    daxpy(b, r, -1.0, n3);  // r = A . x - b
     #pragma omp parallel for
     for (i = 0; i < n3; i++) {
         x[i] = x0[i];
     }
-    laplace_filter(x, r, n);  // r = A . x
-    daxpy(b, r, -1.0, n3);  // r = A . x - b
 
     #pragma omp parallel for
     for (i = 0; i < n3; i++) {
@@ -205,4 +204,56 @@ int conj_grad(double *b, double *x0, double *x, double tol, int n) {
     free(Ap);
 
     return res;
+}
+
+/*
+Apply Verlet algorithm to compute the updated value of the field phi, with LCG + SHAKE.
+The previous and current fields and the y array are updated in place.
+@param tol: tolerance
+@param h: the grid spacing
+@param phi: the potential field of size n_grid * n_grid * n_grid
+@param phi_prev: electrostatic field for step t - 1 Verlet
+@param q: the charge on a grid of size n_grid * n_grid * n_grid\
+@param y: copy of the 'q' given as input to the function
+@param n_grid: the number of grid points in each dimension
+
+@return the number of iterations for convergence of the LCG
+*/
+EXTERN_C int verlet_poisson(double tol, double h, double* phi, double* phi_prev, double* q, double* y, int n_grid) {
+    int iter_conv;
+
+    long int i;
+    long int n3 = get_n_loc() * n_grid * n_grid;
+
+    double app;
+
+    double *tmp = (double*)malloc(n3 * sizeof(double));
+    
+    // Compute provisional update for the field phi
+    #pragma omp parallel for private(app)
+    for (i = 0; i < n3; i++) {
+        app = phi[i];
+        phi[i] = 2 * app - phi_prev[i];
+        phi_prev[i] = app;
+    }
+
+    // Compute the constraint with the provisional value of the field phi
+    laplace_filter(phi, tmp, n_grid);
+    daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A^phi + 4 * pi * rho
+
+    // Apply LCG
+    iter_conv = conj_grad(tmp, y, tmp, tol, n_grid);
+
+    // Scale the field with the constrained 'force' term
+    #pragma omp parallel for private(app)
+    for (i = 0; i < n3; i++) {
+        app = tmp[i];
+        phi[i] -= app;
+        y[i] = app;
+    }
+
+    // Free temporary arrays
+    free(tmp);
+
+    return iter_conv;
 }
