@@ -43,13 +43,14 @@ class OutputSettings(BaseSettings):
         self.print_temperature = False
         self.print_tot_force = False
         self.print_restart = False
+        self.print_restart_field = False
         self.path = 'Outputs/'
         self.format = 'csv'
         self.stride = 50
         self.flushstride = 0
         self.debug = False
         self.generate_restart_file = False
-        self.restart_stride = 100
+        self.restart_step = None
 
 class GridSetting(BaseSettings):
     tocheck = ['N', 'N_p', 'L', 'h', 'file']
@@ -58,6 +59,7 @@ class GridSetting(BaseSettings):
         self._N = None
         self.input_file = None
         self.restart_file = None
+        self.restart_field_file = None
         self.L = None
         self.h = None
         
@@ -110,11 +112,12 @@ class MDVariables(BaseSettings):
         self.method = 'FFT'
         self.tol = 1e-7
         self.gamma = 1e-3
+        self._invert_time = False
     
     @property
     def T(self):
         return self._T
-    
+
     @T.setter
     def T(self, value):
         self._T = value
@@ -130,8 +133,23 @@ class MDVariables(BaseSettings):
 
     @dt_fs.setter
     def dt_fs(self, value):
+        if value <= 0:
+            raise ValueError("Timestep must be positive.")
+        if self.invert_time:
+            value = -value
         self._dt_fs = value
         self.dt = value / t_au
+
+    @property
+    def invert_time(self):
+        return self._invert_time
+    @invert_time.setter
+    def invert_time(self, value):
+        if value and self.dt_fs is not None and self.dt_fs > 0:
+            dt_fs = -self.dt_fs
+            self._dt_fs = dt_fs
+            self.dt = dt_fs / t_au
+        self._invert_time = value
 
 def mpi_file_loader(func):
     @wraps(func)

@@ -39,7 +39,7 @@ class LCGGrid(BaseGrid):
         self._phi.append(phi)
 
     def gather(self, vec):
-        self.gathered = collect_grid_buffer(vec, self.N)
+        return collect_grid_buffer(vec, self.N)
 
     @property
     def phi(self):

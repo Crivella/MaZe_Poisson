@@ -6,7 +6,7 @@ import pandas as pd
 from . import c_api
 from .constants import a0, conv_mass, kB
 from .indices import GetDictTF
-from .input import GridSetting
+from .myio.input import GridSetting
 from .myio.loggers import Logger
 
 

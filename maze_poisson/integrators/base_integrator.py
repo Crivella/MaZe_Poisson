@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from ..input import MDVariables
+from ..myio.input import MDVariables
 from ..particles import Particles
 
 

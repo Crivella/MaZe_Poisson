@@ -69,19 +69,25 @@ class OutputFiles:
     solute = None
     tot_force = None
     restart = None
+    restart_field = None
 
-    files = ['field', 'energy', 'temperature', 'solute', 'tot_force', 'restart']
+    files = ['field', 'energy', 'temperature', 'solute', 'tot_force', 'restart', 'restart_field']
 
     format_classes = {}
+
+    last = -1
 
     def __init__(self, oset: OutputSettings):
         self.oset = oset
         self.base_path = oset.path
         self.fmt = oset.format
 
+        if not os.path.exists(self.base_path):
+            os.makedirs(self.base_path)
+
         self.out_stride = oset.stride
         self.out_flushstride = (oset.flushstride or 0) * oset.stride
-        self.restart_stride = oset.restart_stride
+        self.restart_step = oset.restart_step
 
         self.init_files()
 
@@ -103,20 +109,24 @@ class OutputFiles:
             if file:
                 file.flush()
 
-    def output(self, iter: int, grid: BaseGrid, particles: Particles, force: bool = False):
+    def output(self, itr: int, grid: BaseGrid, particles: Particles, force: bool = False):
         """Output the results of the molecular dynamics loop."""
-        if force or iter % self.out_stride == 0:
-            self.energy.write_data(iter, grid, particles)
-            self.tot_force.write_data(iter, grid, particles)
-            self.temperature.write_data(iter, grid, particles)
-            self.solute.write_data(iter, grid, particles)
-            # self.performance.write_data(iter, grid, particles)
-            self.field.write_data(iter, grid, particles)
-            if force or (self.out_flushstride and iter % self.out_flushstride == 0):
-                self.flush()
-        if force or (self.restart_stride and iter % self.restart_stride == 0):
-            self.restart.write_data(iter, grid, particles, mode='w')
+        if force or itr % self.out_stride == 0:
+            if self.last != itr:
+                self.last = itr
+                self.energy.write_data(itr, grid, particles)
+                self.tot_force.write_data(itr, grid, particles)
+                self.temperature.write_data(itr, grid, particles)
+                self.solute.write_data(itr, grid, particles)
+                # self.performance.write_data(itr, grid, particles)
+                self.field.write_data(itr, grid, particles)
+                if force or (self.out_flushstride and itr % self.out_flushstride == 0):
+                    self.flush()
+        if self.restart_step == itr:
+            self.restart.write_data(itr, grid, particles, mode='w')
+            self.restart_field.write_data(itr, grid, particles, mode='w')
             self.restart.flush()
+            self.restart_field.flush()
 
     @classmethod
     def register_format(cls, name: str, classes: dict):

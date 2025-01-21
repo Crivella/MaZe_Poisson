@@ -21,6 +21,7 @@ class CSVOutputFile(BaseOutputFile):
     def write_data(self, iter: int, grid: BaseGrid, particles: Particles, mode: str = 'a'):
         header = False
         if mode == 'w':
+            open(self.path, 'w').close()
             self.buffer.truncate(0)
             self.buffer.seek(0)
             header = True
@@ -115,6 +116,17 @@ class RestartCSVOutputFile(CSVOutputFile):
         df['mass'] = particles.masses / conv_mass
         return df
 
+class RestartFieldCSVOutputFile(CSVOutputFile):
+    name = 'restart_field'
+    headers = ['phi_prev', 'phi']
+    def get_data(self, iter: int, grid: BaseGrid = None, particles: Particles = None):
+        phi = grid.gather(grid.phi)
+        phi_prev = grid.gather(grid.phi_prev)
+        df = pd.DataFrame(phi_prev.flatten(), columns=['phi_prev'])
+        df['phi'] = phi.flatten()
+        return df
+
+
 OutputFiles.register_format(
     'csv',
     {
@@ -124,6 +136,7 @@ OutputFiles.register_format(
         'temperature': TemperatureCSVOutputFile,
         'solute': SolutesCSVOutputFile,
         'tot_force': ForcesCSVOutputFile,
-        'restart': RestartCSVOutputFile
+        'restart': RestartCSVOutputFile,
+        'restart_field': RestartFieldCSVOutputFile
     }
 )
