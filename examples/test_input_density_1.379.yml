@@ -25,14 +25,14 @@ output_settings:
   # restart: true
   print_tot_force: TRUE
   print_field: false
-  print_performance: true
+  # print_performance: true
   print_solute: TRUE
   print_energy: TRUE 
   print_temperature: TRUE
   print_restart: true
-  stride: 1
-  flushstride: 1
-  restart_stride: 20
+  stride: 20
+  flushstride: 5
+  restart_stride: 0
   # debug: true
 
   # for eqm: N_steps=6000, init_steps=5000, True, True, True, false, false, false, false, true, true, true, true (ignore rescale)

@@ -1,8 +1,10 @@
 """Implement a base solver Class for maze_poisson."""
+import atexit
 from typing import Dict, Tuple
 
 import numpy as np
 
+from ..c_api import capi
 from ..clocks import Clock
 from ..grid import BaseGrid, FFTGrid, LCGGrid
 from ..input import GridSetting, MDVariables, OutputSettings
@@ -26,6 +28,7 @@ class SolverMD(Logger):
     """Base class for all solver classes."""
 
     def __init__(self, gset: GridSetting, mdv: MDVariables, outset: OutputSettings):
+        capi.initialize()
         super().__init__()
 
         self.gset = gset
@@ -52,6 +55,8 @@ class SolverMD(Logger):
         self.q_tot = 0
         self.thermostat = self.mdv.thermostat
 
+        atexit.register(self.finalize)
+
     @Clock('initialize')
     def initialize(self):
         """Initialize the solver."""
@@ -64,6 +69,7 @@ class SolverMD(Logger):
         """Finalize the solver."""
         self.particles.cleanup()
         self.grid.cleanup()
+        Clock.report_all()
 
     def initialize_grid(self):
         """Initialize the grid."""
@@ -194,12 +200,8 @@ class SolverMD(Logger):
         """Run the MD calculation."""
         self.initialize()
         self.init_info()
-        # self.grid.gather(self.grid.phi)
-        # exit()
         self.md_loop()
         self.md_loop_output(self.mdv.N_steps, force=True)
-        self.finalize()
-        Clock.report_all()
 
     def init_info(self):
         """Print information about the initialization."""

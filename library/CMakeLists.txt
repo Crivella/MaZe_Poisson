@@ -76,7 +76,6 @@ if (MPI_C_FOUND)
 endif()
 # Set FFTW flags
 if (FFTW3_FOUND)
-    # target_include_directories(maze_poisson PRIVATE ${FFTW_INCLUDES})
     target_link_libraries(maze_poisson PRIVATE FFTW3)
     target_sources(maze_poisson PRIVATE src/fftw_wrap.c)
 endif()

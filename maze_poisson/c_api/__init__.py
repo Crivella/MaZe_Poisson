@@ -58,7 +58,10 @@ class CAPI:
     def finalize(self):
         for fname, args, kwargs in self.tofina:
             if isinstance(fname, str):
-                func = self.functions[fname]
+                try:
+                    func = self.functions[fname]
+                except:
+                    continue
             else:
                 func = fname
             func(*args, **kwargs)
@@ -83,4 +86,4 @@ from . import charges, fftw, forces, laplace, mympi
 
 __all__ = ['capi']
 
-capi.initialize()
+# capi.initialize()
