@@ -39,6 +39,8 @@ class OutputSettings(BaseSettings):
         """Set default values."""
         self.print_field = False
         self.print_solute = False
+        self.print_performance = False
+        self.print_momentum = False
         self.print_energy = False
         self.print_temperature = False
         self.print_tot_force = False

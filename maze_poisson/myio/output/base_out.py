@@ -63,15 +63,16 @@ class BaseOutputFile(Logger, ABC):
 
 class OutputFiles:
     field = None
-    # performance = None
+    performance = None
     energy = None
+    momentum = None
     temperature = None
     solute = None
     tot_force = None
     restart = None
     restart_field = None
 
-    files = ['field', 'energy', 'temperature', 'solute', 'tot_force', 'restart', 'restart_field']
+    files = ['field', 'performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force', 'restart', 'restart_field']
 
     format_classes = {}
 
@@ -114,7 +115,9 @@ class OutputFiles:
         if force or itr % self.out_stride == 0:
             if self.last != itr:
                 self.last = itr
+                self.performance.write_data(itr, grid, particles)
                 self.energy.write_data(itr, grid, particles)
+                self.momentum.write_data(itr, grid, particles)
                 self.tot_force.write_data(itr, grid, particles)
                 self.temperature.write_data(itr, grid, particles)
                 self.solute.write_data(itr, grid, particles)

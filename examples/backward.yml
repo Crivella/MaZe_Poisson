@@ -3,8 +3,9 @@
 grid_setting:
   N: 50
   N_p: 250 # at N_p=2, rescale=False
-  input_file: "input_files/input_coord250.csv"
-  # step_restart: 3999
+  # input_file: "input_files/input_coord250.csv"
+  restart_file: "forward_lcg/restart.csv"
+  # restart_file: "forward_fft/restart.csv"
 
 md_variables:
   N_steps: 4000
@@ -17,19 +18,18 @@ md_variables:
   elec: TRUE 
   not_elec: TRUE 
   invert_time: true
-  # method: LCG
-  method: FFT
+  method: LCG
+  # method: FFT
   integrator: OVRVO
 
 output_settings: 
-  # path: 'backward_lcg/'
-  path: 'backward_fft/'
+  path: 'backward_lcg/'
+  # path: 'backward_fft/'
 
   print_tot_force: true
-  print_field: FALSE
-  # print_performance: False
   print_solute: TRUE
   print_energy: TRUE 
+  print_momentum: TRUE
   print_temperature: TRUE
 
   print_restart: false
@@ -37,7 +37,7 @@ output_settings:
 
   stride: 20
   flushstride: 5
-  restart_stride: 0
+  restart_step: 0
 
   # for eqm: N_steps=6000, init_steps=5000, True, True, True, false, false, false, false, true, true, true, true (ignore rescale)
   # for restart: N_steps=200, init_steps=0, False, True, True, true, false, false, true, true, true, true, false (ignore rescale)

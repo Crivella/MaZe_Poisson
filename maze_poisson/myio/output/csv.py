@@ -47,6 +47,18 @@ class EnergyCSVOutputFile(CSVOutputFile):
             'V_notelec': [grid.potential_notelec]
         })
 
+class MomentumCSVOutputFile(CSVOutputFile):
+    name = 'momentum'
+    headers = ['iter', 'Px', 'Py', 'Pz']
+    def get_data(self, iter: int, grid: BaseGrid = None, particles: Particles = None):
+        momentum = particles.get_momentum()
+        return pd.DataFrame({
+            'iter': [iter],
+            'Px': [momentum[0]],
+            'Py': [momentum[1]],
+            'Pz': [momentum[2]]
+        })
+
 class ForcesCSVOutputFile(CSVOutputFile):
     name = 'forces'
     headers = ['iter', 'Fx', 'Fy', 'Fz']
@@ -133,6 +145,7 @@ OutputFiles.register_format(
         'field': FieldCSVOutputFile,
         'performance': PerformanceCSVOutputFile,
         'energy': EnergyCSVOutputFile,
+        'momentum': MomentumCSVOutputFile,
         'temperature': TemperatureCSVOutputFile,
         'solute': SolutesCSVOutputFile,
         'tot_force': ForcesCSVOutputFile,

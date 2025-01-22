@@ -3,41 +3,41 @@
 grid_setting:
   N: 50
   N_p: 250 # at N_p=2, rescale=False
-  input_file: "input_files/input_coord250.csv"
+  # input_file: "input_files/input_coord250.csv"
+  restart_file: "restart_files/density_1.379/restart_N100_N_p_250_9999_iter1.csv"
   # step_restart: 3999
 
 md_variables:
   N_steps: 4000
   T: 1550 # Kelvin
   dt_fs: 0.25 # in fs
-  rescale: False # rescaling of the initial momenta to have tot momenta = 0, always true 
+  rescale: false # rescaling of the initial momenta to have tot momenta = 0, always true 
   tol: 1.e-10
   init_steps: 0
   thermostat: false
   elec: TRUE 
   not_elec: TRUE 
   invert_time: false
-  # method: LCG
-  method: FFT
+  method: LCG
+  # method: FFT
   integrator: OVRVO
 
 output_settings: 
-  # path: 'forward_lcg/'
-  path: 'forward_fft/'
-  
+  path: 'forward_lcg/'
+  # path: 'forward_fft/'
+
   print_tot_force: true
-  print_field: FALSE
-  # print_performance: False
   print_solute: TRUE
   print_energy: TRUE 
+  print_momentum: TRUE
   print_temperature: TRUE
 
-  print_restart: false
+  print_restart: true
   print_restart_field: false
 
   stride: 20
   flushstride: 5
-  restart_stride: 0
+  restart_step: 4000
 
   # for eqm: N_steps=6000, init_steps=5000, True, True, True, false, false, false, false, true, true, true, true (ignore rescale)
   # for restart: N_steps=200, init_steps=0, False, True, True, true, false, false, true, true, true, true, false (ignore rescale)

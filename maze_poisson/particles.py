@@ -178,6 +178,10 @@ class Particles(Logger):
         self.kinetic = 0.5 * np.sum(self.masses * np.sum(self.vel**2, axis=1))
         return self.kinetic
 
+    def get_momentum(self):
+        self.momentum = np.sum(self.masses[:, np.newaxis] * self.vel, axis=0)
+        return self.momentum
+
     def rescale_velocities(self):
         init_vel_Na = np.zeros(3)
         new_vel_Na = np.zeros(3)
