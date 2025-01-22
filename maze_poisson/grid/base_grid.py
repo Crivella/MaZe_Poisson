@@ -73,7 +73,7 @@ class BaseGrid(Logger, ABC):
             float: Total charge contribution.
         """
         N_p = particles.N_p
-        pos = np.ascontiguousarray(particles.pos)
+        pos = particles.pos
         neighbors = particles.neighbors
         charges = particles.charges
 

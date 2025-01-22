@@ -23,7 +23,7 @@ class Particles(Logger):
 
         # Particle properties as NumPy arrays
         self.masses = np.array(masses)        # Shape: (N_p,)
-        self.pos = np.array(positions) # Shape: (N_p, 3)
+        self.pos = np.ascontiguousarray(positions) # Shape: (N_p, 3)
         self.vel = np.zeros((N_p, 3), dtype=float) # Shape: (N_p, 3)
         self.charges = np.array(charges)     # Shape: (N_p,)
         self.forces = np.zeros((N_p, 3), dtype=float) # Electrostatic forces

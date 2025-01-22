@@ -23,7 +23,7 @@ class VerletIntegrator(BaseIntegrator):
         particles.vel += 0.5 * self.dt * particles.forces / particles.masses[:, np.newaxis]
         particles.pos += self.dt * particles.vel
         particles.pos %= self.L
-        particles.pos = np.ascontiguousarray(particles.pos)
+        particles.pos = particles.pos
 
     def part2(self, particles: Particles):
         """Update the velocity of the particles."""
