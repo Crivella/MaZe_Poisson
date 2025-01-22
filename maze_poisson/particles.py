@@ -3,7 +3,7 @@ from itertools import product
 import numpy as np
 import pandas as pd
 
-from . import c_api
+from .c_api import capi
 from .constants import a0, conv_mass, kB
 from .indices import GetDictTF
 from .myio.input import GridSetting
@@ -124,13 +124,11 @@ class Particles(Logger):
 
         neighbors = self.neighbors
 
-        q_tot = c_api.capi.compute_force_fd(N, N_p, h, phi, q, neighbors, self.forces_elec)
-
-        return q_tot
+        return capi.compute_force_fd(N, N_p, h, phi, q, neighbors, self.forces_elec)
 
     def ComputeTFForces(self) -> float:
         # Get all pairwise differences
-        return c_api.capi.compute_tf_forces(
+        return capi.compute_tf_forces(
             self.N_p, self.L, self.pos, self.B, self.tf_params, self.r_cutoff, self.forces_notelec
             )
 

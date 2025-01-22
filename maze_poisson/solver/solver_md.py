@@ -211,11 +211,13 @@ class SolverMD(Logger):
 
     def init_info(self):
         """Print information about the initialization."""
+        from ..constants import density
         self.logger.info(f'Running a MD simulation with:')
         self.logger.info(f'  N_p = {self.N_p}, N_steps = {self.mdv.N_steps}, tol = {self.mdv.tol}')
         self.logger.info(f'  N = {self.N}, L [a.u.] = {self.L}, h [a.u.] = {self.h}')
+        self.logger.info(f'  density = {density} g/cm^3')
         self.logger.info(f'  Preconditioning: {self.mdv.preconditioning}')
-        self.logger.info(f'  Integrator: {self.mdv.integrator}, Method: {self.mdv.method} dt = {self.mdv.dt}')
+        self.logger.info(f'  Integrator: {self.mdv.integrator},  Method: {self.mdv.method},  dt = {self.mdv.dt}')
         self.logger.info(f'  Potential: {self.mdv.potential}')
         self.logger.info(f'  Elec: {self.mdv.elec}    NotElec: {self.mdv.not_elec}')
         self.logger.info(f'  Temperature: {self.mdv.T} K,  Thermostat: {self.thermostat},  Gamma: {self.mdv.gamma}')

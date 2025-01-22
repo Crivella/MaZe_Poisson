@@ -229,7 +229,6 @@ EXTERN_C int verlet_poisson(double tol, double h, double* phi, double* phi_prev,
     long int n3 = get_n_loc() * n_grid * n_grid;
 
     double app;
-+
     double *tmp = (double*)malloc(n3 * sizeof(double));
     
     // Compute provisional update for the field phi
