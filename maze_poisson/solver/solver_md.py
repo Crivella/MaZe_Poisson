@@ -104,11 +104,12 @@ class SolverMD(Logger):
         self.logger.info(f"Total charge: {self.q_tot}")
 
         ffile = self.gset.restart_field_file
-        if ffile is None:
+        if ffile is None or self.mdv.invert_time:
             # STEP 0 Verlet
             self.update_charges()
             if self.mdv.preconditioning:
                 self.initialize_field()
+            self.compute_forces()
 
             # STEP 1 Verlet
             self.integrator.part1(self.particles)
@@ -122,9 +123,6 @@ class SolverMD(Logger):
 
         if self.mdv.rescale:
             self.particles.rescale_velocities()
-
-        self.grid.field_j = int(self.particles.pos[0,1] / self.h)
-        self.grid.field_k = int(self.particles.pos[0,2] / self.h)
 
     @Clock('field')
     def initialize_field(self):
