@@ -6,6 +6,7 @@
 #include "mympi.h"
 
 
+#ifdef __MPI
 // /*
 // Compute the forces on each particle by computing the field from the potential using finite differences.
 // New version computes the field only where the particles are located.
@@ -28,15 +29,15 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
     long int i0, i1, i2;
     long int j0, j1, j2;
     long int k0, k1, k2;
+    double E, qc;
+    double *ptr1, *ptr2;
 
     int n_loc = get_n_loc();
     int n_start = get_n_start();
 
     h *= 2.0;
 
-    double E, qc;
     int n_loc1 = n_loc - 1;
-    double *ptr1, *ptr2;
     double *ptr_p1 = phi + n2;  // Pointer to the first +1 slice
     double *ptr_m1 = phi + (n_loc - 2) * n2; // Pointer to the last -1 slice
 
@@ -44,7 +45,7 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
     exchange_bot_top(phi, phi + n_loc1 * n2, &bot, &top);
 
     double sum_q = 0.0;
-    #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, E, qc) reduction(+:sum_q)
+    #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, E, qc, ptr1, ptr2) reduction(+:sum_q)
     for (int ip = 0; ip < n_p; ip++) {
         i0 = ip*24;
         j0 = ip*3;
@@ -98,6 +99,78 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
 
     return sum_q;
 }
+
+#else
+// /*
+// Compute the forces on each particle by computing the field from the potential using finite differences.
+// New version computes the field only where the particles are located.
+
+// @param n_grid: the number of grid points in each dimension
+// @param n_p: the number of particles
+// @param h: the grid spacing
+// @param phi: the potential field of size n_grid * n_grid * n_grid
+// @param q: the charge on a grid of size n_grid * n_grid * n_grid
+// @param neighbors: Array (x,y,z) of neighbors indexes for each particle (n_p x 8 x 3)
+// @param forces: the output forces on each particle of size n_p * 3
+
+// @return the sum of the charges on the neighbors
+// */
+double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, long int *neighbors, double *forces) {
+    long int n = n_grid;
+    long int n2 = n * n;
+
+    int i, j, k, jn, in2;
+    long int i0, i1, i2;
+    long int j0, j1, j2;
+    long int k0, k1, k2;
+
+    h *= 2.0;
+
+    double E, qc;
+
+    double sum_q = 0.0;
+    #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, E, qc) reduction(+:sum_q)
+    for (int ip = 0; ip < n_p; ip++) {
+        i0 = ip*24;
+        j0 = ip*3;
+        forces[j0] = 0.0;
+        forces[j0+1] = 0.0;
+        forces[j0+2] = 0.0;
+        for (int in = 0; in < 8; in++) {
+            i1 = i0 + in*3;
+            i = neighbors[i1];
+            j = neighbors[i1 + 1];
+            k = neighbors[i1 + 2];
+
+            in2 = i * n2;
+            jn = j * n;
+
+            qc = q[in2 + jn + k];
+            sum_q += qc;
+            // X
+            i1 = ((i+1) % n) * n2;
+            i2 = ((i-1 + n) % n) * n2;
+            E = (phi[i2 + jn + k] - phi[i1 + jn + k]) / h;
+            forces[j0] += qc * E;
+            // Y
+            i1 = in2;
+            j1 = ((j+1) % n) * n;
+            j2 = ((j-1 + n) % n) * n;
+            E = (phi[i1 + j2 + k] - phi[i1 + j1 + k]) / h;
+            forces[j0 + 1] += qc * E;
+            // Z
+            j1 = i1 + jn;
+            k1 = ((k+1) % n);
+            k2 = ((k-1 + n) % n);
+            E = (phi[j1 + k2] - phi[j1 + k1]) / h;
+            forces[j0 + 2] += qc * E;
+        }
+    }
+
+    return sum_q;
+}
+
+#endif
 
 
 /*
