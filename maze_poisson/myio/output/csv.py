@@ -63,12 +63,9 @@ class ForcesCSVOutputFile(CSVOutputFile):
     name = 'forces'
     headers = ['iter', 'Fx', 'Fy', 'Fz']
     def get_data(self, iter: int, grid: BaseGrid = None, particles: Particles = None):
-        return pd.DataFrame({
-            'iter': [iter],
-            'Fx': [particles.forces[:, 0].sum()],
-            'Fy': [particles.forces[:, 1].sum()],
-            'Fz': [particles.forces[:, 2].sum()]
-        })
+        df = pd.DataFrame(particles.forces.sum(axis=0).reshape(1,3), columns=['Fx', 'Fy', 'Fz'])
+        df['iter'] = iter
+        return df
 
 class TemperatureCSVOutputFile(CSVOutputFile):
     name = 'temperature'
