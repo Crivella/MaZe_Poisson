@@ -7,13 +7,12 @@
 #include "forces.h"
 #include "mp_structs.h"
 
-particles * particles_init(int n, int n_p, double L, double h, int type) {
+particles * particles_init(int n, int n_p, double L, double h) {
     particles *p = (particles *)malloc(sizeof(particles));
     p->n = n;
     p->n_p = n_p;
     p->L = L;
     p->h = h;
-    p->grid_type = type;
 
     p->pos = (double *)malloc(n_p * 3 * sizeof(double));
     p->vel = (double *)malloc(n_p * 3 * sizeof(double));
@@ -62,10 +61,10 @@ void * particles_free(particles *p) {
 void * particles_init_potential(particles *p, int pot_type) {
     switch (pot_type) 
     {
-    case 0:
+    case PARTICLE_POTENTIAL_TYPE_TF:
         p->init_potential_tf(p);
         break;
-    case 1:
+    case PARTICLE_POTENTIAL_TYPE_LD:
         p->init_potential_ld(p);
         break;
     
@@ -211,21 +210,8 @@ void * particles_update_nearest_neighbors(particles *p) {
     }
 }
 
-double particles_compute_forces_field(particles *p, void *grid) {
-    double *phi, *q;
-    switch (p->grid_type) { 
-        case GRID_TYPE_LCG:
-            phi = ((lcg_grid *)grid)->phi_n;
-            q = ((lcg_grid *)grid)->q;
-            break;
-        case GRID_TYPE_FFT:
-            phi = ((fft_grid *)grid)->phi;
-            q = ((fft_grid *)grid)->q;
-            break;
-        default:
-            return 0.0;
-    }
-    return compute_force_fd(p->n, p->n_p, p->h, phi, q, p->neighbors, p->fcs_elec);
+double particles_compute_forces_field(particles *p, grid *grid) {
+    return compute_force_fd(p->n, p->n_p, p->h, grid->phi_n, grid->q, p->neighbors, p->fcs_elec);
 }
 
 double particles_compute_forces_tf(particles *p) {
@@ -236,7 +222,7 @@ double particles_compute_forces_ld(particles *p) {
     return 0.0;
 }
 
-void * particles_compute_forces(particles *p, void *grid) {
+void * particles_compute_forces(particles *p, grid *grid) {
     p->compute_forces_noel(p);
     p->compute_forces_field(p, grid);
 

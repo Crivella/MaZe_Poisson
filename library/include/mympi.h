@@ -23,8 +23,8 @@ typedef struct mpi_data {
     double *top;
 } mpi_data;
 
-// int init_mpi();
-// int init_mpi_grid(int n);
+int init_mpi();
+int init_mpi_grid(int n);
 void cleanup_mpi();
 
 // int get_size();

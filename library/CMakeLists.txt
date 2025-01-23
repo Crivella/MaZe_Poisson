@@ -40,8 +40,16 @@ add_library(maze_poisson SHARED
     src/charges.c
 
     src/particles.c
-    src/lcg_grid.c
-    src/fft_grid.c
+
+    src/grid_general.c
+    src/grid_lcg.c
+    src/grid_fft.c
+    
+    src/integrator_general.c
+    src/integrator_ovrvo.c
+    src/integrator_verlet.c
+
+    src/solver_md.c
 )
 
 if(MP_FAST_MATH)
