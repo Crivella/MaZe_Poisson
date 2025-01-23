@@ -20,12 +20,10 @@ class BaseGrid(Logger, ABC):
 
         self.potential_notelec = 0
 
+        self.q = None
+
         self.time = 0
         self.n_iters = 0
-
-        self.X = np.arange(0, L, h)
-        self.field_j = 0
-        self.field_k = 0
 
         self.n_loc = capi.init_mpi_grid(self.N)
 

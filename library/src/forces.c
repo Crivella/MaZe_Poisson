@@ -25,7 +25,7 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
     long int n = n_grid;
     long int n2 = n * n;
 
-    int i, j, k, jn, in2;
+    long int i, j, k, jn, in2;
     long int i0, i1, i2;
     long int j0, j1, j2;
     long int k0, k1, k2;
@@ -119,7 +119,8 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
     long int n = n_grid;
     long int n2 = n * n;
 
-    int i, j, k, jn, in2;
+    long int i, j, k;
+    long int jn, in2;
     long int i0, i1, i2;
     long int j0, j1, j2;
     long int k0, k1, k2;

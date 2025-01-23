@@ -13,7 +13,7 @@ capi.register_function(
         ctypes.c_double,
         npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.int64, ndim=3, flags='C_CONTIGUOUS'),
-        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+        npct.ndpointer(dtype=np.int64, ndim=1, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),   
     ],
     update_charges

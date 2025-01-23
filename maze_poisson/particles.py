@@ -25,7 +25,7 @@ class Particles(Logger):
         self.masses = np.array(masses)        # Shape: (N_p,)
         self.pos = np.ascontiguousarray(positions) # Shape: (N_p, 3)
         self.vel = np.zeros((N_p, 3), dtype=float) # Shape: (N_p, 3)
-        self.charges = np.array(charges)     # Shape: (N_p,)
+        self.charges = np.array(charges, dtype=int)     # Shape: (N_p,)
         self.forces = np.zeros((N_p, 3), dtype=float) # Electrostatic forces
         self.forces_elec = np.zeros((N_p, 3), dtype=float) # Electrostatic forces
         self.forces_notelec = np.zeros((N_p, 3), dtype=float) # Non-electrostatic forces
@@ -186,18 +186,18 @@ class Particles(Logger):
         init_vel_Cl = np.zeros(3)
         new_vel_Cl = np.zeros(3)
         
-        init_vel_Na = np.sum(self.vel[self.charges == 1.], axis=0)
-        init_vel_Cl = np.sum(self.vel[self.charges == -1.], axis=0)
+        init_vel_Na = np.sum(self.vel[self.charges == 1], axis=0)
+        init_vel_Cl = np.sum(self.vel[self.charges == -1], axis=0)
 
         self.get_temperature()
 
         # print(f'Total initial vel:\nNa = {init_vel_Na} \nCl = {init_vel_Cl}\nOld T = {self.temperature}\n')
         
-        self.vel[self.charges == 1.] -= 2 * init_vel_Na / self.N_p
-        self.vel[self.charges == -1.] -= 2 * init_vel_Cl / self.N_p
+        self.vel[self.charges == 1] -= 2 * init_vel_Na / self.N_p
+        self.vel[self.charges == -1] -= 2 * init_vel_Cl / self.N_p
         
-        new_vel_Na = np.sum(self.vel[self.charges == 1.], axis=0)
-        new_vel_Cl = np.sum(self.vel[self.charges == -1.], axis=0)
+        new_vel_Na = np.sum(self.vel[self.charges == 1], axis=0)
+        new_vel_Cl = np.sum(self.vel[self.charges == -1], axis=0)
 
         self.get_temperature()
 

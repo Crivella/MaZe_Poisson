@@ -43,8 +43,9 @@ class CAPI:
                 func.argtypes = argtypes
                 self.functions[fname] = func
                 logger.debug(f"C_API: Registered function {fname}")
-            except:
+            except Exception as e:
                 logger.warning(f"C_API: Could not register function {fname}, using fallback")
+                logger.warning(f"C_API: {e}")
                 self.functions[fname] = fallback
 
         for fname, args, kwargs in self.toinit:

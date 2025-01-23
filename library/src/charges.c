@@ -10,18 +10,21 @@ double g(double x, double L, double h) {
         return 0.0;
     }
     return 1.0 - x / h;
+
+    if (2*x > L) x = L - x;
+    return x < h ? 1.0 - x / h : 0.0;
 }
 
 #ifdef __MPI
 
 double update_charges(
     int n_grid, int n_p, double h,
-    double *pos, long int *neighbors, double *charges, double *q
+    double *pos, long int *neighbors, long int *charges, double *q
 ) {
     int n_loc = get_n_loc();
     int n_loc_start = get_n_start();
 
-    int ni, nj, nk, ni_loc;
+    long int ni, nj, nk, ni_loc;
     long int i, i1, i2;
     long int n2 = n_grid * n_grid;
     long int n3 = n_loc * n2;
@@ -30,7 +33,8 @@ double update_charges(
 
     double L = n_grid * h;
     double q_tot = 0.0;
-    double app, upd, chg;
+    long int chg;
+    double app, upd;
 
     #pragma omp parallel for
     for (i=0; i < n3; i++) {
@@ -72,9 +76,9 @@ double update_charges(
 
 double update_charges(
     int n_grid, int n_p, double h,
-    double *pos, long int *neighbors, double *charges, double *q
+    double *pos, long int *neighbors, long int *charges, double *q
 ) {
-    int ni, nj, nk;
+    long int ni, nj, nk;
     long int i, i1, i2;
     long int n2 = n_grid * n_grid;
     long int n3 = n_grid * n2;
@@ -83,7 +87,8 @@ double update_charges(
 
     double L = n_grid * h;
     double q_tot = 0.0;
-    double app, upd, chg;
+    long int chg;
+    double app, upd;
 
     #pragma omp parallel for
     for (i=0; i < n3; i++) {

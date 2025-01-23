@@ -38,6 +38,10 @@ add_library(maze_poisson SHARED
     src/forces.c
     src/mympi.c
     src/charges.c
+
+    src/particles.c
+    src/lcg_grid.c
+    src/fft_grid.c
 )
 
 if(MP_FAST_MATH)
