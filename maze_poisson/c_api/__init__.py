@@ -93,8 +93,6 @@ class CAPI:
 
 
 capi = CAPI()
-capi.register_function('get_omp_info', ctypes.c_int, [], lambda: 0)
-capi.register_init('get_omp_info')
 capi.register_init(signal.signal, (signal.SIGINT, signal.SIG_DFL))
 
 # Needed to register functions from other modules

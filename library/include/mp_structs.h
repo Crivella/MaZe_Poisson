@@ -28,10 +28,12 @@ void * particles_free(particles *p);
 void * integrator_free(integrator *integrator);
 
 void lcg_grid_init(grid * grid);
+void lcg_grid_cleanup(grid * grid);
 void * lcg_grid_init_field(grid *grid);
 int lcg_grid_update_field(grid *grid);
 
 void fft_grid_init(grid * grid);
+void fft_grid_cleanup(grid * grid);
 void * fft_grid_init_field(grid *grid);
 int fft_grid_update_field(grid *grid);
 

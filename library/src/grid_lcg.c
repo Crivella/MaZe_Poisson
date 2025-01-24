@@ -20,6 +20,9 @@ void lcg_grid_init(grid * grid) {
     grid->update_field = lcg_grid_update_field;
 }
 
+void lcg_grid_cleanup(grid * grid) {
+}
+
 void * lcg_grid_init_field(grid *grid) {
     long int i;
 

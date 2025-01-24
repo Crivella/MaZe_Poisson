@@ -22,7 +22,7 @@ option(MP_MTUNE "Enable -mtune=native" ON)
 option(MP_AVX "Enable AVX" ON)
 
 # Find the required packages
-find_package(OpenMP COMPONENTS C)
+# find_package(OpenMP COMPONENTS C)
 find_package(MPI COMPONENTS C)
 find_package(FFTW3 COMPONENTS DOUBLE_OPENMP DOUBLE)
 
@@ -36,8 +36,11 @@ add_library(maze_poisson SHARED
     src/linalg.c
     src/laplace.c
     src/forces.c
-    src/mpi_base.c
     src/charges.c
+    src/fftw_wrap.c
+    
+    src/omp_base.c
+    src/mpi_base.c
 
     src/particles.c
 
@@ -88,8 +91,8 @@ if (MPI_C_FOUND)
 endif()
 # Set FFTW flags
 if (FFTW3_FOUND)
+    target_compile_definitions(maze_poisson PRIVATE __FFTW)
     target_link_libraries(maze_poisson PRIVATE FFTW3)
-    target_sources(maze_poisson PRIVATE src/fftw_wrap.c)
 endif()
 
 install(TARGETS maze_poisson

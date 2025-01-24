@@ -69,6 +69,16 @@ void * grid_free(grid *grid) {
     if (grid->phi_n != NULL) {
         free(grid->phi_n);
     }
+    switch (grid->type) {
+        case GRID_TYPE_LCG:
+            lcg_grid_cleanup(grid);
+            break;
+        case GRID_TYPE_FFT:
+            fft_grid_cleanup(grid);
+            break;
+        default:
+            break;
+    }
     free(grid);
 }
 

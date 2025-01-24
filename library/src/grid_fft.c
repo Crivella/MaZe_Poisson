@@ -64,6 +64,10 @@ void fft_grid_init(grid * grid) {
     free(rfreq);
 }
 
+void fft_grid_cleanup(grid * grid) {
+    cleanup_fftw();
+}   
+
 void * fft_grid_init_field(grid *grid) {
     rfft_solve(grid->n, grid->q, grid->ig2, grid->phi_n);
 }

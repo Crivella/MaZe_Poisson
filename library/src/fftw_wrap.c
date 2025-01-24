@@ -2,14 +2,20 @@
 
 // Order matters here, including complex.h before fftw3.h makes fftw_complex be a complex instead of a double[2]
 #include <stdio.h>
+#include <stdlib.h>
+
+#include "omp_base.h"
+
+#ifdef __FFTW
+
 #include <complex.h>
 #include <fftw3.h>
-#include <stdlib.h>
-#ifdef _OPENMP
-#include <omp.h>
-#endif
 
-int initialized_omp = 0;
+#define FFTW_OMP_BLANK 0
+#define FFTW_OMP_INITIALIZED 1
+#define FFTW_OMP_DOCLEANUP 2
+
+int initialized_omp = FFTW_OMP_BLANK;
 // int initialized_c = 0;
 int initialized_r = 0;
 
@@ -29,18 +35,23 @@ int FLAG = FFTW_MEASURE;
 // int FLAG = FFTW_PATIENT;
 
 void init_fftw_omp() {
-    #ifdef _OPENMP
-    if (initialized_omp != 0) {
+    if (initialized_omp != FFTW_OMP_BLANK) {
         return;
     }
-    initialized_omp = 1;
-    int res = fftw_init_threads();
-    if (res == 0) {
-        printf("Error initializing fftw threads\n");
-        exit(1);
+    initialized_omp = FFTW_OMP_INITIALIZED;  // Set to 2 to avoid reinitializing but skip the cleanup
+
+    int res;
+    int num_threads = get_omp_max_threads();
+    if (num_threads > 0) {
+        initialized_omp = FFTW_OMP_DOCLEANUP;
+        res = fftw_init_threads();
+        if (res == 0) {
+            printf("Error initializing FFTW threads\n");
+            exit(1);
+        }
+        fftw_plan_with_nthreads(get_omp_max_threads());
+        printf("FFTW: Running with %d threads\n", num_threads);
     }
-    printf("FFTW: Running with %d threads\n", omp_get_max_threads());
-    #endif
 }
 
 // void init_fft(int n){
@@ -73,28 +84,21 @@ void init_rfft(int n) {
     }
     int nh = n / 2 + 1;
     initialized_r = 1;
-    #ifdef _OPENMP
-    int tid = omp_get_thread_num();
-    fftw_plan_with_nthreads(omp_get_max_threads());
-    #endif
+    int tid = get_omp_thread_num();
   
     r_real = (double *)fftw_malloc(n * n * n * sizeof(double));
     r_cmpx = (fftw_complex *)fftw_malloc(n * n * nh * sizeof(fftw_complex));
 
-    #ifdef _OPENMP
     if (tid == 0) {
-    #endif
-    printf("FFTW: Initializing R-C-R plans\n");
-    r_fwd_plan = fftw_plan_dft_r2c_3d(n, n, n, r_real, r_cmpx, FLAG | FFTW_DESTROY_INPUT);
-    r_bwd_plan = fftw_plan_dft_c2r_3d(n, n, n, r_cmpx, r_real, FLAG | FFTW_DESTROY_INPUT);
-    printf("FFTW: ...DONE\n");
-    #ifdef _OPENMP
+        printf("FFTW: Initializing R-C-R plans\n");
+        r_fwd_plan = fftw_plan_dft_r2c_3d(n, n, n, r_real, r_cmpx, FLAG | FFTW_DESTROY_INPUT);
+        r_bwd_plan = fftw_plan_dft_c2r_3d(n, n, n, r_cmpx, r_real, FLAG | FFTW_DESTROY_INPUT);
+        printf("FFTW: ...DONE\n");
     }
-    #endif
 }
 
 void cleanup_fftw() {
-    printf("FFTW: Cleaning up\n");
+    // printf("FFTW: Cleaning up\n");
     // if (initialized_c == 0) {
     //     fftw_destroy_plan(c_fwd_plan);
     //     fftw_destroy_plan(c_bwd_plan);
@@ -109,11 +113,11 @@ void cleanup_fftw() {
         fftw_free(r_cmpx);
         initialized_r = 0;
     }
-    if (initialized_omp) {
+    if (initialized_omp == FFTW_OMP_DOCLEANUP) {
         fftw_cleanup_threads();
-        initialized_omp = 0;
+        initialized_omp = FFTW_OMP_BLANK;
     }
-    printf("FFTW: ...DONE\n");
+    // printf("FFTW: Cleaned up\n");
 }
 
 // void fft_3d(int n, double *in, complex *out) {
@@ -222,3 +226,27 @@ void rfft_solve(int n, double *b, double *ig2, double *x) {
         x[i] = r_real[i] / n3r;
     }
 }
+
+#else // __FFTW
+
+void init_fftw_omp() {
+    fprintf(stderr, "FFTW not enabled\n");
+    exit(1);
+}
+
+void init_rfft(int n) {
+    fprintf(stderr, "FFTW not enabled\n");
+    exit(1);
+}
+
+void cleanup_fftw() {
+    fprintf(stderr, "FFTW not enabled\n");
+    exit(1);
+}
+
+void rfft_solve(int n, double *b, double *ig2, double *x) {
+    fprintf(stderr, "FFTW not enabled\n");
+    exit(1);
+}
+
+#endif // __FFTW

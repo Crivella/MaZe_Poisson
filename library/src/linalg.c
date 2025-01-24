@@ -11,14 +11,6 @@
 #define EXTERN_C
 #endif
 
-EXTERN_C int get_omp_info(void) {
-#ifdef _OPENMP
-    return omp_get_max_threads();
-#else
-    return 0;
-#endif
-}
-
 /*
 Compute the dot product of two vectors
 @param u: the first vector
