@@ -36,7 +36,7 @@ add_library(maze_poisson SHARED
     src/linalg.c
     src/laplace.c
     src/forces.c
-    src/mympi.c
+    src/mpi_base.c
     src/charges.c
 
     src/particles.c

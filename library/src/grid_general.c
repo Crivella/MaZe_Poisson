@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "mympi.h"
+#include "mpi_base.h"
 #include "charges.h"
 #include "mp_structs.h"
 #include "fftw_wrap.h"

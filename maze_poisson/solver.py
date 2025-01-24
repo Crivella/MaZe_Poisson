@@ -1,27 +1,31 @@
 """Implement a base solver Class for maze_poisson."""
 import atexit
-from typing import Dict, Tuple
+from typing import Dict
 
 import numpy as np
+import pandas as pd
 
-from ..c_api import capi
-from ..clocks import Clock
-from ..grid import BaseGrid, FFTGrid, LCGGrid
-from ..integrators import BaseIntegrator, OVRVOIntegrator, VerletIntegrator
-from ..myio import Logger, OutputFiles, ProgressBar
-from ..myio.input import GridSetting, MDVariables, OutputSettings
-from ..particles import Particles
+from .c_api import capi
+from .clocks import Clock
+from .constants import a0, conv_mass
+from .myio import Logger, OutputFiles, ProgressBar
+from .myio.input import GridSetting, MDVariables, OutputSettings
 
 np.random.seed(42)
 
-method_grid_map: Dict[str, Tuple[BaseGrid, BaseGrid]] = {
-    'LCG': LCGGrid,
-    'FFT': FFTGrid,
+method_grid_map: Dict[str, int] = {
+    'LCG': 0,
+    'FFT': 1,
 }
 
-integrator_map: Dict[str, BaseIntegrator] = {
-    'OVRVO': OVRVOIntegrator,
-    'VERLET': VerletIntegrator,
+integrator_map: Dict[str, int] = {
+    'OVRVO': 0,
+    'VERLET': 1,
+}
+
+potential_map: Dict[str, int] = {
+    'TF': 0,
+    'LD': 1,
 }
 
 class SolverMD(Logger):
@@ -40,10 +44,6 @@ class SolverMD(Logger):
         self.N = gset.N
         self.N_p = gset.N_p
 
-        self.integrator: BaseIntegrator = None
-        self.grid: BaseGrid = None
-        self.particles: Particles = None
-
         self.ofiles = OutputFiles(self.outset)
         self.out_stride = outset.stride
         self.out_flushstride = outset.flushstride * outset.stride
@@ -52,57 +52,85 @@ class SolverMD(Logger):
                 handler.setLevel(0)
             self.logger.debug("Set verbosity to DEBUG")
 
-        self.q_tot = 0
-        self.thermostat = self.mdv.thermostat
-
-        atexit.register(self.finalize)
-
     @Clock('initialize')
     def initialize(self):
         """Initialize the solver."""
+        capi.solver_initialize(self.N)
+
         self.initialize_grid()
         self.initialize_particles()
         self.initialize_integrator()
         self.initialize_md()
 
+        atexit.register(self.finalize)
+
     def finalize(self):
         """Finalize the solver."""
-        self.particles.cleanup()
-        self.grid.cleanup()
+        capi.solver_finalize()
         Clock.report_all()
 
     def initialize_grid(self):
         """Initialize the grid."""
+        self.logger.info(f"Initializing grid with method: {self.mdv.method}")
         method = self.mdv.method.upper()
         if not method in method_grid_map:
             raise ValueError(f"Method {method} not recognized.")
 
-        grid_cls = method_grid_map[method]
-        restart_field = self.gset.restart_field_file
-        self.grid = grid_cls(self.L, self.h, self.N, self.mdv.tol, field_file=restart_field)
+        grid_id = method_grid_map[method]
+        capi.solver_initialize_grid(self.N, self.L, self.h, self.mdv.tol, grid_id)
 
     def initialize_particles(self):
         """Initialize the particles."""
+        self.logger.info(f"Initializing particles with potential: {self.mdv.potential}")
+        potential = self.mdv.potential.upper()
+        if not potential in potential_map:
+            raise ValueError(f"Potential {potential} not recognized.")
+        pot_id = potential_map[potential]
+
         start_file = self.gset.restart_file or self.gset.input_file
-        self.particles = Particles.from_file(start_file, self.gset, self.mdv.potential, self.mdv.kBT)
+        kBT = self.mdv.kBT
+
+        df = pd.read_csv(start_file)
+        charges = np.ascontiguousarray(df['charge'].values, dtype=np.int64)
+        mass = np.ascontiguousarray(df['mass'].values * conv_mass)
+        pos = np.ascontiguousarray(df[['x', 'y', 'z']].values / a0)
+
+        self.logger.info(f"Loaded starting positions from file: {start_file}")
+        if 'vx' in df.columns:
+            self.logger.info("Loading starting velocities from file.")
+            vel = np.ascontiguousarray(df[['vx', 'vy', 'vz']].values)
+        else:
+            if kBT is None:
+                raise ValueError("kBT must be provided to generate random velocities.")
+            self.logger.info("Generating random velocities.")
+            vel = np.random.normal(
+                loc = 0.0,
+                scale = np.sqrt(kBT / mass[:, np.newaxis]),
+                size=(len(df), 3)
+            )
+        capi.solver_initialize_particles(
+            self.N, self.L, self.h, self.N_p, pot_id,
+            pos, vel, mass, charges
+        )
 
     def initialize_integrator(self):
         """Initialize the MD integrator."""
+        self.logger.info(f"Initializing integrator: {self.mdv.integrator}")
         name = self.mdv.integrator.upper()
         if not name in integrator_map:
             raise ValueError(f"Integrator {name} not recognized.")
-        cls = integrator_map[name]
-        self.integrator = cls(self.mdv.dt, self.mdv.kBT, self.grid.L)
+        itg_id = integrator_map[name]
 
-        if self.thermostat:
-            tstat_args = cls.get_thermostat_variables(self.mdv)
-            self.integrator.init_thermostat(*tstat_args)
+        enabled = 1 if self.mdv.thermostat else 0
+        capi.solver_initialize_integrator(
+            self.N_p, self.mdv.dt, self.mdv.T, self.mdv.gamma, itg_id, enabled
+        )
 
     def initialize_md(self):
         """Initialize the first 2 steps for the MD and forces."""
-        self.q_tot = np.sum(self.particles.charges)
-        self.logger.info(f"Total charge: {self.q_tot}")
-
+        # if capi.solver_initialize_md(self.mdv.preconditioning, self.mdv.rescale) != 0:
+        #     self.logger.error("Error initializing MD.")
+        #     exit()
         ffile = self.gset.restart_field_file
         if ffile is None or self.mdv.invert_time:
             # STEP 0 Verlet
@@ -112,27 +140,27 @@ class SolverMD(Logger):
             self.compute_forces()
 
             # STEP 1 Verlet
-            self.integrator.part1(self.particles)
+            self.integrator_part1()
             self.update_charges()
             if self.mdv.preconditioning:
                 self.initialize_field()
             self.compute_forces()
-            self.integrator.part2(self.particles)
+            self.integrator_part2()
         else:
             self.logger.info(f"Initialization step skipped due to field loaded from file.")
 
         if self.mdv.rescale:
-            self.particles.rescale_velocities()
+            capi.solver_rescale_velocities()
 
     @Clock('field')
     def initialize_field(self):
         """Initialize the field."""
-        self.grid.initialize_field()
+        capi.solver_init_field()
 
     @Clock('field')
     def update_field(self):
         """Update the field."""
-        self.grid.update_field()
+        capi.solver_update_field()
 
     @Clock('forces')
     def compute_forces(self):
@@ -141,51 +169,52 @@ class SolverMD(Logger):
             self.compute_forces_field()
         if self.mdv.not_elec:
             self.compute_forces_notelec()
-        self.particles.forces = self.particles.forces_elec + self.particles.forces_notelec
+        capi.solver_compute_forces_tot()
 
     @Clock('forces_field')
     def compute_forces_field(self):
         """Compute the forces on the particles due to the electric field."""
-        self.particles.compute_forces_field(self.grid)
+        capi.solver_compute_forces_elec()
 
     @Clock('forces_notelec')
     def compute_forces_notelec(self):
         """Compute the forces on the particles due to non-electric interactions."""
-        self.grid.potential_notelec = self.particles.ComputeTFForces()
+        self.potential_notelec = capi.solver_compute_forces_noel()
 
     @Clock('file_output')
     def md_loop_output(self, i: int, force: bool = False):
         """Output the data for the MD loop."""
-        self.ofiles.output(i, self.grid, self.particles, force)
+        self.ofiles.output(i, self, force)
 
     @Clock('charges')
     def update_charges(self):
         """Update the charge grid based on the particles position with function g to spread them on the grid."""
-        self.particles.get_nearest_neighbors()
-        q_tot = self.grid.update_charges(self.particles)
-
-        if np.abs(self.q_tot - q_tot) > 1e-6:
-            self.logger.error('Error: change initial position, charge is not preserved: q_tot = %.6f, %.6f', q_tot, self.q_tot)
+        if capi.solver_update_charges() != 0:
+            self.logger.error('Error: change initial position, charge is not preserved.')
             exit()
 
-        self.q_tot = q_tot
+    @Clock('integrator')
+    def integrator_part1(self):
+        """Update the position and velocity of the particles."""
+        capi.integrator_part_1()
+
+    @Clock('integrator')
+    def integrator_part2(self):
+        """Update the velocity of the particles."""
+        capi.integrator_part_2()
 
     def md_loop_iter(self):
         """Run one iteration of the molecular dynamics loop."""
-        self.integrator.part1(self.particles)
+        self.integrator_part1()
         if self.mdv.elec:
             self.update_charges()
             self.update_field()
         self.compute_forces()
-        self.integrator.part2(self.particles)
+        self.integrator_part2()
 
     def md_check_thermostat(self, iter: int):
-        if self.thermostat:
-            temperature = self.particles.get_temperature()
-            if np.abs(temperature - self.mdv.T) <= 100:
-                self.logger.info(f'End thermostating iteration {iter}')
-                self.thermostat = False
-                self.integrator.stop_thermostat()
+        if capi.solver_check_thermostat():
+            self.logger.info(f'End thermostating iteration {iter}')
 
     def md_loop(self):
         """Run the molecular dynamics loop."""
@@ -202,14 +231,14 @@ class SolverMD(Logger):
 
     def run(self):
         """Run the MD calculation."""
-        self.initialize()
         self.init_info()
+        self.initialize()
         self.md_loop()
         self.md_loop_output(self.mdv.N_steps, force=True)
 
     def init_info(self):
         """Print information about the initialization."""
-        from ..constants import density
+        from .constants import density
         self.logger.info(f'Running a MD simulation with:')
         self.logger.info(f'  N_p = {self.N_p}, N_steps = {self.mdv.N_steps}, tol = {self.mdv.tol}')
         self.logger.info(f'  N = {self.N}, L [a.u.] = {self.L}, h [a.u.] = {self.h}')
@@ -218,5 +247,5 @@ class SolverMD(Logger):
         self.logger.info(f'  Integrator: {self.mdv.integrator},  Method: {self.mdv.method},  dt = {self.mdv.dt}')
         self.logger.info(f'  Potential: {self.mdv.potential}')
         self.logger.info(f'  Elec: {self.mdv.elec}    NotElec: {self.mdv.not_elec}')
-        self.logger.info(f'  Temperature: {self.mdv.T} K,  Thermostat: {self.thermostat},  Gamma: {self.mdv.gamma}')
+        self.logger.info(f'  Temperature: {self.mdv.T} K,  Thermostat: {self.mdv.thermostat},  Gamma: {self.mdv.gamma}')
         self.logger.info(f'  Velocity rescaling: {self.mdv.rescale}')

@@ -2,7 +2,6 @@ import atexit
 import ctypes
 import os
 import signal
-from functools import partial
 
 from ..myio import logger
 
@@ -99,7 +98,8 @@ capi.register_init('get_omp_info')
 capi.register_init(signal.signal, (signal.SIGINT, signal.SIG_DFL))
 
 # Needed to register functions from other modules
-from . import charges, fftw, forces, laplace, mympi, solver
+# from . import charges, fftw, forces, laplace, mympi, solver
+from . import mympi, solver
 
 __all__ = ['capi']
 

@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "mympi.h"
+#include "mpi_base.h"
 #include "linalg.h"
 
 #ifdef __cplusplus

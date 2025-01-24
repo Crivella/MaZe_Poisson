@@ -92,18 +92,18 @@ capi.register_function(
     'integrator_part_2', None, [],
 )
 
-# int solver_nitialize_md(int preconditioning, int vel_rescale) {
-capi.register_function(
-    'solver_initialize_md', ctypes.c_int, [
-        ctypes.c_int,
-        ctypes.c_int,
-    ],
-)
+# # int solver_nitialize_md(int preconditioning, int vel_rescale) {
+# capi.register_function(
+#     'solver_initialize_md', ctypes.c_int, [
+#         ctypes.c_int,
+#         ctypes.c_int,
+#     ],
+# )
 
-# void solver_md_loop_iter() {
-capi.register_function(
-    'solver_md_loop_iter', None, [],
-)
+# # void solver_md_loop_iter() {
+# capi.register_function(
+#     'solver_md_loop_iter', None, [],
+# )
 
 # int solver_check_thermostat() {
 capi.register_function(
@@ -115,12 +115,12 @@ capi.register_function(
     'solver_rescale_velocities', None, [],
 )
 
-# void solver_run_n_steps(int n_steps) {
-capi.register_function(
-    'solver_run_n_steps', None, [
-        ctypes.c_int,
-    ],
-)
+# # void solver_run_n_steps(int n_steps) {
+# capi.register_function(
+#     'solver_run_n_steps', None, [
+#         ctypes.c_int,
+#     ],
+# )
 
 # void solver_finalize() {
 capi.register_function(

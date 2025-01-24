@@ -6,9 +6,7 @@ from io import StringIO
 
 import pandas as pd
 
-from ...grid.base_grid import BaseGrid
 from ...myio.loggers import Logger
-from ...particles import Particles
 from .. import get_enabled
 from ..input import OutputSettings
 

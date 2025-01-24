@@ -4,7 +4,7 @@
 #include <math.h>
 
 #include "mp_structs.h"
-#include "mympi.h"
+#include "mpi_base.h"
 
 #define MAX_ITG_PARAMS 10
 
@@ -95,11 +95,11 @@ void solver_compute_forces_tot() {
     g_particles->compute_forces_tot(g_particles);
 }
 
-void solver_compute_forces() {
-    solver_compute_forces_elec();
-    solver_compute_forces_noel();
-    solver_compute_forces_tot();
-}
+// void solver_compute_forces() {
+//     solver_compute_forces_elec();
+//     solver_compute_forces_noel();
+//     solver_compute_forces_tot();
+// }
 
 void integrator_part_1() {
     g_integrator->part1(g_integrator, g_particles);
@@ -113,41 +113,41 @@ void solver_rescale_velocities() {
     g_particles->rescale_velocities(g_particles);
 }
 
-int solver_initialize_md(int preconditioning, int vel_rescale) {
-    int res = 0;
+// int solver_initialize_md(int preconditioning, int vel_rescale) {
+//     int res = 0;
 
-    #pragma omp parallel for reduction(+:q_tot)
-    for (int i = 0; i < g_particles->n_p; i++) {
-        q_tot += g_particles->charges[i];
-    }
+//     #pragma omp parallel for reduction(+:q_tot)
+//     for (int i = 0; i < g_particles->n_p; i++) {
+//         q_tot += g_particles->charges[i];
+//     }
 
-    // Step 0 Verlet
-    res |= solver_update_charges();
-    if (preconditioning == 1)
-        solver_init_field();
-    solver_compute_forces();
+//     // Step 0 Verlet
+//     res |= solver_update_charges();
+//     if (preconditioning == 1)
+//         solver_init_field();
+//     solver_compute_forces();
 
-    // Step 1 Verlet
-    integrator_part_1();
-    res |= solver_update_charges();
-    if (preconditioning == 1) 
-        solver_init_field();
-    solver_compute_forces();
-    integrator_part_2();
+//     // Step 1 Verlet
+//     integrator_part_1();
+//     res |= solver_update_charges();
+//     if (preconditioning == 1) 
+//         solver_init_field();
+//     solver_compute_forces();
+//     integrator_part_2();
 
-    if (vel_rescale == 1) 
-        solver_rescale_velocities();
+//     if (vel_rescale == 1) 
+//         solver_rescale_velocities();
 
-    return res;
-}
+//     return res;
+// }
 
-void solver_md_loop_iter() {
-    integrator_part_1();
-    solver_update_charges();
-    solver_update_field();
-    solver_compute_forces();
-    integrator_part_2();
-}
+// void solver_md_loop_iter() {
+//     integrator_part_1();
+//     solver_update_charges();
+//     solver_update_field();
+//     solver_compute_forces();
+//     integrator_part_2();
+// }
 
 int solver_check_thermostat() {
     int res = 0;
@@ -163,11 +163,11 @@ int solver_check_thermostat() {
     return res;
 }
 
-void solver_run_n_steps(int n_steps) {
-    for (int i = 0; i < n_steps; i++) {
-        solver_md_loop_iter();
-    }
-}
+// void solver_run_n_steps(int n_steps) {
+//     for (int i = 0; i < n_steps; i++) {
+//         solver_md_loop_iter();
+//     }
+// }
 
 void solver_finalize() {
     if (g_particles != NULL) {

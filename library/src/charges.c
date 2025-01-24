@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <math.h>
 
-#include "mympi.h"
+#include "mpi_base.h"
 
 
 double g(double x, double L, double h) {

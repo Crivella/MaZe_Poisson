@@ -3,7 +3,7 @@
 #include <math.h>
 
 
-#include "mympi.h"
+#include "mpi_base.h"
 
 
 #ifdef __MPI

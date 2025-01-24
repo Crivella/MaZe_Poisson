@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "mympi.h"
+#include "mpi_base.h"
 
 mpi_data *global_mpi_data = NULL;
 
@@ -129,24 +129,6 @@ void allreduce_buffer(double *buffer, long int size) {
         MPI_Allreduce(MPI_IN_PLACE, buffer, size, MPI_DOUBLE, MPI_SUM, global_mpi_data->comm);
     }
 }
-
-// void broadcast_int(long int *value) {
-//     if (global_mpi_data->size > 1) {
-//         MPI_Bcast(value, 1, MPI_LONG, 0, global_mpi_data->comm);
-//     }
-// }
-
-// double *broadcast_buffer(double *data, long int size) {
-//     double *result = data;
-//     if (global_mpi_data->size > 1) {
-//         broadcast_int(&size);
-//         if (global_mpi_data->rank > 0) {
-//             result = (double *)malloc(size * sizeof(double));
-//         }
-//         MPI_Bcast(result, size, MPI_DOUBLE, 0, global_mpi_data->comm);
-//     }
-//     return result;
-// }
 
 void collect_grid_buffer(double *data, double *recv, int n) {
     int n_loc = global_mpi_data->n_loc;

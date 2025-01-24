@@ -3,7 +3,7 @@
 #include <omp.h>
 #endif
 
-#include "mympi.h"
+#include "mpi_base.h"
 
 #ifdef __cplusplus
 #define EXTERN_C extern "C"                                                           
