@@ -1,13 +1,30 @@
+#include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 
 #include "mpi_base.h"
 #include "charges.h"
 #include "mp_structs.h"
-#include "fftw_wrap.h"
 
 
 grid * grid_init(int n, double L, double h, double tol, int type) {
+    int n_loc = get_n_loc();
+
+    void   (*init_func)(grid *);
+    switch (type) {
+        case GRID_TYPE_LCG:
+            init_func = lcg_grid_init;
+            break;
+        case GRID_TYPE_FFT:
+            if (n_loc != n) {
+                fprintf(stderr, "FFT grid does not support MPI\n");
+                exit(1);
+            }
+            init_func = fft_grid_init;
+            break;
+        default:
+            break;
+    }
+
     grid *new = (grid *)malloc(sizeof(grid));
     new->type = type;
     new->n = n;
@@ -22,20 +39,11 @@ grid * grid_init(int n, double L, double h, double tol, int type) {
     new->phi_n = NULL;
     new->ig2 = NULL;
 
+    init_func(new);
+
     new->update_charges = grid_update_charges;
 
     long int size;
-
-    switch (type) {
-        case GRID_TYPE_LCG:
-            lcg_grid_init(new);
-            break;
-        case GRID_TYPE_FFT:
-            fft_grid_init(new);
-            break;
-        default:
-            break;
-    }
 
     new->tol = tol;
     new->n_iters = 0;
