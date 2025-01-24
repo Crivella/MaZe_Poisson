@@ -22,7 +22,7 @@ option(MP_MTUNE "Enable -mtune=native" ON)
 option(MP_AVX "Enable AVX" ON)
 
 # Find the required packages
-# find_package(OpenMP COMPONENTS C)
+find_package(OpenMP COMPONENTS C)
 find_package(MPI COMPONENTS C)
 find_package(FFTW3 COMPONENTS DOUBLE_OPENMP DOUBLE)
 

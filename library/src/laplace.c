@@ -244,14 +244,12 @@ EXTERN_C int verlet_poisson(double tol, double h, double* phi, double* phi_prev,
     daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A^phi + 4 * pi * rho
 
     // Apply LCG
-    iter_conv = conj_grad(tmp, y, tmp, tol, n_grid);
+    iter_conv = conj_grad(tmp, y, y, tol, n_grid);  // Inplace y <- y0
 
     // Scale the field with the constrained 'force' term
-    #pragma omp parallel for private(app)
+    #pragma omp parallel for
     for (i = 0; i < n3; i++) {
-        app = tmp[i];
-        phi[i] -= app;
-        y[i] = app;
+        phi[i] -= y[i];
     }
 
     // Free temporary arrays
