@@ -69,4 +69,4 @@ def init_mpi():
             disable()
 
 capi.register_init(init_mpi)
-capi.register_finalize('cleanup_mpi')
+# capi.register_finalize('cleanup_mpi')

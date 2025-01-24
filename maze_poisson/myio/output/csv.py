@@ -1,10 +1,13 @@
 from abc import abstractmethod
 
+import numpy as np
 import pandas as pd
 
+from ...c_api import capi
 from ...constants import Ha_to_eV, a0, conv_mass
 from ...grid.base_grid import BaseGrid
 from ...particles import Particles
+# from ...solver import SolverMD
 from .base_out import BaseOutputFile, OutputFiles, ensure_enabled
 
 
@@ -18,14 +21,14 @@ class CSVOutputFile(BaseOutputFile):
         pd.DataFrame(columns=self.headers).to_csv(self.buffer, index=False)
 
     @ensure_enabled
-    def write_data(self, iter: int, grid: BaseGrid, particles: Particles, mode: str = 'a'):
+    def write_data(self, iter: int, solver = None, mode: str = 'a'):
         header = False
         if mode == 'w':
             open(self.path, 'w').close()
             self.buffer.truncate(0)
             self.buffer.seek(0)
             header = True
-        df = self.get_data(iter, grid, particles)
+        df = self.get_data(iter, solver)
         df.to_csv(self.buffer, columns=self.headers, header=header, index=False, mode=mode)
 
     @property
@@ -34,24 +37,26 @@ class CSVOutputFile(BaseOutputFile):
         pass
 
     @abstractmethod
-    def get_data(self, iter: int, grid: BaseGrid, particles: Particles) -> pd.DataFrame:
+    def get_data(self, iter: int, solver) -> pd.DataFrame:
         pass
 
 class EnergyCSVOutputFile(CSVOutputFile):
     name = 'energy'
     headers = ['iter', 'K', 'V_notelec']
-    def get_data(self, iter: int, grid: BaseGrid = None, particles: Particles = None):
+    def get_data(self, iter: int, solver):
+        kin = capi.get_kinetic_energy()
         return pd.DataFrame({
             'iter': [iter],
-            'K': [particles.get_kinetic_energy()],
-            'V_notelec': [grid.potential_notelec]
+            'K': [kin],
+            'V_notelec': [solver.potential_notelec]
         })
 
 class MomentumCSVOutputFile(CSVOutputFile):
     name = 'momentum'
     headers = ['iter', 'Px', 'Py', 'Pz']
-    def get_data(self, iter: int, grid: BaseGrid = None, particles: Particles = None):
-        momentum = particles.get_momentum()
+    def get_data(self, iter: int, solver):
+        momentum = np.empty(3, dtype=np.float64)
+        capi.get_momentum(momentum)
         return pd.DataFrame({
             'iter': [iter],
             'Px': [momentum[0]],
@@ -62,63 +67,73 @@ class MomentumCSVOutputFile(CSVOutputFile):
 class ForcesCSVOutputFile(CSVOutputFile):
     name = 'forces'
     headers = ['iter', 'Fx', 'Fy', 'Fz']
-    def get_data(self, iter: int, grid: BaseGrid = None, particles: Particles = None):
-        df = pd.DataFrame(particles.forces.sum(axis=0).reshape(1,3), columns=['Fx', 'Fy', 'Fz'])
+    def get_data(self, iter: int, solver):
+        forces = np.empty((solver.N_p, 3), dtype=np.float64)
+        capi.get_fcs_tot(forces)
+        df = pd.DataFrame(forces.sum(axis=0).reshape(1,3), columns=['Fx', 'Fy', 'Fz'])
         df['iter'] = iter
         return df
 
 class TemperatureCSVOutputFile(CSVOutputFile):
     name = 'temperature'
     headers = ['iter', 'T']
-    def get_data(self, iter: int, grid: BaseGrid = None, particles: Particles = None):
+    def get_data(self, iter: int, solver):
+        temp = capi.get_temperature()
         return pd.DataFrame({
             'iter': [iter],
-            'T': [particles.get_temperature()]
+            'T': [temp]
         })
 
 class SolutesCSVOutputFile(CSVOutputFile):
     name = 'solute'
     headers = ['charge', 'iter', 'particle', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'fx_elec', 'fy_elec', 'fz_elec']
-    def get_data(self, iter: int, grid: BaseGrid = None, particles: Particles = None):
-        df = pd.DataFrame(particles.pos, columns=['x', 'y', 'z'])
-        df['vx'] = particles.vel[:, 0]
-        df['vy'] = particles.vel[:, 1]
-        df['vz'] = particles.vel[:, 2]
-        df['fx_elec'] = particles.forces_elec[:, 0]
-        df['fy_elec'] = particles.forces_elec[:, 1]
-        df['fz_elec'] = particles.forces_elec[:, 2]
-        df['charge'] = particles.charges
+    def get_data(self, iter: int, solver):
+        tmp = np.empty((solver.N_p, 3), dtype=np.float64)
+        df = pd.DataFrame()
+        
+        capi.get_pos(tmp)
+        df[['x', 'y', 'z']] = tmp
+        capi.get_vel(tmp)
+        df[['vx', 'vy', 'vz']] = tmp
+        capi.get_fcs_elec(tmp)
+        df[['fx_elec', 'fy_elec', 'fz_elec']] = tmp
+
+        tmp = np.empty(solver.N_p, dtype=np.int64)
+        capi.get_charges(tmp)
+        df['charge'] = tmp
+
         df['iter'] = iter
-        df['particle'] = range(particles.N_p)
+        df['particle'] = range(solver.N_p)
         return df
 
 class PerformanceCSVOutputFile(CSVOutputFile):
     name =  'performance'
     headers = ['iter', 'time', 'n_iters']
-    def get_data(self, iter: int, grid: BaseGrid = None, particles: Particles = None):
+    def get_data(self, iter: int, solver):
         return pd.DataFrame({
             'iter': [iter],
             'time': [grid.time],
             'n_iters': [grid.n_iters]
         })
 
-class FieldCSVOutputFile(CSVOutputFile):
-    name = 'field'
-    headers = ['iter', 'x', 'MaZe']
-    def get_data(self, iter: int, grid: BaseGrid = None, particles: Particles = None):
-        X = grid.X
-        j = grid.field_j
-        k = grid.field_k
-        return pd.DataFrame({
-            'iter': [iter]*len(X),
-            'x': X,
-            'MaZe': grid.phi[:, j, k] * Ha_to_eV
-        })
+# class FieldCSVOutputFile(CSVOutputFile):
+#     name = 'field'
+#     headers = ['iter', 'x', 'MaZe']
+#     def get_data(self, iter: int, solver):
+#         X = grid.X
+#         j = grid.field_j
+#         k = grid.field_k
+#         return pd.DataFrame({
+#             'iter': [iter]*len(X),
+#             'x': X,
+#             'MaZe': grid.phi[:, j, k] * Ha_to_eV
+#         })
 
 class RestartCSVOutputFile(CSVOutputFile):
     name = 'restart'
     headers = ['charge', 'mass', 'x', 'y', 'z', 'vx', 'vy', 'vz']
-    def get_data(self, iter: int, grid: BaseGrid = None, particles: Particles = None):
+    def get_data(self, iter: int, solver):
+        raise NotImplementedError
         df = pd.DataFrame(particles.pos * a0, columns=['x', 'y', 'z'])
         df[['vx', 'vy', 'vz']] = particles.vel
         df['charge'] = particles.charges
@@ -128,7 +143,8 @@ class RestartCSVOutputFile(CSVOutputFile):
 class RestartFieldCSVOutputFile(CSVOutputFile):
     name = 'restart_field'
     headers = ['phi_prev', 'phi']
-    def get_data(self, iter: int, grid: BaseGrid = None, particles: Particles = None):
+    def get_data(self, iter: int, solver):
+        raise NotImplementedError
         phi = grid.gather(grid.phi)
         phi_prev = grid.gather(grid.phi_prev)
         df = pd.DataFrame(phi_prev.flatten(), columns=['phi_prev'])
@@ -139,7 +155,7 @@ class RestartFieldCSVOutputFile(CSVOutputFile):
 OutputFiles.register_format(
     'csv',
     {
-        'field': FieldCSVOutputFile,
+        # 'field': FieldCSVOutputFile,
         'performance': PerformanceCSVOutputFile,
         'energy': EnergyCSVOutputFile,
         'momentum': MomentumCSVOutputFile,

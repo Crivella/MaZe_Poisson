@@ -11,8 +11,8 @@ double g(double x, double L, double h) {
     }
     return 1.0 - x / h;
 
-    if (2*x > L) x = L - x;
-    return x < h ? 1.0 - x / h : 0.0;
+    // if (2*x > L) x = L - x;
+    // return x < h ? 1.0 - x / h : 0.0;
 }
 
 #ifdef __MPI

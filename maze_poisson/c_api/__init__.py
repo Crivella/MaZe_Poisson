@@ -2,9 +2,25 @@ import atexit
 import ctypes
 import os
 import signal
+from functools import partial
 
 from ..myio import logger
 
+
+class SafeCallable:
+    def __init__(self, func, name):
+        self.func = func
+        self.name = name
+
+    def __call__(self, *args, **kwargs):
+        if self.func is None:
+            logger.error(f"Function {self.name} not available")
+            exit()
+        try:
+            return self.func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in {self.name}: {e}")
+            exit()
 
 class CAPI:
     def __init__(self):
@@ -21,7 +37,7 @@ class CAPI:
     def __getattr__(self, name):
         if name in self.functions:
             return self.functions[name]
-        return super().__getattr__(name)
+        return super().__getattribute__(name)
 
     def initialize(self):
         if self.library is not None:
@@ -41,12 +57,12 @@ class CAPI:
                 func = getattr(self.library, fname)
                 func.restype = restype
                 func.argtypes = argtypes
-                self.functions[fname] = func
+                self.functions[fname] = SafeCallable(func, fname)
                 logger.debug(f"C_API: Registered function {fname}")
             except Exception as e:
                 logger.warning(f"C_API: Could not register function {fname}, using fallback")
                 logger.warning(f"C_API: {e}")
-                self.functions[fname] = fallback
+                self.functions[fname] = SafeCallable(fallback, fname)
 
         for fname, args, kwargs in self.toinit:
             if isinstance(fname, str):
@@ -83,7 +99,7 @@ capi.register_init('get_omp_info')
 capi.register_init(signal.signal, (signal.SIGINT, signal.SIG_DFL))
 
 # Needed to register functions from other modules
-from . import charges, fftw, forces, laplace, mympi
+from . import charges, fftw, forces, laplace, mympi, solver
 
 __all__ = ['capi']
 

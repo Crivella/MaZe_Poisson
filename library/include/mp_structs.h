@@ -11,7 +11,7 @@
 #define INTEGRATOR_TYPE_VERLET 1
 
 #define INTEGRATOR_ENABLED 1
-#define INTEGRATOR_DISABLED 1
+#define INTEGRATOR_DISABLED 0
 
 // Struct typedefs
 typedef struct grid grid;
@@ -27,13 +27,15 @@ void * grid_free(grid *grid);
 void * particles_free(particles *p);
 void * integrator_free(integrator *integrator);
 
+void lcg_grid_init(grid * grid);
 void * lcg_grid_init_field(grid *grid);
 int lcg_grid_update_field(grid *grid);
-double lcg_grid_update_charges(grid *grid, particles *p);
 
+void fft_grid_init(grid * grid);
 void * fft_grid_init_field(grid *grid);
 int fft_grid_update_field(grid *grid);
-double fft_grid_update_charges(grid *grid, particles *p);
+
+double grid_update_charges(grid *grid, particles *p);
 
 void * particles_init_potential(particles *p, int pot_type);
 void * particles_init_potential_tf(particles *p);
@@ -42,17 +44,19 @@ void * particles_update_nearest_neighbors(particles *p);
 double particles_compute_forces_field(particles *p, grid *grid);
 double particles_compute_forces_tf(particles *p);
 double particles_compute_forces_ld(particles *p);
-void * particles_compute_forces(particles *p, grid *grid);
+void * particles_compute_forces_tot(particles *p);
 double particles_get_temperature(particles *p);
 double particles_get_kinetic_energy(particles *p);
 void * particles_get_momentum(particles *p, double *out);
 void * particles_rescale_velocities(particles *p);
 
+void ovrvo_integrator_init(integrator *integrator);
 void * ovrvo_integrator_part1(integrator *integrator, particles *p);
 void * ovrvo_integrator_part2(integrator *integrator, particles *p);
 void * ovrvo_integrator_init_thermostat(integrator *integrator, double *params);
 void * ovrvo_integrator_stop_thermostat(integrator *integrator);
 
+void verlet_integrator_init(integrator *integrator);
 void * verlet_integrator_part1(integrator *integrator, particles *p);
 void * verlet_integrator_part2(integrator *integrator, particles *p);
 void * verlet_integrator_init_thermostat(integrator *integrator, double *params);
@@ -65,6 +69,7 @@ struct grid {
     double L;  // Length of the grid
     double h;  // Grid spacing
 
+    long int size;  // Total number of grid points
     int n_local; // X - Number of grid points per dimension (MPI aware)
 
     double *y;  // Intermediate field constraint
@@ -76,10 +81,10 @@ struct grid {
     double tol;  // Tolerance for the LCG
     long int n_iters;  // Number of iterations for convergence of the LCG
 
-    void *      (*free)( grid *);
-    void *      (*init_field)( grid *);
-    int         (*update_field)( grid *);
-    double      (*update_charges)( grid *, particles *);
+    void *  (*free)( grid *);
+    void *  (*init_field)( grid *);
+    int     (*update_field)( grid *);
+    double  (*update_charges)( grid *, particles *);
 };
 
 struct particles {
@@ -102,23 +107,23 @@ struct particles {
     double epsilon;
     double *tf_params;  // Parameters for the TF potential (6 x n_p x n_p)
 
-    void *      (*free)( particles *);
+    void *  (*free)( particles *);
 
-    void *      (*init_potential)( particles *, int pot_type);
-    void *      (*init_potential_tf)( particles *);
-    void *      (*init_potential_ld)( particles *);
+    void *  (*init_potential)( particles *, int pot_type);
+    void *  (*init_potential_tf)( particles *);
+    void *  (*init_potential_ld)( particles *);
 
-    void *      (*update_nearest_neighbors)( particles *);
+    void *  (*update_nearest_neighbors)( particles *);
 
-    double      (*compute_forces_field)( particles *, grid *);
-    double      (*compute_forces_noel)( particles *);
-    void *      (*compute_forces)( particles *, grid *);
+    double  (*compute_forces_field)( particles *, grid *);
+    double  (*compute_forces_noel)( particles *);
+    void *  (*compute_forces_tot)( particles *);
 
-    double      (*get_temperature)( particles *);
-    double      (*get_kinetic_energy)( particles *);
-    void *      (*get_momentum)( particles *, double *);
+    double  (*get_temperature)( particles *);
+    double  (*get_kinetic_energy)( particles *);
+    void *  (*get_momentum)( particles *, double *);
 
-    void *      (*rescale_velocities)( particles *);
+    void *  (*rescale_velocities)( particles *);
 };
 
 struct integrator {
@@ -131,11 +136,11 @@ struct integrator {
     double c1;  // Thermostat parameter
     double c2;  // Thermostat parameter
 
-    void *      (*part1)( integrator *, particles *);
-    void *      (*part2)( integrator *, particles *);
-    void *      (*init_thermostat)( integrator *, double *);
-    void *      (*stop_thermostat)( integrator *);
-    void *      (*free)( integrator *);
+    void *  (*part1)( integrator *, particles *);
+    void *  (*part2)( integrator *, particles *);
+    void *  (*init_thermostat)( integrator *, double *);
+    void *  (*stop_thermostat)( integrator *);
+    void *  (*free)( integrator *);
 };
 
 #endif // __MP_STRUCTS_H

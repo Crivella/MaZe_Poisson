@@ -181,6 +181,9 @@ void collect_grid_buffer(double *data, double *recv, int n) {
 #else
 
 int init_mpi() {
+    if (global_mpi_data != NULL) {
+        return 0;
+    }
     global_mpi_data = (mpi_data *)malloc(sizeof(mpi_data));
 
     return 1;
@@ -196,6 +199,7 @@ int init_mpi_grid(int n) {
 void cleanup_mpi() {
     if (global_mpi_data != NULL) {
         free(global_mpi_data);
+        global_mpi_data = NULL;
     }
 }
 

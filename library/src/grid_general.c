@@ -1,7 +1,11 @@
 #include <stdlib.h>
+#include <math.h>
 
 #include "mympi.h"
+#include "charges.h"
 #include "mp_structs.h"
+#include "fftw_wrap.h"
+
 
 grid * grid_init(int n, double L, double h, double tol, int type) {
     grid *new = (grid *)malloc(sizeof(grid));
@@ -13,33 +17,25 @@ grid * grid_init(int n, double L, double h, double tol, int type) {
     new->n_local = get_n_loc();
 
     new->y = NULL;
-    // new->q = NULL;
+    new->q = NULL;
     new->phi_p = NULL;
-    // new->phi_n = NULL;
+    new->phi_n = NULL;
     new->ig2 = NULL;
+
+    new->update_charges = grid_update_charges;
+
+    long int size;
 
     switch (type) {
         case GRID_TYPE_LCG:
-            new->y = (double *)malloc(new->n_local * n * n * sizeof(double));
-            new->phi_p = (double *)malloc(new->n_local * n * n * sizeof(double));
-
-            new->init_field = lcg_grid_init_field;
-            new->update_field = lcg_grid_update_field;
-            new->update_charges = lcg_grid_update_charges;
+            lcg_grid_init(new);
             break;
         case GRID_TYPE_FFT:
-            new->ig2 = (double *)malloc(n * n * n * sizeof(double));
-
-            new->init_field = fft_grid_init_field;
-            new->update_field = fft_grid_update_field;
-            new->update_charges = fft_grid_update_charges;
+            fft_grid_init(new);
             break;
         default:
             break;
     }
-    
-    new->q = (double *)malloc(new->n_local * n * n * sizeof(double));
-    new->phi_n = (double *)malloc(new->n_local * n * n * sizeof(double));
 
     new->tol = tol;
     new->n_iters = 0;
@@ -66,6 +62,8 @@ void * grid_free(grid *grid) {
         free(grid->phi_n);
     }
     free(grid);
+}
 
-    return NULL;
+double grid_update_charges(grid *grid, particles *p) {
+    return update_charges(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
 }

@@ -20,11 +20,11 @@ void solver_initialize(int n_grid) {
     init_mpi_grid(n_grid);
 }
 
-void solverinitialize_grid(int n_grid, double L, double h, double tol, int grid_type) {
+void solver_initialize_grid(int n_grid, double L, double h, double tol, int grid_type) {
     g_grid = grid_init(n_grid, L, h, tol, grid_type);
 }
 
-void solverinitialize_particles(
+void solver_initialize_particles(
     int n, double L, double h, int n_p, int pot_type,
     double *pos, double *vel, double *mass, long int *charges
 ) {
@@ -38,9 +38,7 @@ void solverinitialize_particles(
     g_particles->init_potential(g_particles, pot_type);
 }
 
-void solverinitialize_integrator(
-    int n_p, double dt, double T, double gamma, int itg_type, int itg_enabled
-) {
+void solver_initialize_integrator(int n_p, double dt, double T, double gamma, int itg_type, int itg_enabled) {
     g_integrator = integrator_init(n_p, dt, itg_type);
 
     double itg_params[MAX_ITG_PARAMS];
@@ -55,7 +53,9 @@ void solverinitialize_integrator(
             break;
     }
 
-    if (itg_enabled) g_integrator->init_thermostat(g_integrator, itg_params);
+    if (itg_enabled == 1) {
+        g_integrator->init_thermostat(g_integrator, itg_params);
+    }
 }
 
 int solver_update_charges() {
@@ -65,51 +65,88 @@ int solver_update_charges() {
     g_particles->update_nearest_neighbors(g_particles);
     q_tot_loc = g_grid->update_charges(g_grid, g_particles);
 
-    if (fabs(q_tot - q_tot_loc) < 1e-6)  res = 1;
+    if (fabs(q_tot - q_tot_loc) > 1e-6) {
+        res = 1;
+        printf("Charge conservation error: q_tot = %.6f, q_tot_loc = %.6f\n", q_tot, q_tot_loc);
+    }
 
     q_tot = q_tot_loc;
 
     return res;
 }
 
+void solver_init_field() {
+    g_grid->init_field(g_grid);
+}
+
 void solver_update_field() {
     g_grid->update_field(g_grid);
 }
 
-void solver_compute_forces() {
-    g_particles->compute_forces(g_particles, g_grid);
+void solver_compute_forces_elec() {
+    g_particles->compute_forces_field(g_particles, g_grid);
 }
 
-void solvernitialize_md(int preconditioning, int vel_rescale) {
+double solver_compute_forces_noel() {
+    return g_particles->compute_forces_noel(g_particles);
+}
+
+void solver_compute_forces_tot() {
+    g_particles->compute_forces_tot(g_particles);
+}
+
+void solver_compute_forces() {
+    solver_compute_forces_elec();
+    solver_compute_forces_noel();
+    solver_compute_forces_tot();
+}
+
+void integrator_part_1() {
+    g_integrator->part1(g_integrator, g_particles);
+}
+
+void integrator_part_2() {
+    g_integrator->part2(g_integrator, g_particles);
+}
+
+void solver_rescale_velocities() {
+    g_particles->rescale_velocities(g_particles);
+}
+
+int solver_initialize_md(int preconditioning, int vel_rescale) {
+    int res = 0;
+
     #pragma omp parallel for reduction(+:q_tot)
     for (int i = 0; i < g_particles->n_p; i++) {
         q_tot += g_particles->charges[i];
     }
 
     // Step 0 Verlet
-    solver_update_charges();
+    res |= solver_update_charges();
     if (preconditioning == 1)
-        solver_update_field();
+        solver_init_field();
     solver_compute_forces();
 
     // Step 1 Verlet
-    g_integrator->part1(g_integrator, g_particles);
-    solver_update_charges();
+    integrator_part_1();
+    res |= solver_update_charges();
     if (preconditioning == 1) 
-        solver_update_field();
+        solver_init_field();
     solver_compute_forces();
-    g_integrator->part2(g_integrator, g_particles);
+    integrator_part_2();
 
     if (vel_rescale == 1) 
-        g_particles->rescale_velocities(g_particles);
+        solver_rescale_velocities();
+
+    return res;
 }
 
 void solver_md_loop_iter() {
-    g_integrator->part1(g_integrator, g_particles);
+    integrator_part_1();
     solver_update_charges();
     solver_update_field();
     solver_compute_forces();
-    g_integrator->part2(g_integrator, g_particles);
+    integrator_part_2();
 }
 
 int solver_check_thermostat() {
@@ -133,9 +170,62 @@ void solver_run_n_steps(int n_steps) {
 }
 
 void solver_finalize() {
-    if (g_particles != NULL)  g_particles->free(g_particles);
-    if (g_grid != NULL)  g_grid->free(g_grid);
-    if (g_integrator != NULL)  g_integrator->free(g_integrator);
+    if (g_particles != NULL) {
+        g_particles->free(g_particles);
+        g_particles = NULL;
+    }
+    if (g_grid != NULL) {
+        g_grid->free(g_grid);
+        g_grid = NULL;
+    }
+    if (g_integrator != NULL) {
+        g_integrator->free(g_integrator);
+        g_integrator = NULL;
+    }
 
     cleanup_mpi();
+}
+
+void get_pos(double *recv) {
+    memcpy(recv, g_particles->pos, g_particles->n_p * 3 * sizeof(double));
+}
+
+void get_vel(double *recv) {
+    memcpy(recv, g_particles->vel, g_particles->n_p * 3 * sizeof(double));
+}
+
+void get_fcs_elec(double *recv) {
+    memcpy(recv, g_particles->fcs_elec, g_particles->n_p * 3 * sizeof(double));
+}
+
+void get_fcs_noel(double *recv) {
+    memcpy(recv, g_particles->fcs_noel, g_particles->n_p * 3 * sizeof(double));
+}
+
+void get_fcs_tot(double *recv) {
+    memcpy(recv, g_particles->fcs_tot, g_particles->n_p * 3 * sizeof(double));
+}
+
+void get_charges(long int *recv) {
+    memcpy(recv, g_particles->charges, g_particles->n_p * sizeof(long int));
+}
+
+void get_field(double *recv) {
+    memcpy(recv, g_grid->phi_n, g_grid->size * sizeof(double));
+}
+
+void get_q(double *recv) {
+    memcpy(recv, g_grid->q, g_grid->size * sizeof(double));
+}
+
+double get_kinetic_energy() {
+    return g_particles->get_kinetic_energy(g_particles);
+}
+
+void get_momentum(double *recv) {
+    g_particles->get_momentum(g_particles, recv);
+}
+
+double get_temperature() {
+    return g_particles->get_temperature(g_particles);
 }

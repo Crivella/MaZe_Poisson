@@ -32,10 +32,18 @@
 //   return (mu + sigma * (double) X1);
 // }
 
+void ovrvo_integrator_init(integrator *integrator) {
+    integrator->part1 = ovrvo_integrator_part1;
+    integrator->part2 = ovrvo_integrator_part2;
+    integrator->init_thermostat = ovrvo_integrator_init_thermostat;
+    integrator->stop_thermostat = ovrvo_integrator_stop_thermostat;
+}
+
 void o_block(integrator *integrator, particles *p) {
     double dt = integrator->dt;
     double c1 = integrator->c1;
     double T = integrator->T;
+    
     int n_p = p->n_p;
     double *vel = p->vel;
     double *masses = p->mass;
@@ -110,14 +118,18 @@ void r_block(integrator *integrator, particles *p) {
 }
 
 void * ovrvo_integrator_part1(integrator *integrator, particles *p) {
-    if (integrator->enabled == INTEGRATOR_ENABLED) o_block(integrator, p);
+    if (integrator->enabled == INTEGRATOR_ENABLED) {
+        o_block(integrator, p);
+    }
     v_block(integrator, p);
     r_block(integrator, p);
 }
 
 void * ovrvo_integrator_part2(integrator *integrator, particles *p) {
     v_block(integrator, p);
-    if (integrator->enabled == INTEGRATOR_ENABLED) o_block(integrator, p);
+    if (integrator->enabled == INTEGRATOR_ENABLED) {
+        o_block(integrator, p);
+    }
 }
 
 void * ovrvo_integrator_init_thermostat(integrator *integrator, double *params) {

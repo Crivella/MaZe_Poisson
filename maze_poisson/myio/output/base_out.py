@@ -62,7 +62,6 @@ class BaseOutputFile(Logger, ABC):
 
 
 class OutputFiles:
-    field = None
     performance = None
     energy = None
     momentum = None
@@ -72,7 +71,7 @@ class OutputFiles:
     restart = None
     restart_field = None
 
-    files = ['field', 'performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force', 'restart', 'restart_field']
+    files = ['performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force', 'restart', 'restart_field']
 
     format_classes = {}
 
@@ -110,24 +109,23 @@ class OutputFiles:
             if file:
                 file.flush()
 
-    def output(self, itr: int, grid: BaseGrid, particles: Particles, force: bool = False):
+    def output(self, itr: int, solver: 'SolverMD', force: bool = False):
         """Output the results of the molecular dynamics loop."""
         if force or itr % self.out_stride == 0:
             if self.last != itr:
                 self.last = itr
-                self.performance.write_data(itr, grid, particles)
-                self.energy.write_data(itr, grid, particles)
-                self.momentum.write_data(itr, grid, particles)
-                self.tot_force.write_data(itr, grid, particles)
-                self.temperature.write_data(itr, grid, particles)
-                self.solute.write_data(itr, grid, particles)
-                # self.performance.write_data(itr, grid, particles)
-                self.field.write_data(itr, grid, particles)
+                self.energy.write_data(itr, solver)
+                self.momentum.write_data(itr, solver)
+                self.tot_force.write_data(itr, solver)
+                self.temperature.write_data(itr, solver)
+                self.solute.write_data(itr, solver)
+                # self.performance.write_data(itr, solver)
+                # self.field.write_data(itr, solver)
                 if force or (self.out_flushstride and itr % self.out_flushstride == 0):
                     self.flush()
         if self.restart_step == itr:
-            self.restart.write_data(itr, grid, particles, mode='w')
-            self.restart_field.write_data(itr, grid, particles, mode='w')
+            self.restart.write_data(itr, solver, mode='w')
+            self.restart_field.write_data(itr, solver, mode='w')
             self.restart.flush()
             self.restart_field.flush()
 

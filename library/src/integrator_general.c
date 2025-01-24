@@ -18,16 +18,10 @@ integrator * integrator_init(int n_p, double dt, int type) {
 
     switch (type) {
         case INTEGRATOR_TYPE_OVRVO:
-            new->part1 = ovrvo_integrator_part1;
-            new->part2 = ovrvo_integrator_part2;
-            new->init_thermostat = ovrvo_integrator_init_thermostat;
-            new->stop_thermostat = ovrvo_integrator_stop_thermostat;
+            ovrvo_integrator_init(new);
             break;
         case INTEGRATOR_TYPE_VERLET:
-            new->part1 = verlet_integrator_part1;
-            new->part2 = verlet_integrator_part2;
-            new->init_thermostat = verlet_integrator_init_thermostat;
-            new->stop_thermostat = verlet_integrator_stop_thermostat;
+            verlet_integrator_init(new);
             break;
     }
 

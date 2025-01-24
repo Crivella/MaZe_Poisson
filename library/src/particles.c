@@ -1,4 +1,4 @@
-// #include <stdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 // #include <string.h>
 #include <math.h>
@@ -16,9 +16,9 @@ particles * particles_init(int n, int n_p, double L, double h) {
 
     p->pos = (double *)malloc(n_p * 3 * sizeof(double));
     p->vel = (double *)malloc(n_p * 3 * sizeof(double));
-    p->fcs_elec = (double *)malloc(n_p * 3 * sizeof(double));
-    p->fcs_noel = (double *)malloc(n_p * 3 * sizeof(double));
-    p->fcs_tot = (double *)malloc(n_p * 3 * sizeof(double));
+    p->fcs_elec = (double *)calloc(n_p * 3, sizeof(double));
+    p->fcs_noel = (double *)calloc(n_p * 3, sizeof(double));
+    p->fcs_tot = (double *)calloc(n_p * 3, sizeof(double));
     p->mass = (double *)malloc(n_p * sizeof(double));
     p->charges = (long int *)malloc(n_p * sizeof(long int));
     p->neighbors = (long int *)malloc(n_p * 24 * sizeof(long int));
@@ -32,7 +32,7 @@ particles * particles_init(int n, int n_p, double L, double h) {
     p->update_nearest_neighbors = particles_update_nearest_neighbors;
     p->compute_forces_field = particles_compute_forces_field;
     p->compute_forces_noel = NULL;
-    p->compute_forces = particles_compute_forces;
+    p->compute_forces_tot = particles_compute_forces_tot;
     p->get_temperature = particles_get_temperature;
     p->get_kinetic_energy = particles_get_kinetic_energy;
     p->get_momentum = particles_get_momentum;
@@ -54,8 +54,6 @@ void * particles_free(particles *p) {
         free(p->tf_params);
     }
     free(p);
-
-    return NULL;
 }
 
 void * particles_init_potential(particles *p, int pot_type) {
@@ -71,8 +69,6 @@ void * particles_init_potential(particles *p, int pot_type) {
     default:
         break;
     }
-
-    return NULL;
 }
 
 // This really needs to be generalized
@@ -145,8 +141,6 @@ void * particles_init_potential_tf(particles *p) {
     }
 
     p->compute_forces_noel = particles_compute_forces_tf;
-
-    return NULL;
 }
 
 void * particles_init_potential_ld(particles *p) {
@@ -155,8 +149,6 @@ void * particles_init_potential_ld(particles *p) {
     p->r_cut = 2.5 * p->sigma;
 
     p->compute_forces_noel = particles_compute_forces_ld;
-
-    return NULL;
 }
 
 void * particles_update_nearest_neighbors(particles *p) {
@@ -191,20 +183,20 @@ void * particles_update_nearest_neighbors(particles *p) {
             neighbors[i1 + j + 2] = nk;
         }
 
-        neighbors[i1 +  3 + 0] = nip;
-        neighbors[i1 +  6 + 1] = njp;
-        neighbors[i1 +  9 + 2] = nkp;
+        neighbors[i1 +  3 + 0] = nip;  // 1,0,0
+        neighbors[i1 +  6 + 1] = njp;  // 0,1,0
+        neighbors[i1 +  9 + 2] = nkp;  // 0,0,1
 
-        neighbors[i1 + 12 + 0] = nip;
+        neighbors[i1 + 12 + 0] = nip;  // 1,1,0
         neighbors[i1 + 12 + 1] = njp;
 
-        neighbors[i1 + 15 + 0] = nip;
+        neighbors[i1 + 15 + 0] = nip;  // 1,0,1
         neighbors[i1 + 15 + 2] = nkp;
 
-        neighbors[i1 + 18 + 1] = njp;
+        neighbors[i1 + 18 + 1] = njp;  // 0,1,1
         neighbors[i1 + 18 + 2] = nkp;
 
-        neighbors[i1 + 21 + 0] = nip;
+        neighbors[i1 + 21 + 0] = nip;  // 1,1,1
         neighbors[i1 + 21 + 1] = njp;
         neighbors[i1 + 21 + 2] = nkp;
     }
@@ -215,17 +207,14 @@ double particles_compute_forces_field(particles *p, grid *grid) {
 }
 
 double particles_compute_forces_tf(particles *p) {
-    return compute_tf_forces(p->n_p, p->L, p->pos, B, p->tf_params, p->r_cut, p->fcs_tot);
+    return compute_tf_forces(p->n_p, p->L, p->pos, B, p->tf_params, p->r_cut, p->fcs_noel);
 }
 
 double particles_compute_forces_ld(particles *p) {
     return 0.0;
 }
 
-void * particles_compute_forces(particles *p, grid *grid) {
-    p->compute_forces_noel(p);
-    p->compute_forces_field(p, grid);
-
+void * particles_compute_forces_tot(particles *p) {
     int ni;
     #pragma omp parallel for private(ni)
     for (int i = 0; i < p->n_p; i++) {
@@ -234,8 +223,6 @@ void * particles_compute_forces(particles *p, grid *grid) {
             p->fcs_tot[ni + j] = p->fcs_elec[ni + j] + p->fcs_noel[ni + j];
         }
     }
-
-    return NULL;
 }
 
 
@@ -244,17 +231,20 @@ double particles_get_temperature(particles *p) {
 }
 
 double particles_get_kinetic_energy(particles *p) {
-    int ni;
+    long int ni;
     double kin = 0.0;
+    double app;
 
-    #pragma omp parallel for private(ni) reduction(+:kin)
+    #pragma omp parallel for private(ni, app) reduction(+:kin)
     for (int i = 0; i < p->n_p; i++) {
         ni = i * 3;
-        kin += p->mass[i] * (
-            p->vel[ni]     * p->vel[ni] +
-            p->vel[ni + 1] * p->vel[ni + 1] +
-            p->vel[ni + 2] * p->vel[ni + 2]
-            );
+        app = 0.0;
+        // printf("vel: %e, %e, %e\n", p->vel[ni], p->vel[ni + 1], p->vel[ni + 2]);
+        for (int j = 0; j < 3; j++) {
+            app += pow(p->vel[ni + j], 2);
+        }
+        // printf("app: %e, mass: %f\n", app, p->mass[i]);
+        kin += p->mass[i] * app;
     }
 
     return 0.5 * kin;
@@ -262,19 +252,21 @@ double particles_get_kinetic_energy(particles *p) {
 
 void * particles_get_momentum(particles *p, double *out) {
     int ni;
+    double mass;
+    double px = 0.0, py = 0.0, pz = 0.0;
 
-    out[0] = 0.0;
-    out[1] = 0.0;
-    out[2] = 0.0;
-
+    #pragma omp parallel for private(ni, mass) reduction(+:px, py, pz)
     for (int i = 0; i < p->n_p; i++) {
         ni = i * 3;
-        out[0] += p->mass[i] * p->vel[ni];
-        out[1] += p->mass[i] * p->vel[ni + 1];
-        out[2] += p->mass[i] * p->vel[ni + 2];
+        mass = p->mass[i];
+        px += mass * p->vel[ni];
+        py += mass * p->vel[ni + 1];
+        pz += mass * p->vel[ni + 2];
     }
 
-    return NULL;
+    out[0] = px;
+    out[1] = py;
+    out[2] = pz;
 }
 
 // This also needs to be generalized
@@ -297,7 +289,5 @@ void * particles_rescale_velocities(particles *p) {
             p->vel[i * 3 + j] -= 2 * init_vel[p->charges[i] - min_charge][j] / p->n_p;
         }
     }
-
-    return NULL;
 }
 

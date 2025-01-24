@@ -37,7 +37,7 @@ class OutputSettings(BaseSettings):
 
     def defaults(self):
         """Set default values."""
-        self.print_field = False
+        # self.print_field = False
         self.print_solute = False
         self.print_performance = False
         self.print_momentum = False
