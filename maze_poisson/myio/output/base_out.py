@@ -74,7 +74,8 @@ class OutputFiles:
     restart = None
     restart_field = None
 
-    files = ['performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force', 'restart', 'restart_field']
+    files = ['performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force']
+    files_restart = ['restart', 'restart_field']
 
     format_classes = {}
 
@@ -97,7 +98,7 @@ class OutputFiles:
     def init_files(self):
         """Initialize the output files."""
         ptr = self.format_classes[self.fmt]
-        for name in self.files:
+        for name in self.files + self.files_restart:
             cls = ptr[name]
             _path = os.path.join(self.base_path, f'{name}.{self.fmt}')
             setattr(self, name, cls(
@@ -106,24 +107,32 @@ class OutputFiles:
                 overwrite=True
             ))
 
+    @property
+    def all_files(self):
+        return self.files + self.files_restart
+
     def flush(self):
-        for fname in self.files:
+        for fname in self.all_files:
             file = getattr(self, fname)
             if file:
                 file.flush()
 
-    def output(self, itr: int, solver: 'SolverMD', force: bool = False):
+    def output(self, itr: int, solver, force: bool = False):
         """Output the results of the molecular dynamics loop."""
         if force or itr % self.out_stride == 0:
             if self.last != itr:
                 self.last = itr
-                self.energy.write_data(itr, solver)
-                self.momentum.write_data(itr, solver)
-                self.tot_force.write_data(itr, solver)
-                self.temperature.write_data(itr, solver)
-                self.solute.write_data(itr, solver)
+                for name in self.files:
+                    file = getattr(self, name)
+                    if file:
+                        file.write_data(itr, solver)
+                # self.energy.write_data(itr, solver)
+                # self.momentum.write_data(itr, solver)
+                # self.tot_force.write_data(itr, solver)
+                # self.temperature.write_data(itr, solver)
+                # self.solute.write_data(itr, solver)
                 # self.performance.write_data(itr, solver)
-                # self.field.write_data(itr, solver)
+                # # self.field.write_data(itr, solver)
                 if force or (self.out_flushstride and itr % self.out_flushstride == 0):
                     self.flush()
         if self.restart_step == itr:

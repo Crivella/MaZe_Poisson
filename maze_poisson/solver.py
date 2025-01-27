@@ -170,7 +170,7 @@ class SolverMD(Logger):
     @Clock('field')
     def update_field(self):
         """Update the field."""
-        capi.solver_update_field()
+        return capi.solver_update_field()
 
     @Clock('forces')
     def compute_forces(self):
