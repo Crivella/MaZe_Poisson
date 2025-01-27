@@ -68,9 +68,15 @@ int init_mpi_grid(int n) {
     div = n / size;
     mod = n % size;
     for (int i=0; i<size; i++) {
-        n_loc = (i < mod) ? div + 1 : div;
+        if (i < mod) {
+            n_loc = div + 1;
+            n_start = i * n_loc;
+        } else {
+            n_loc = div;
+            n_start = i * n_loc + mod;
+        }
         global_mpi_data->n_loc_list[i] = n_loc;
-        global_mpi_data->n_start_list[i] = i * n_loc + mod;
+        global_mpi_data->n_start_list[i] = n_start;
     }
 
     global_mpi_data->n_start = global_mpi_data->n_start_list[rank];
