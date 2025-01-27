@@ -9,7 +9,7 @@ def disable_io():
     enabled = False
     logging.getLogger(MAIN_LOGGER_NAME).setLevel(logging.CRITICAL)
 
-def get_enabled() -> bool:
+def get_enabled_io() -> bool:
     return enabled
 
 from .loggers import Logger, logger

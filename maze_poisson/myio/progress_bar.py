@@ -1,4 +1,4 @@
-from . import get_enabled
+from . import get_enabled_io
 
 try:
     from tqdm import tqdm
@@ -11,6 +11,6 @@ class ProgressBar:
         self.n = n
         
     def __iter__(self):
-        if get_enabled():
+        if get_enabled_io():
             return iter(tqdm(range(self.n)))
         return iter(range(self.n))

@@ -7,7 +7,7 @@ from io import StringIO
 import pandas as pd
 
 from ...myio.loggers import Logger
-from .. import get_enabled
+from .. import get_enabled_io
 from ..input import OutputSettings
 
 
@@ -24,7 +24,8 @@ class BaseOutputFile(Logger, ABC):
     def __init__(self, *args, path: str, enabled: bool = True, overwrite: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self.path = os.path.abspath(path)
-        self.enabled = enabled and get_enabled()
+        self._enabled = enabled
+        self._io_enabled = get_enabled_io()
 
         if not enabled:
             return
@@ -42,6 +43,10 @@ class BaseOutputFile(Logger, ABC):
 
         self.buffer = StringIO()
         atexit.register(self.close)
+
+    @property
+    def enabled(self):
+        return self._enabled and self._io_enabled
 
     @abstractmethod
     def write_data(self, df: pd.DataFrame, mode: str = 'a', mpi_bypass: bool = False):

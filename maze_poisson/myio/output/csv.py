@@ -19,7 +19,8 @@ class CSVOutputFile(BaseOutputFile):
 
     def write_data(self, iter: int, solver = None, mode: str = 'a', mpi_bypass: bool = False):
         if not self.enabled:
-            if mpi_bypass:
+            # Needed when the get_data method needs to be called on all ranks to avoid MPI deadlock
+            if self._enabled and mpi_bypass:
                 self.get_data(iter, solver)
             return
         header = False
