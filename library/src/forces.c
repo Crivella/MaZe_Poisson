@@ -94,8 +94,8 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
         }
     }
 
-    allreduce_double(&sum_q);
-    allreduce_buffer(forces, 3 * n_p);
+    allreduce_sum(&sum_q, 1);
+    allreduce_sum(forces, 3 * n_p);
 
     return sum_q;
 }

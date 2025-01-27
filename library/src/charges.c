@@ -10,9 +10,6 @@ double g(double x, double L, double h) {
         return 0.0;
     }
     return 1.0 - x / h;
-
-    // if (2*x > L) x = L - x;
-    // return x < h ? 1.0 - x / h : 0.0;
 }
 
 #ifdef __MPI
@@ -65,7 +62,7 @@ double update_charges(
         }
     }
 
-    allreduce_double(&q_tot);
+    allreduce_sum(&q_tot, 1);
 
     return q_tot;
 }

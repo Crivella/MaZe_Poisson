@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from ...c_api import capi
-from ...constants import Ha_to_eV, a0, conv_mass
+from ...constants import a0, conv_mass
 from .base_out import BaseOutputFile, OutputFiles, ensure_enabled
 
 
@@ -116,19 +116,6 @@ class PerformanceCSVOutputFile(CSVOutputFile):
             'n_iters': [solver.n_iters]
         })
 
-# class FieldCSVOutputFile(CSVOutputFile):
-#     name = 'field'
-#     headers = ['iter', 'x', 'MaZe']
-#     def get_data(self, iter: int, solver):
-#         X = grid.X
-#         j = grid.field_j
-#         k = grid.field_k
-#         return pd.DataFrame({
-#             'iter': [iter]*len(X),
-#             'x': X,
-#             'MaZe': grid.phi[:, j, k] * Ha_to_eV
-#         })
-
 class RestartCSVOutputFile(CSVOutputFile):
     name = 'restart'
     headers = ['charge', 'mass', 'x', 'y', 'z', 'vx', 'vy', 'vz']
@@ -167,7 +154,6 @@ class RestartFieldCSVOutputFile(CSVOutputFile):
 OutputFiles.register_format(
     'csv',
     {
-        # 'field': FieldCSVOutputFile,
         'performance': PerformanceCSVOutputFile,
         'energy': EnergyCSVOutputFile,
         'momentum': MomentumCSVOutputFile,

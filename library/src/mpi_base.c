@@ -65,17 +65,12 @@ int init_mpi_grid(int n) {
     rank = global_mpi_data->rank;
     size = global_mpi_data->size;
 
+    div = n / size;
+    mod = n % size;
     for (int i=0; i<size; i++) {
-        div = n / size;
-        mod = n % size;
-
-        if (i < mod) {
-            global_mpi_data->n_loc_list[i] = div + 1;
-            global_mpi_data->n_start_list[i] = i * (div + 1);
-        } else {
-            global_mpi_data->n_loc_list[i] = div;
-            global_mpi_data->n_start_list[i] = i * div + mod;
-        }
+        n_loc = (i < mod) ? div + 1 : div;
+        global_mpi_data->n_loc_list[i] = n_loc;
+        global_mpi_data->n_start_list[i] = i * n_loc + mod;
     }
 
     global_mpi_data->n_start = global_mpi_data->n_start_list[rank];
@@ -129,13 +124,7 @@ void exchange_bot_top(double *bot, double *top, double **bot_recv, double **top_
     }
 }
 
-void allreduce_double(double *value) {
-    if (global_mpi_data->size > 1) {
-        MPI_Allreduce(MPI_IN_PLACE, value, 1, MPI_DOUBLE, MPI_SUM, global_mpi_data->comm);
-    }
-}
-
-void allreduce_buffer(double *buffer, long int size) {
+void allreduce_sum(double *buffer, long int size) {
     if (global_mpi_data->size > 1) {
         MPI_Allreduce(MPI_IN_PLACE, buffer, size, MPI_DOUBLE, MPI_SUM, global_mpi_data->comm);
     }
@@ -149,7 +138,6 @@ void collect_grid_buffer(double *data, double *recv, int n) {
 
     long int n2 = n * n;
     long int n3_loc = n_loc * n2;
-    long int n3 = n * n2;
 
     if (size > 1) {
         if (rank == 0) {
@@ -198,11 +186,7 @@ void exchange_bot_top(double *bot, double *top, double **bot_recv, double **top_
     *top_recv = top;
 }
 
-void allreduce_double(double *value) {
-    // Do nothing
-}
-
-void allreduce_buffer(double *buffer, long int size) {
+void allreduce_sum(double *buffer, long int size) {
     // Do nothing
 }
 

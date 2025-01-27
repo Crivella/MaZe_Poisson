@@ -25,7 +25,7 @@ EXTERN_C double ddot(double *u, double *v, long int n) {
     for (i = 0; i < n; i++) {
         result += u[i] * v[i];
     }
-    allreduce_double(&result);
+    allreduce_sum(&result, 1);
     return result;
 }
 
