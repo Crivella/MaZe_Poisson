@@ -17,8 +17,11 @@ class CSVOutputFile(BaseOutputFile):
     def init_headers(self):
         pd.DataFrame(columns=self.headers).to_csv(self.buffer, index=False)
 
-    @ensure_enabled
-    def write_data(self, iter: int, solver = None, mode: str = 'a'):
+    def write_data(self, iter: int, solver = None, mode: str = 'a', mpi_bypass: bool = False):
+        if not self.enabled:
+            if mpi_bypass:
+                self.get_data(iter, solver)
+            return
         header = False
         if mode == 'w':
             open(self.path, 'w').close()
@@ -105,12 +108,12 @@ class SolutesCSVOutputFile(CSVOutputFile):
 
 class PerformanceCSVOutputFile(CSVOutputFile):
     name =  'performance'
-    headers = ['iter', 'time', 'n_iters']
+    headers = ['iter', 'n_iters']
     def get_data(self, iter: int, solver):
         return pd.DataFrame({
             'iter': [iter],
-            'time': [grid.time],
-            'n_iters': [grid.n_iters]
+            # 'time': [grid.time],
+            'n_iters': [solver.n_iters]
         })
 
 # class FieldCSVOutputFile(CSVOutputFile):
@@ -130,22 +133,34 @@ class RestartCSVOutputFile(CSVOutputFile):
     name = 'restart'
     headers = ['charge', 'mass', 'x', 'y', 'z', 'vx', 'vy', 'vz']
     def get_data(self, iter: int, solver):
-        raise NotImplementedError
-        df = pd.DataFrame(particles.pos * a0, columns=['x', 'y', 'z'])
-        df[['vx', 'vy', 'vz']] = particles.vel
-        df['charge'] = particles.charges
-        df['mass'] = particles.masses / conv_mass
+        df = pd.DataFrame()
+
+        tmp = np.empty((solver.N_p, 3), dtype=np.float64)
+        capi.get_pos(tmp)
+        df[['x', 'y', 'z']] = tmp * a0
+        capi.get_vel(tmp)
+        df[['vx', 'vy', 'vz']] = tmp
+
+        tmp = np.empty(solver.N_p, dtype=np.int64)
+        capi.get_charges(tmp)
+        df['charge'] = tmp
+        tmp = np.empty(solver.N_p, dtype=np.float64)
+        capi.get_masses(tmp)
+        df['mass'] = tmp / conv_mass
+
         return df
 
 class RestartFieldCSVOutputFile(CSVOutputFile):
     name = 'restart_field'
     headers = ['phi_prev', 'phi']
     def get_data(self, iter: int, solver):
-        raise NotImplementedError
-        phi = grid.gather(grid.phi)
-        phi_prev = grid.gather(grid.phi_prev)
-        df = pd.DataFrame(phi_prev.flatten(), columns=['phi_prev'])
-        df['phi'] = phi.flatten()
+        df = pd.DataFrame()
+        tmp = np.empty((solver.N, solver.N, solver.N), dtype=np.float64)
+        capi.get_field(tmp)
+        df['phi'] = tmp.flatten()
+        capi.get_field_prev(tmp)
+        df['phi_prev'] = tmp.flatten()
+
         return df
 
 

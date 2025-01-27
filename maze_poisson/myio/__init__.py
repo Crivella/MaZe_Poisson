@@ -4,7 +4,7 @@ import logging
 enabled: bool = True
 MAIN_LOGGER_NAME = "main"
 
-def disable():
+def disable_io():
     global enabled
     enabled = False
     logging.getLogger(MAIN_LOGGER_NAME).setLevel(logging.CRITICAL)

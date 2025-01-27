@@ -62,9 +62,9 @@ capi.register_function(
     'solver_init_field', None, [],
 )
 
-# void solver_update_field() {
+# int solver_update_field() {
 capi.register_function(
-    'solver_update_field', None, [],
+    'solver_update_field', ctypes.c_int, [],
 )
 
 # void solver_compute_forces_elec() {
@@ -169,9 +169,37 @@ capi.register_function(
     ],
 )
 
+# void get_masses(double *recv) {
+capi.register_function(
+    'get_masses', None, [
+        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+    ],
+)
+
 # void get_field(double *recv) {
 capi.register_function(
     'get_field', None, [
+        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void get_field_prev(double *recv) {
+capi.register_function(
+    'get_field_prev', None, [
+        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void solver_set_field(double *phi) {
+capi.register_function(
+    'solver_set_field', None, [
+        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void solver_set_field_prev(double *phi) {
+capi.register_function(
+    'solver_set_field_prev', None, [
         npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
     ],
 )

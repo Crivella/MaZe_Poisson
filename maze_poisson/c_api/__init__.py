@@ -60,7 +60,8 @@ class CAPI:
                 logger.debug(f"C_API: Registered function {fname}")
             except Exception as e:
                 logger.warning(f"C_API: Could not register function {fname}, using fallback")
-                logger.warning(f"C_API: {e}")
+                if self.library is not None:
+                    logger.warning(f"C_API: {e}")
                 self.functions[fname] = SafeCallable(fallback, fname)
 
         for fname, args, kwargs in self.toinit:
@@ -76,7 +77,8 @@ class CAPI:
             if isinstance(fname, str):
                 try:
                     func = self.functions[fname]
-                except:
+                except Exception as e:
+                    logger.warning(f"C_API: Could not finalize {fname}")
                     continue
             else:
                 func = fname
@@ -96,9 +98,6 @@ capi = CAPI()
 capi.register_init(signal.signal, (signal.SIGINT, signal.SIG_DFL))
 
 # Needed to register functions from other modules
-# from . import charges, fftw, forces, laplace, mympi, solver
-from . import mympi, solver
+from . import mpi_base, solver
 
 __all__ = ['capi']
-
-# capi.initialize()

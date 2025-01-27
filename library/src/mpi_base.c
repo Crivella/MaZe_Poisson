@@ -26,7 +26,7 @@ int get_n_start() {
 
 int init_mpi() {
     if (global_mpi_data != NULL) {
-        return 0;
+        return global_mpi_data->size;
     }
     int rank, size, next_rank, prev_rank;
 
@@ -47,6 +47,9 @@ int init_mpi() {
     global_mpi_data->next_rank = next_rank;
     global_mpi_data->prev_rank = prev_rank;
 
+    global_mpi_data->n_loc_list = (int *)malloc(size * sizeof(int));
+    global_mpi_data->n_start_list = (int *)malloc(size * sizeof(int));
+
     global_mpi_data->bot = NULL;
     global_mpi_data->top = NULL;
 
@@ -62,19 +65,21 @@ int init_mpi_grid(int n) {
     rank = global_mpi_data->rank;
     size = global_mpi_data->size;
 
-    div = n / size;
-    mod = n % size;
+    for (int i=0; i<size; i++) {
+        div = n / size;
+        mod = n % size;
 
-    if (rank < mod) {
-        n_loc = div + 1;
-        n_start = rank * n_loc;
-    } else {
-        n_loc = div;
-        n_start = rank * n_loc + mod;
+        if (i < mod) {
+            global_mpi_data->n_loc_list[i] = div + 1;
+            global_mpi_data->n_start_list[i] = i * (div + 1);
+        } else {
+            global_mpi_data->n_loc_list[i] = div;
+            global_mpi_data->n_start_list[i] = i * div + mod;
+        }
     }
 
-    global_mpi_data->n_start = n_start;
-    global_mpi_data->n_loc = n_loc;
+    global_mpi_data->n_start = global_mpi_data->n_start_list[rank];
+    global_mpi_data->n_loc = global_mpi_data->n_loc_list[rank];
     global_mpi_data->buffer_size = buffer_size;
     if (global_mpi_data->size > 1) {
         global_mpi_data->bot = (double *)malloc(buffer_size * sizeof(double));
@@ -91,6 +96,12 @@ void cleanup_mpi() {
         }
         if (global_mpi_data->top != NULL) {
             free(global_mpi_data->top);
+        }
+        if (global_mpi_data->n_loc_list != NULL) {
+            free(global_mpi_data->n_loc_list);
+        }
+        if (global_mpi_data->n_start_list != NULL) {
+            free(global_mpi_data->n_start_list);
         }
         free(global_mpi_data);
     }
@@ -132,6 +143,7 @@ void allreduce_buffer(double *buffer, long int size) {
 
 void collect_grid_buffer(double *data, double *recv, int n) {
     int n_loc = global_mpi_data->n_loc;
+    int n_loc_start;
     int size = global_mpi_data->size;
     int rank = global_mpi_data->rank;
 
@@ -143,15 +155,11 @@ void collect_grid_buffer(double *data, double *recv, int n) {
         if (rank == 0) {
             memcpy(recv, data, n3_loc * sizeof(double));
             for (int i=1; i<size; i++) {
-                int n_loc_start = 0;
-                int n_loc = 0;
-                MPI_Recv(&n_loc_start, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                MPI_Recv(&n_loc, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                n_loc = global_mpi_data->n_loc_list[i];
+                n_loc_start = global_mpi_data->n_start_list[i];
                 MPI_Recv(recv + n_loc_start * n2, n_loc * n2, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
         } else {
-            MPI_Send(&global_mpi_data->n_start, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-            MPI_Send(&global_mpi_data->n_loc, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
             MPI_Send(data, n3_loc, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
         }
     } else {

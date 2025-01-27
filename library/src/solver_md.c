@@ -79,8 +79,24 @@ void solver_init_field() {
     g_grid->init_field(g_grid);
 }
 
-void solver_update_field() {
-    g_grid->update_field(g_grid);
+void solver_set_field(double *phi) {
+    int n = g_grid->n;
+    long int n2 = n * n;
+    int n_start = get_n_start();
+    memcpy(g_grid->phi_n, phi + n_start * n2, g_grid->size * sizeof(double));
+}
+
+void solver_set_field_prev(double *phi) {
+    if (g_grid->phi_p != NULL) {
+        int n = g_grid->n;
+        long int n2 = n * n;
+        int n_start = get_n_start();
+        memcpy(g_grid->phi_p, phi + n_start * n2, g_grid->size * sizeof(double));
+    }
+}
+
+int solver_update_field() {
+    return g_grid->update_field(g_grid);
 }
 
 void solver_compute_forces_elec() {
@@ -210,12 +226,21 @@ void get_charges(long int *recv) {
     memcpy(recv, g_particles->charges, g_particles->n_p * sizeof(long int));
 }
 
+void get_masses(double *recv) {
+    memcpy(recv, g_particles->mass, g_particles->n_p * sizeof(double));
+}
+
 void get_field(double *recv) {
-    memcpy(recv, g_grid->phi_n, g_grid->size * sizeof(double));
+    collect_grid_buffer(g_grid->phi_n, recv, g_grid->n);
+}
+
+void get_field_prev(double *recv) {
+    double *ptr = g_grid->phi_p !=  NULL ? g_grid->phi_p : g_grid->phi_n;
+    collect_grid_buffer(ptr, recv, g_grid->n);
 }
 
 void get_q(double *recv) {
-    memcpy(recv, g_grid->q, g_grid->size * sizeof(double));
+    collect_grid_buffer(g_grid->q, recv, g_grid->n);
 }
 
 double get_kinetic_energy() {

@@ -44,6 +44,8 @@ class SolverMD(Logger):
         self.N = gset.N
         self.N_p = gset.N_p
 
+        self.n_iters = 0
+
         self.ofiles = OutputFiles(self.outset)
         self.out_stride = outset.stride
         self.out_flushstride = outset.flushstride * outset.stride
@@ -87,6 +89,8 @@ class SolverMD(Logger):
             raise ValueError(f"Potential {potential} not recognized.")
         pot_id = potential_map[potential]
 
+        if self.gset.input_file and self.gset.restart_file:
+            self.logger.warning("Both input and restart files provided. Using restart file.")
         start_file = self.gset.restart_file or self.gset.input_file
         kBT = self.mdv.kBT
 
@@ -146,7 +150,13 @@ class SolverMD(Logger):
                 self.initialize_field()
             self.compute_forces()
             self.integrator_part2()
-        else:
+        elif ffile:
+            df = pd.read_csv(ffile)
+            phi = np.ascontiguousarray(df['phi'].values).reshape((self.N, self.N, self.N))
+            capi.solver_set_field(phi)
+            phi = np.ascontiguousarray(df['phi_prev'].values).reshape((self.N, self.N, self.N))
+            capi.solver_set_field_prev(phi)
+
             self.logger.info(f"Initialization step skipped due to field loaded from file.")
 
         if self.mdv.rescale:
@@ -208,7 +218,7 @@ class SolverMD(Logger):
         self.integrator_part1()
         if self.mdv.elec:
             self.update_charges()
-            self.update_field()
+            self.n_iters = self.update_field()
         self.compute_forces()
         self.integrator_part2()
 

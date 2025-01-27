@@ -44,7 +44,7 @@ class BaseOutputFile(Logger, ABC):
         atexit.register(self.close)
 
     @abstractmethod
-    def write_data(self, df: pd.DataFrame, mode: str = 'a'):
+    def write_data(self, df: pd.DataFrame, mode: str = 'a', mpi_bypass: bool = False):
         pass
 
     @ensure_enabled
@@ -123,7 +123,7 @@ class OutputFiles:
                     self.flush()
         if self.restart_step == itr:
             self.restart.write_data(itr, solver, mode='w')
-            self.restart_field.write_data(itr, solver, mode='w')
+            self.restart_field.write_data(itr, solver, mode='w', mpi_bypass=True)
             self.restart.flush()
             self.restart_field.flush()
 

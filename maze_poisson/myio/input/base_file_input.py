@@ -88,11 +88,7 @@ class GridSetting(BaseSettings):
 
     @property
     def file(self):
-        if self.restart_file:
-            if self.input_file:
-                logger.warning("Both input and restart files are provided. Using the restart file.")
-            return self.restart_file
-        return self.input_file
+        return self.restart_file or self.input_file
 
 class MDVariables(BaseSettings):
     tocheck = ['N_steps', 'T', 'dt']
