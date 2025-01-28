@@ -5,42 +5,6 @@ import numpy.ctypeslib as npct
 
 from . import capi
 
-# int get_grid_type_num() {
-capi.register_function(
-    'get_grid_type_num', ctypes.c_int, [],
-)
-
-# char *get_grid_type_str(int n) {
-capi.register_function(
-    'get_grid_type_str', ctypes.c_char_p, [
-        ctypes.c_int,
-    ],
-)
-
-# int get_potential_type_num() {
-capi.register_function(
-    'get_potential_type_num', ctypes.c_int, [],
-)
-
-# char *get_potential_type_str(int n) {
-capi.register_function(
-    'get_potential_type_str', ctypes.c_char_p, [
-        ctypes.c_int,
-    ],
-)
-
-# int get_integrator_type_num() {
-capi.register_function(
-    'get_integrator_type_num', ctypes.c_int, [],
-)
-
-# char *get_integrator_type_str(int n) {
-capi.register_function(
-    'get_integrator_type_str', ctypes.c_char_p, [
-        ctypes.c_int,
-    ],
-)
-
 capi.register_function(
     'solver_initialize', None, [
         ctypes.c_int,
@@ -96,6 +60,20 @@ capi.register_function(
 # void solver_init_field() {
 capi.register_function(
     'solver_init_field', None, [],
+)
+
+# void solver_set_field(double *phi) {
+capi.register_function(
+    'solver_set_field', None, [
+        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void solver_set_field_prev(double *phi) {
+capi.register_function(
+    'solver_set_field_prev', None, [
+        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    ],
 )
 
 # int solver_update_field() {
@@ -161,105 +139,4 @@ capi.register_function(
 # void solver_finalize() {
 capi.register_function(
     'solver_finalize', None, [],
-)
-
-# void get_pos(double *recv) {
-capi.register_function(
-    'get_pos', None, [
-        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# void get_vel(double *recv) {
-capi.register_function(
-    'get_vel', None, [
-        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# void get_fcs_elec(double *recv) {
-capi.register_function(
-    'get_fcs_elec', None, [
-        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# void get_fcs_noel(double *recv) {
-capi.register_function(
-    'get_fcs_noel', None, [
-        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# void get_fcs_tot(double *recv) {
-capi.register_function(
-    'get_fcs_tot', None, [
-        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# void get_charges(long int *recv) {
-capi.register_function(
-    'get_charges', None, [
-        npct.ndpointer(dtype=np.int64, ndim=1, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# void get_masses(double *recv) {
-capi.register_function(
-    'get_masses', None, [
-        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# void get_field(double *recv) {
-capi.register_function(
-    'get_field', None, [
-        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# void get_field_prev(double *recv) {
-capi.register_function(
-    'get_field_prev', None, [
-        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# void solver_set_field(double *phi) {
-capi.register_function(
-    'solver_set_field', None, [
-        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# void solver_set_field_prev(double *phi) {
-capi.register_function(
-    'solver_set_field_prev', None, [
-        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# void get_q(double *recv) {
-capi.register_function(
-    'get_q', None, [
-        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# double get_kinetic_energy() {
-capi.register_function(
-    'get_kinetic_energy', ctypes.c_double, [],
-)
-
-# void get_momentum(double *recv) {
-capi.register_function(
-    'get_momentum', None, [
-        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
-    ],
-)
-
-# double get_temperature() {
-capi.register_function(
-    'get_temperature', ctypes.c_double, [],
 )

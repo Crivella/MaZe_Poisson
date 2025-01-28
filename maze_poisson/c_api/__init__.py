@@ -98,6 +98,6 @@ capi = CAPI()
 capi.register_init(signal.signal, (signal.SIGINT, signal.SIG_DFL))
 
 # Needed to register functions from other modules
-from . import mpi_base, solver
+from . import get_functions, mpi_base, solver
 
 __all__ = ['capi']
