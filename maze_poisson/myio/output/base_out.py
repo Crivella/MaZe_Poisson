@@ -1,7 +1,6 @@
 import atexit
 import os
 from abc import ABC, abstractmethod
-from functools import wraps
 from io import StringIO
 
 import pandas as pd
@@ -11,14 +10,6 @@ from .. import get_enabled_io
 from ..input import OutputSettings
 
 
-def ensure_enabled(func):
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        if not self.enabled:
-            return
-        return func(self, *args, **kwargs)
-    return wrapper
-
 class BaseOutputFile(Logger, ABC):
     name = None
     def __init__(self, *args, path: str, enabled: bool = True, overwrite: bool = True, **kwargs):
@@ -27,7 +18,7 @@ class BaseOutputFile(Logger, ABC):
         self._enabled = enabled
         self._io_enabled = get_enabled_io()
 
-        if not enabled:
+        if not self.enabled:
             return
 
         self.logger.info("Saving %s to '%s'", self.name, self.path)
@@ -52,17 +43,17 @@ class BaseOutputFile(Logger, ABC):
     def write_data(self, df: pd.DataFrame, mode: str = 'a', mpi_bypass: bool = False):
         pass
 
-    @ensure_enabled
     def flush(self):
-        with open(self.path, 'a', encoding='utf-8') as f:
-            f.write(self.buffer.getvalue())
-        self.buffer.truncate(0)
-        self.buffer.seek(0)
+        if self.enabled:
+            with open(self.path, 'a', encoding='utf-8') as f:
+                f.write(self.buffer.getvalue())
+            self.buffer.truncate(0)
+            self.buffer.seek(0)
 
-    @ensure_enabled
     def close(self):
-        self.flush()
-
+        if self.enabled:
+            self.flush()
+            self.buffer.close()
 
 class OutputFiles:
     performance = None
@@ -126,13 +117,6 @@ class OutputFiles:
                     file = getattr(self, name)
                     if file:
                         file.write_data(itr, solver)
-                # self.energy.write_data(itr, solver)
-                # self.momentum.write_data(itr, solver)
-                # self.tot_force.write_data(itr, solver)
-                # self.temperature.write_data(itr, solver)
-                # self.solute.write_data(itr, solver)
-                # self.performance.write_data(itr, solver)
-                # # self.field.write_data(itr, solver)
                 if force or (self.out_flushstride and itr % self.out_flushstride == 0):
                     self.flush()
         if self.restart_step == itr:

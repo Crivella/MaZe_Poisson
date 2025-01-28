@@ -14,18 +14,18 @@ from .myio.input import GridSetting, MDVariables, OutputSettings
 np.random.seed(42)
 
 method_grid_map: Dict[str, int] = {
-    'LCG': 0,
-    'FFT': 1,
+    # 'LCG': 0,
+    # 'FFT': 1,
 }
 
 integrator_map: Dict[str, int] = {
-    'OVRVO': 0,
-    'VERLET': 1,
+    # 'OVRVO': 0,
+    # 'VERLET': 1,
 }
 
 potential_map: Dict[str, int] = {
-    'TF': 0,
-    'LD': 1,
+    # 'TF': 0,
+    # 'LD': 1,
 }
 
 class SolverMD(Logger):
@@ -59,6 +59,8 @@ class SolverMD(Logger):
         """Initialize the solver."""
         capi.solver_initialize(self.N)
 
+        self.initialize_str_maps()
+
         self.initialize_grid()
         self.initialize_particles()
         self.initialize_integrator()
@@ -70,6 +72,23 @@ class SolverMD(Logger):
         """Finalize the solver."""
         capi.solver_finalize()
         Clock.report_all()
+
+    def initialize_str_maps(self):
+        """Initialize the string maps."""
+        n = capi.get_grid_type_num()
+        for i in range(n):
+            ptr = capi.get_grid_type_str(i)
+            method_grid_map[ptr.decode('utf-8').upper()] = i
+
+        n = capi.get_potential_type_num()
+        for i in range(n):
+            ptr = capi.get_potential_type_str(i)
+            potential_map[ptr.decode('utf-8').upper()] = i
+
+        n = capi.get_integrator_type_num()
+        for i in range(n):
+            ptr = capi.get_integrator_type_str(i)
+            integrator_map[ptr.decode('utf-8').upper()] = i
 
     def initialize_grid(self):
         """Initialize the grid."""

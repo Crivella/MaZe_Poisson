@@ -5,6 +5,16 @@
 #include "charges.h"
 #include "mp_structs.h"
 
+char grid_type_str[2][16] = {"LCG", "FFT"};
+
+int get_grid_type_num() {
+    return GRID_TYPE_NUM;
+}
+
+char *get_grid_type_str(int n) {
+    return grid_type_str[n];
+}
+
 
 grid * grid_init(int n, double L, double h, double tol, int type) {
     int n_loc = get_n_loc();

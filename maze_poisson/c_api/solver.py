@@ -5,6 +5,42 @@ import numpy.ctypeslib as npct
 
 from . import capi
 
+# int get_grid_type_num() {
+capi.register_function(
+    'get_grid_type_num', ctypes.c_int, [],
+)
+
+# char *get_grid_type_str(int n) {
+capi.register_function(
+    'get_grid_type_str', ctypes.c_char_p, [
+        ctypes.c_int,
+    ],
+)
+
+# int get_potential_type_num() {
+capi.register_function(
+    'get_potential_type_num', ctypes.c_int, [],
+)
+
+# char *get_potential_type_str(int n) {
+capi.register_function(
+    'get_potential_type_str', ctypes.c_char_p, [
+        ctypes.c_int,
+    ],
+)
+
+# int get_integrator_type_num() {
+capi.register_function(
+    'get_integrator_type_num', ctypes.c_int, [],
+)
+
+# char *get_integrator_type_str(int n) {
+capi.register_function(
+    'get_integrator_type_str', ctypes.c_char_p, [
+        ctypes.c_int,
+    ],
+)
+
 capi.register_function(
     'solver_initialize', None, [
         ctypes.c_int,

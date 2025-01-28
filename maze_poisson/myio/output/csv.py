@@ -5,7 +5,7 @@ import pandas as pd
 
 from ...c_api import capi
 from ...constants import a0, conv_mass
-from .base_out import BaseOutputFile, OutputFiles, ensure_enabled
+from .base_out import BaseOutputFile, OutputFiles
 
 
 class CSVOutputFile(BaseOutputFile):
@@ -13,8 +13,9 @@ class CSVOutputFile(BaseOutputFile):
         super().__init__(*args, **kwargs)
         self.init_headers()
 
-    @ensure_enabled
     def init_headers(self):
+        if not self.enabled:
+            return
         pd.DataFrame(columns=self.headers).to_csv(self.buffer, index=False)
 
     def write_data(self, iter: int, solver = None, mode: str = 'a', mpi_bypass: bool = False):

@@ -7,6 +7,16 @@
 #include "forces.h"
 #include "mp_structs.h"
 
+char potential_type_str[2][16] = {"TF", "LD"};
+
+int get_potential_type_num() {
+    return PARTICLE_POTENTIAL_TYPE_NUM;
+}
+
+char *get_potential_type_str(int n) {
+    return potential_type_str[n];
+}
+
 particles * particles_init(int n, int n_p, double L, double h) {
     particles *p = (particles *)malloc(sizeof(particles));
     p->n = n;
