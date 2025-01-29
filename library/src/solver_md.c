@@ -5,6 +5,7 @@
 
 #include "mp_structs.h"
 #include "mpi_base.h"
+#include "omp_base.h"
 
 #define MAX_ITG_PARAMS 10
 
@@ -16,8 +17,27 @@ double q_tot = 0.0;
 
 
 void solver_initialize(int n_grid) {
-    init_mpi();
-    init_mpi_grid(n_grid);
+    int size = init_mpi();
+    int rank = get_rank();
+    int n_loc = init_mpi_grid(n_grid);
+
+    int n_threads = get_omp_max_threads();
+
+    if (rank == 0) {
+        printf("******************************************************\n");
+        printf("* MAZE_POISSON\n");
+        if (size > 0) {
+            printf("*   MPI version    running on %d processes\n", size);
+        } else {
+            printf("*   MPI not available\n");
+        }
+        if (n_threads > 0) {
+            printf("*   OpenMP version running on %d threads\n", n_threads);
+        } else {
+            printf("*   OpenMP not available\n");
+        }
+        printf("******************************************************\n");
+    }
 }
 
 void solver_initialize_grid(int n_grid, double L, double h, double tol, int grid_type) {
