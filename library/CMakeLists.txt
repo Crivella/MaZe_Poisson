@@ -25,6 +25,7 @@ option(MP_AVX "Enable AVX" ON)
 find_package(OpenMP COMPONENTS C)
 find_package(MPI COMPONENTS C)
 find_package(FFTW3 COMPONENTS DOUBLE_OPENMP DOUBLE)
+find_package(LAPACK)
 
 # Set the compiler flags
 set(CMAKE_C_FLAGS_DEBUG "-g")
@@ -88,6 +89,26 @@ if (MPI_C_FOUND)
     target_compile_definitions(maze_poisson PRIVATE __MPI)
     target_include_directories(maze_poisson PRIVATE ${MPI_C_INCLUDE_PATH})
     target_link_libraries(maze_poisson PRIVATE ${MPI_C_LIBRARIES})
+endif()
+# Set LAPACK flags
+if (LAPACK_FOUND)
+    target_compile_definitions(maze_poisson PRIVATE __LAPACK)
+    list(APPEND _lapack_libs
+        ${BLAS_LIBRARIES}
+        ${BLAS_LINKER_FLAGS}
+        ${LAPACK_LIBRARIES}
+        ${LAPACK_LINKER_FLAGS})
+    list(REMOVE_DUPLICATES _lapack_libs)
+    target_link_libraries(maze_poisson PRIVATE ${_lapack_libs})
+    find_path(
+        LAPACK_INCLUDE_DIRS
+        NAMES cblas.h
+        HINTS $ENV{LAPACK_ROOT}
+        PATH_SUFFIXES include include/flexiblas/
+        NO_DEFAULT_PATH    
+    )
+    message(STATUS "LAPACK include dirs: ${LAPACK_INCLUDE_DIRS}")
+    target_include_directories(maze_poisson PRIVATE ${LAPACK_INCLUDE_DIRS})
 endif()
 # Set FFTW flags
 if (FFTW3_FOUND)

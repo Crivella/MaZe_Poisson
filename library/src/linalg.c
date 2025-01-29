@@ -1,7 +1,4 @@
 #include <math.h>
-#ifdef _OPENMP
-#include <omp.h>
-#endif
 
 #include "mpi_base.h"
 
@@ -10,6 +7,27 @@
 #else
 #define EXTERN_C
 #endif
+
+#ifdef __LAPACK ///////////////////////////////////////////////////////////////////////////
+
+#include <cblas.h>
+
+EXTERN_C double ddot(double *u, double *v, long int n) {
+    double result = 0.0;
+    result = cblas_ddot(n, u, 1, v, 1);
+    allreduce_sum(&result, 1);
+    return result;
+}
+
+EXTERN_C void daxpy(double *v, double *u, double alpha, long int n) {
+    cblas_daxpy(n, alpha, v, 1, u, 1);
+}
+
+EXTERN_C double norm(double *u, long int n) {
+    return cblas_dnrm2(n, u, 1);
+}
+
+#else // __LAPACK ///////////////////////////////////////////////////////////////////////////
 
 /*
 Compute the dot product of two vectors
@@ -28,6 +46,8 @@ EXTERN_C double ddot(double *u, double *v, long int n) {
     allreduce_sum(&result, 1);
     return result;
 }
+
+
 
 /*
 Compute the sum of two vectors scaled by a constant (u += alpha * v)
@@ -54,3 +74,5 @@ Compute the Euclidean norm of a vector
 EXTERN_C double norm(double *u, long int n) {
     return sqrt(ddot(u, u, n));
 }
+
+#endif // __LAPACK ///////////////////////////////////////////////////////////////////////////
