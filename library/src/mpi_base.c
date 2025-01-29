@@ -145,19 +145,15 @@ void collect_grid_buffer(double *data, double *recv, int n) {
     long int n2 = n * n;
     long int n3_loc = n_loc * n2;
 
-    if (size > 1) {
-        if (rank == 0) {
-            memcpy(recv, data, n3_loc * sizeof(double));
-            for (int i=1; i<size; i++) {
-                n_loc = global_mpi_data->n_loc_list[i];
-                n_loc_start = global_mpi_data->n_start_list[i];
-                MPI_Recv(recv + n_loc_start * n2, n_loc * n2, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            }
-        } else {
-            MPI_Send(data, n3_loc, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+    if (rank == 0) {
+        memcpy(recv, data, n3_loc * sizeof(double));
+        for (int i=1; i<size; i++) {
+            n_loc = global_mpi_data->n_loc_list[i];
+            n_loc_start = global_mpi_data->n_start_list[i];
+            MPI_Recv(recv + n_loc_start * n2, n_loc * n2, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
     } else {
-        memcpy(recv, data, n3_loc * sizeof(double));
+        MPI_Send(data, n3_loc, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
     }
 }
 
