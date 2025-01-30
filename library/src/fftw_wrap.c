@@ -192,17 +192,17 @@ void rfft_solve(int n, double *b, double *ig2, double *x) {
 #else // __FFTW
 
 void init_rfft(int n) {
-    fprintf(stderr, "FFTW not enabled\n");
+    fprintf(stderr, "TERMINATING: Library compiled without FFTW support\n");
     exit(1);
 }
 
 void cleanup_fftw() {
-    fprintf(stderr, "FFTW not enabled\n");
+    fprintf(stderr, "TERMINATING: Library compiled without FFTW support\n");
     exit(1);
 }
 
 void rfft_solve(int n, double *b, double *ig2, double *x) {
-    fprintf(stderr, "FFTW not enabled\n");
+    fprintf(stderr, "TERMINATING: Library compiled without FFTW support\n");
     exit(1);
 }
 
