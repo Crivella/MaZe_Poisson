@@ -53,7 +53,6 @@ void fft_grid_init(grid * grid) {
         }
     }
 
-    init_fftw_omp();
     init_rfft(n);
 
 
