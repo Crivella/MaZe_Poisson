@@ -4,8 +4,14 @@
 #ifdef __FFTW
 // Order matters here, including complex.h before fftw3.h makes fftw_complex be a complex instead of a double[2]
 #include <complex.h>
+
+#ifdef __FFTW_MPI
+#include <fftw3-mpi.h>
+#else  // __FFTW_MPI
 #include <fftw3.h>
-#endif
+#endif  // __FFTW_MPI
+
+#endif  // __FFTW
 
 #define FFTW_BLANK 0
 #define FFTW_INITIALIZED 1

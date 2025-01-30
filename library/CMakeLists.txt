@@ -24,7 +24,7 @@ option(MP_AVX "Enable AVX" ON)
 # Find the required packages
 find_package(OpenMP COMPONENTS C)
 find_package(MPI COMPONENTS C)
-find_package(FFTW3 COMPONENTS DOUBLE_OPENMP DOUBLE)
+find_package(FFTW3 COMPONENTS DOUBLE_MPI DOUBLE_OPENMP DOUBLE)
 find_package(LAPACK)
 
 # Set the compiler flags
@@ -113,6 +113,9 @@ endif()
 # Set FFTW flags
 if (FFTW3_FOUND)
     target_compile_definitions(maze_poisson PRIVATE __FFTW)
+    if (FFTW3_DOUBLE_MPI_FOUND)
+        target_compile_definitions(maze_poisson PRIVATE __FFTW_MPI)
+    endif()
     target_link_libraries(maze_poisson PRIVATE FFTW3)
 endif()
 

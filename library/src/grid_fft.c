@@ -2,16 +2,22 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "mpi_base.h"
 #include "mp_structs.h"
 #include "fftw_wrap.h"
 
 void fft_grid_init(grid * grid) {
+    // #ifndef __FFTW_MPI
+    if (get_size() > 1) {
+        fprintf(stderr, "FFT grid does not support MPI\n");
+        exit(1);
+    }
+    // #endif
     int n = grid->n;
     double L = grid->L;
     double h = grid->h;
 
     int nh = n / 2 + 1;
-
 
     long int size = n * n * n;
     grid->size = size;

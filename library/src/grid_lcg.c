@@ -4,9 +4,12 @@
 
 #include "laplace.h"
 #include "mp_structs.h"
+#include "mpi_base.h"
 
 void lcg_grid_init(grid * grid) {
     int n = grid->n;
+
+    grid->n_local = get_n_loc();
 
     long int size = grid->n_local * n * n;
     grid->size = size;

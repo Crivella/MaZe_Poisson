@@ -17,18 +17,12 @@ char *get_grid_type_str(int n) {
 
 
 grid * grid_init(int n, double L, double h, double tol, int type) {
-    int n_loc = get_n_loc();
-
     void   (*init_func)(grid *);
     switch (type) {
         case GRID_TYPE_LCG:
             init_func = lcg_grid_init;
             break;
         case GRID_TYPE_FFT:
-            if (n_loc != n) {
-                fprintf(stderr, "FFT grid does not support MPI\n");
-                exit(1);
-            }
             init_func = fft_grid_init;
             break;
         default:
@@ -41,7 +35,7 @@ grid * grid_init(int n, double L, double h, double tol, int type) {
     new->L = L;
     new->h = h;
 
-    new->n_local = get_n_loc();
+    new->n_local = n;
 
     new->y = NULL;
     new->q = NULL;

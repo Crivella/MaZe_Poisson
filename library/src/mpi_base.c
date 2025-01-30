@@ -164,6 +164,8 @@ int init_mpi() {
     if (global_mpi_data == NULL) {
         global_mpi_data = (mpi_data *)malloc(sizeof(mpi_data));
     }
+    global_mpi_data->rank = 0;
+    global_mpi_data->size = 1;
 
     return 0;
 }
