@@ -7,12 +7,12 @@
 #include "fftw_wrap.h"
 
 void fft_grid_init(grid * grid) {
-    // #ifndef __FFTW_MPI
+    #ifndef __FFTW_MPI
     if (get_size() > 1) {
         fprintf(stderr, "FFT grid does not support MPI\n");
         exit(1);
     }
-    // #endif
+    #endif
     int n = grid->n;
     double L = grid->L;
     double h = grid->h;

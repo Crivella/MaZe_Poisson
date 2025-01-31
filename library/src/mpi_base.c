@@ -79,6 +79,21 @@ int init_mpi_grid(int n) {
         global_mpi_data->n_start_list[i] = n_start;
     }
 
+    // div = (n+size-1) / size;
+    // mod = n % size;
+    // for (int i=0; i<size-1; i++) {
+    //     n_loc = div;
+    //     n_start = i * div;
+    //     global_mpi_data->n_loc_list[i] = n_loc;
+    //     global_mpi_data->n_start_list[i] = n_start;
+    // }
+    // global_mpi_data->n_loc_list[size-1] = n - div * (size-1);
+    // if (global_mpi_data->n_loc_list[size-1] == 0) {
+    //     global_mpi_data->n_start_list[size-1] = 0;
+    // } else {
+    //     global_mpi_data->n_start_list[size-1] = div * (size-1);
+    // }
+
     global_mpi_data->n_start = global_mpi_data->n_start_list[rank];
     global_mpi_data->n_loc = global_mpi_data->n_loc_list[rank];
     global_mpi_data->buffer_size = buffer_size;
