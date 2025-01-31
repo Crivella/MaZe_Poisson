@@ -9,7 +9,7 @@ void verlet_integrator_init(integrator *integrator) {
     integrator->stop_thermostat = verlet_integrator_stop_thermostat;
 }
 
-void * verlet_integrator_part1(integrator *integrator, particles *p) {
+void verlet_integrator_part1(integrator *integrator, particles *p) {
     double target_T = integrator->T;
     double current_T;
 
@@ -52,7 +52,7 @@ void * verlet_integrator_part1(integrator *integrator, particles *p) {
     }
 }
 
-void * verlet_integrator_part2(integrator *integrator, particles *p) {
+void verlet_integrator_part2(integrator *integrator, particles *p) {
     long int ni, nj;
     double dt = integrator->dt;
 
@@ -70,11 +70,11 @@ void * verlet_integrator_part2(integrator *integrator, particles *p) {
     }
 }
 
-void * verlet_integrator_init_thermostat(integrator *integrator, double *params) {
+void verlet_integrator_init_thermostat(integrator *integrator, double *params) {
     integrator->T = params[0];
     integrator->enabled = INTEGRATOR_ENABLED;
 }
 
-void * verlet_integrator_stop_thermostat(integrator *integrator) {
+void verlet_integrator_stop_thermostat(integrator *integrator) {
     integrator->enabled = INTEGRATOR_DISABLED;
 }

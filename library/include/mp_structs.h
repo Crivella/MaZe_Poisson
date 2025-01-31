@@ -28,7 +28,7 @@ integrator * integrator_init(int n_p, double dt, int type);
 
 void * grid_free(grid *grid);
 void * particles_free(particles *p);
-void * integrator_free(integrator *integrator);
+void integrator_free(integrator *integrator);
 
 void lcg_grid_init(grid * grid);
 void lcg_grid_cleanup(grid * grid);
@@ -56,16 +56,16 @@ void * particles_get_momentum(particles *p, double *out);
 void * particles_rescale_velocities(particles *p);
 
 void ovrvo_integrator_init(integrator *integrator);
-void * ovrvo_integrator_part1(integrator *integrator, particles *p);
-void * ovrvo_integrator_part2(integrator *integrator, particles *p);
-void * ovrvo_integrator_init_thermostat(integrator *integrator, double *params);
-void * ovrvo_integrator_stop_thermostat(integrator *integrator);
+void ovrvo_integrator_part1(integrator *integrator, particles *p);
+void ovrvo_integrator_part2(integrator *integrator, particles *p);
+void ovrvo_integrator_init_thermostat(integrator *integrator, double *params);
+void ovrvo_integrator_stop_thermostat(integrator *integrator);
 
 void verlet_integrator_init(integrator *integrator);
-void * verlet_integrator_part1(integrator *integrator, particles *p);
-void * verlet_integrator_part2(integrator *integrator, particles *p);
-void * verlet_integrator_init_thermostat(integrator *integrator, double *params);
-void * verlet_integrator_stop_thermostat(integrator *integrator);
+void verlet_integrator_part1(integrator *integrator, particles *p);
+void verlet_integrator_part2(integrator *integrator, particles *p);
+void verlet_integrator_init_thermostat(integrator *integrator, double *params);
+void verlet_integrator_stop_thermostat(integrator *integrator);
 
 // Struct definitions
 struct grid {
@@ -141,11 +141,11 @@ struct integrator {
     double c1;  // Thermostat parameter
     double c2;  // Thermostat parameter
 
-    void *  (*part1)( integrator *, particles *);
-    void *  (*part2)( integrator *, particles *);
-    void *  (*init_thermostat)( integrator *, double *);
-    void *  (*stop_thermostat)( integrator *);
-    void *  (*free)( integrator *);
+    void    (*part1)( integrator *, particles *);
+    void    (*part2)( integrator *, particles *);
+    void    (*init_thermostat)( integrator *, double *);
+    void    (*stop_thermostat)( integrator *);
+    void    (*free)( integrator *);
 };
 
 #endif // __MP_STRUCTS_H

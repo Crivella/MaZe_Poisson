@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 
 #include "mp_structs.h"
@@ -40,6 +42,8 @@ void ovrvo_integrator_init(integrator *integrator) {
 }
 
 void o_block(integrator *integrator, particles *p) {
+    fprintf(stderr, "O block not implemented\n");
+    exit(1);
     double dt = integrator->dt;
     double c1 = integrator->c1;
     double T = integrator->T;
@@ -117,7 +121,7 @@ void r_block(integrator *integrator, particles *p) {
     }
 }
 
-void * ovrvo_integrator_part1(integrator *integrator, particles *p) {
+void ovrvo_integrator_part1(integrator *integrator, particles *p) {
     if (integrator->enabled == INTEGRATOR_ENABLED) {
         o_block(integrator, p);
     }
@@ -125,14 +129,14 @@ void * ovrvo_integrator_part1(integrator *integrator, particles *p) {
     r_block(integrator, p);
 }
 
-void * ovrvo_integrator_part2(integrator *integrator, particles *p) {
+void ovrvo_integrator_part2(integrator *integrator, particles *p) {
     v_block(integrator, p);
     if (integrator->enabled == INTEGRATOR_ENABLED) {
         o_block(integrator, p);
     }
 }
 
-void * ovrvo_integrator_init_thermostat(integrator *integrator, double *params) {
+void ovrvo_integrator_init_thermostat(integrator *integrator, double *params) {
     integrator->T = params[0];
     double gamma = params[1];
 
@@ -142,7 +146,7 @@ void * ovrvo_integrator_init_thermostat(integrator *integrator, double *params) 
     integrator->c2 = sqrt(2 / (gamma * integrator->dt) * tanh(0.5 * gamma * integrator->dt));
 }
 
-void * ovrvo_integrator_stop_thermostat(integrator *integrator) {
+void ovrvo_integrator_stop_thermostat(integrator *integrator) {
     integrator->enabled = INTEGRATOR_DISABLED;
     integrator->c1 = 1.0;
     integrator->c2 = 1.0;

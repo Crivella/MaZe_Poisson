@@ -4,16 +4,6 @@
 #include "mp_structs.h"
 #include "constants.h"
 
-// char grid_type_str[2][16] = {"LCG", "FFT"};
-
-// int get_grid_type_num() {
-//     return GRID_TYPE_NUM;
-// }
-
-// char *get_grid_type_str(int n) {
-//     return grid_type_str[n];
-// }
-
 char integrator_type_str[2][16] = {"OVRVO", "VERLET"};
 
 int get_integrator_type_num() {
@@ -50,8 +40,6 @@ integrator * integrator_init(int n_p, double dt, int type) {
     return new;
 }
 
-void * integrator_free(integrator *integrator) {
+void integrator_free(integrator *integrator) {
     free(integrator);
-
-    return NULL;
 }
