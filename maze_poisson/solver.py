@@ -157,25 +157,25 @@ class SolverMD(Logger):
         ffile = self.gset.restart_field_file
         if ffile is None or self.mdv.invert_time:
             # STEP 0 Verlet
-            self.logger.info("---- Udpating charges")
+            # self.logger.info("---- Udpating charges")
             self.update_charges()
             if self.mdv.preconditioning:
-                self.logger.info("---- Initializing field")
+                # self.logger.info("---- Initializing field")
                 self.initialize_field()
-            self.logger.info("---- Computing forces")
+            # self.logger.info("---- Computing forces")
             self.compute_forces()
 
             # STEP 1 Verlet
-            self.logger.info("---- Integrator part 1")
+            # self.logger.info("---- Integrator part 1")
             self.integrator_part1()
-            self.logger.info("---- Updating charges")
+            # self.logger.info("---- Updating charges")
             self.update_charges()
             if self.mdv.preconditioning:
-                self.logger.info("---- Initializing field")
+                # self.logger.info("---- Initializing field")
                 self.initialize_field()
-            self.logger.info("---- Computing forces")
+            # self.logger.info("---- Computing forces")
             self.compute_forces()
-            self.logger.info("---- Integrator part 2")
+            # self.logger.info("---- Integrator part 2")
             self.integrator_part2()
         elif ffile:
             df = pd.read_csv(ffile)

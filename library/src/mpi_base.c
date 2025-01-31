@@ -81,6 +81,7 @@ void cleanup_mpi() {
 }
 
 void exchange_bot_top(double *bot, double *top, double **bot_recv, double **top_recv) {
+    // Skip loop communication if the processor is holding no data
     if (global_mpi_data->n_loc == 0) {
         return;
     }

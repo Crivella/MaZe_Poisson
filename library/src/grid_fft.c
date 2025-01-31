@@ -29,6 +29,8 @@ void fft_grid_init_mpi(grid *grid) {
         mpid->n_start_list[i] = n_start;
         // printf("FFT MPI(%d %d): n_local = %d, n_start = %d\n", rank, i, n_loc, n_start);
     }
+    // Check that if some processors have no local grid points they should be skipped
+    // from the loop communication
     if (rank < size-1) {
         if (mpid->n_loc_list[rank+1] == 0) {
             mpid->next_rank = 0;
@@ -44,10 +46,10 @@ void fft_grid_init_mpi(grid *grid) {
             }
         }
     }
-    printf(
-        "FFT MPI(%d): n_local = %d, n_start = %d, prev_rank=%d, nxt_rank=%d\n",
-        rank, grid->n_local, grid->n_start, mpid->prev_rank, mpid->next_rank
-    );
+    // printf(
+    //     "FFT MPI(%d): n_local = %d, n_start = %d, prev_rank=%d, nxt_rank=%d\n",
+    //     rank, grid->n_local, grid->n_start, mpid->prev_rank, mpid->next_rank
+    // );
     mpid->buffer_size = buffer_size;
     if (size > 1) {
         mpid->bot = (double *)malloc(buffer_size * sizeof(double));
