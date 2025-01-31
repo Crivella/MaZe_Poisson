@@ -16,10 +16,9 @@ grid *g_grid = NULL;
 double q_tot = 0.0;
 
 
-void solver_initialize(int n_grid) {
+void solver_initialize() {
     int size = init_mpi();
     int rank = get_rank();
-    int n_loc = init_mpi_grid(n_grid);
 
     int n_threads = get_omp_max_threads();
 

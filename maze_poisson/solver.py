@@ -57,7 +57,7 @@ class SolverMD(Logger):
     @Clock('initialize')
     def initialize(self):
         """Initialize the solver."""
-        capi.solver_initialize(self.N)
+        capi.solver_initialize()
 
         self.initialize_str_maps()
 
@@ -157,17 +157,25 @@ class SolverMD(Logger):
         ffile = self.gset.restart_field_file
         if ffile is None or self.mdv.invert_time:
             # STEP 0 Verlet
+            self.logger.info("---- Udpating charges")
             self.update_charges()
             if self.mdv.preconditioning:
+                self.logger.info("---- Initializing field")
                 self.initialize_field()
+            self.logger.info("---- Computing forces")
             self.compute_forces()
 
             # STEP 1 Verlet
+            self.logger.info("---- Integrator part 1")
             self.integrator_part1()
+            self.logger.info("---- Updating charges")
             self.update_charges()
             if self.mdv.preconditioning:
+                self.logger.info("---- Initializing field")
                 self.initialize_field()
+            self.logger.info("---- Computing forces")
             self.compute_forces()
+            self.logger.info("---- Integrator part 2")
             self.integrator_part2()
         elif ffile:
             df = pd.read_csv(ffile)

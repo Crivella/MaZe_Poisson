@@ -38,11 +38,16 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
     h *= 2.0;
 
     int n_loc1 = n_loc - 1;
-    double *ptr_p1 = phi + n2;  // Pointer to the first +1 slice
-    double *ptr_m1 = phi + (n_loc - 2) * n2; // Pointer to the last -1 slice
+    double *ptr_p1 = phi + n2;  // Pointer to the first slice + 1 
+    double *ptr_m1 = phi + (n_loc - 2) * n2; // Pointer to the last slice -1
 
     double *bot, *top;
     exchange_bot_top(phi, phi + n_loc1 * n2, &bot, &top);
+
+    if (n_loc == 1) {
+        ptr_p1 = top;
+        ptr_m1 = bot;
+    }
 
     double sum_q = 0.0;
     #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, E, qc, ptr1, ptr2) reduction(+:sum_q)

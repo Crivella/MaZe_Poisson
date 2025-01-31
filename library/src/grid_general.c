@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "mpi_base.h"
 #include "charges.h"
 #include "mp_structs.h"
 
@@ -36,6 +35,7 @@ grid * grid_init(int n, double L, double h, double tol, int type) {
     new->h = h;
 
     new->n_local = n;
+    new->n_start = 0;
 
     new->y = NULL;
     new->q = NULL;
@@ -57,7 +57,7 @@ grid * grid_init(int n, double L, double h, double tol, int type) {
     return new;
 }
 
-void * grid_free(grid *grid) {
+void grid_free(grid *grid) {
     if (grid->ig2 != NULL) {
         free(grid->ig2);
     }

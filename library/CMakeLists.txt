@@ -20,11 +20,21 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 option(MP_FAST_MATH "Enable fast math" ON)
 option(MP_MTUNE "Enable -mtune=native" ON)
 option(MP_AVX "Enable AVX" ON)
+option(MP_USE_MPI "Use MPI" ON)
+option(MP_USE_OPENMP "Use OpenMP" ON)
+
+set(FFTW_COMPONENTS DOUBLE)
 
 # Find the required packages
 find_package(OpenMP COMPONENTS C)
 find_package(MPI COMPONENTS C)
-find_package(FFTW3 COMPONENTS DOUBLE_MPI DOUBLE_OPENMP DOUBLE)
+if (MPI_C_FOUND AND MP_USE_MPI)
+    list(APPEND FFTW_COMPONENTS DOUBLE_MPI)
+endif()
+if (OpenMP_C_FOUND AND MP_USE_OPENMP)
+    list(APPEND FFTW_COMPONENTS DOUBLE_OPENMP)
+endif()
+find_package(FFTW3 COMPONENTS ${FFTW_COMPONENTS})
 find_package(LAPACK)
 
 # Set the compiler flags
@@ -80,12 +90,12 @@ endif()
 target_include_directories(maze_poisson PRIVATE include)
 
 # Set OpenMP flags 
-if (OpenMP_C_FOUND)
+if (OpenMP_C_FOUND AND MP_USE_OPENMP)
     target_compile_options(maze_poisson PRIVATE ${OpenMP_C_FLAGS})
     target_link_libraries(maze_poisson PRIVATE ${OpenMP_C_LIBRARIES})
 endif()
 # Set MPI flags
-if (MPI_C_FOUND)
+if (MPI_C_FOUND AND MP_USE_MPI)
     target_compile_definitions(maze_poisson PRIVATE __MPI)
     target_include_directories(maze_poisson PRIVATE ${MPI_C_INCLUDE_PATH})
     target_link_libraries(maze_poisson PRIVATE ${MPI_C_LIBRARIES})

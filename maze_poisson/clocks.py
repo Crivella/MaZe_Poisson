@@ -38,10 +38,10 @@ class Clock(Logger):
         if self.num_calls == 0:
             return
         tot_time = self.cumul
-        avg_time = tot_time / self.num_calls
+        avg_time = tot_time / self.num_calls * 1000
 
         self.logger.info(
-            f"{self.name:>20s}   ({self.num_calls:>7d} CALLs): {tot_time:>13.4f} s  ({avg_time:>13.4f} s/CALL)"
+            f"{self.name:>20s}   ({self.num_calls:>7d} CALLs): {tot_time:>13.4f} s  ({avg_time:>10.1f} ms/CALL)"
             )
 
     @staticmethod

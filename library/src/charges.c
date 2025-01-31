@@ -22,7 +22,7 @@ double update_charges(
     int n_loc_start = get_n_start();
 
     long int ni, nj, nk, ni_loc;
-    long int i, i1, i2;
+    long int i1, i2;
     long int n2 = n_grid * n_grid;
     long int n3 = n_loc * n2;
 
@@ -34,12 +34,12 @@ double update_charges(
     double app, upd;
 
     #pragma omp parallel for
-    for (i=0; i < n3; i++) {
+    for (long int i=0; i < n3; i++) {
         q[i] = 0.0;
     }
 
     #pragma omp parallel for private(i1, i2, ni, nj, nk, ni_loc, px, py, pz, app, upd, chg) reduction(+:q_tot)
-    for (i=0; i<n_p; i++) {
+    for (long int i=0; i<n_p; i++) {
         i1 = i * 3;
         i2 = i * 24;
 

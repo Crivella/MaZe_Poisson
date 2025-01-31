@@ -6,6 +6,10 @@
 
 mpi_data *global_mpi_data = NULL;
 
+mpi_data *get_mpi_data() {
+    return global_mpi_data;
+}
+
 int get_size() {
     return global_mpi_data->size;
 }
@@ -56,55 +60,6 @@ int init_mpi() {
     return global_mpi_data->size;
 }
 
-int init_mpi_grid(int n) {
-    int rank, size, n_loc, n_start;
-    double div, mod;
-
-    long int buffer_size = n * n;
-
-    rank = global_mpi_data->rank;
-    size = global_mpi_data->size;
-
-    div = n / size;
-    mod = n % size;
-    for (int i=0; i<size; i++) {
-        if (i < mod) {
-            n_loc = div + 1;
-            n_start = i * n_loc;
-        } else {
-            n_loc = div;
-            n_start = i * n_loc + mod;
-        }
-        global_mpi_data->n_loc_list[i] = n_loc;
-        global_mpi_data->n_start_list[i] = n_start;
-    }
-
-    // div = (n+size-1) / size;
-    // mod = n % size;
-    // for (int i=0; i<size-1; i++) {
-    //     n_loc = div;
-    //     n_start = i * div;
-    //     global_mpi_data->n_loc_list[i] = n_loc;
-    //     global_mpi_data->n_start_list[i] = n_start;
-    // }
-    // global_mpi_data->n_loc_list[size-1] = n - div * (size-1);
-    // if (global_mpi_data->n_loc_list[size-1] == 0) {
-    //     global_mpi_data->n_start_list[size-1] = 0;
-    // } else {
-    //     global_mpi_data->n_start_list[size-1] = div * (size-1);
-    // }
-
-    global_mpi_data->n_start = global_mpi_data->n_start_list[rank];
-    global_mpi_data->n_loc = global_mpi_data->n_loc_list[rank];
-    global_mpi_data->buffer_size = buffer_size;
-    if (global_mpi_data->size > 1) {
-        global_mpi_data->bot = (double *)malloc(buffer_size * sizeof(double));
-        global_mpi_data->top = (double *)malloc(buffer_size * sizeof(double));
-    }
-
-    return n_loc;
-}
-
 void cleanup_mpi() {
     if (global_mpi_data != NULL) {
         if (global_mpi_data->bot != NULL) {
@@ -120,11 +75,15 @@ void cleanup_mpi() {
             free(global_mpi_data->n_start_list);
         }
         free(global_mpi_data);
+        global_mpi_data = NULL;
+        MPI_Finalize();
     }
-    MPI_Finalize();
 }
 
 void exchange_bot_top(double *bot, double *top, double **bot_recv, double **top_recv) {
+    if (global_mpi_data->n_loc == 0) {
+        return;
+    }
     if (global_mpi_data->size == 1) {
         *bot_recv = top;
         *top_recv = bot;
@@ -145,9 +104,9 @@ void exchange_bot_top(double *bot, double *top, double **bot_recv, double **top_
     }
 }
 
-void allreduce_sum(double *buffer, long int size) {
+void allreduce_sum(double *buffer, long int count) {
     if (global_mpi_data->size > 1) {
-        MPI_Allreduce(MPI_IN_PLACE, buffer, size, MPI_DOUBLE, MPI_SUM, global_mpi_data->comm);
+        MPI_Allreduce(MPI_IN_PLACE, buffer, count, MPI_DOUBLE, MPI_SUM, global_mpi_data->comm);
     }
 }
 
@@ -165,10 +124,10 @@ void collect_grid_buffer(double *data, double *recv, int n) {
         for (int i=1; i<size; i++) {
             n_loc = global_mpi_data->n_loc_list[i];
             n_loc_start = global_mpi_data->n_start_list[i];
-            MPI_Recv(recv + n_loc_start * n2, n_loc * n2, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(recv + n_loc_start * n2, n_loc * n2, MPI_DOUBLE, i, 0, global_mpi_data->comm, MPI_STATUS_IGNORE);
         }
     } else {
-        MPI_Send(data, n3_loc, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(data, n3_loc, MPI_DOUBLE, 0, 0, global_mpi_data->comm);
     }
 }
 
@@ -185,13 +144,6 @@ int init_mpi() {
     return 0;
 }
 
-int init_mpi_grid(int n) {
-    global_mpi_data->n_loc = n;
-    global_mpi_data->n_start = 0;
-
-    return n;
-}
-
 void cleanup_mpi() {
     if (global_mpi_data != NULL) {
         free(global_mpi_data);
@@ -200,8 +152,8 @@ void cleanup_mpi() {
 }
 
 void exchange_bot_top(double *bot, double *top, double **bot_recv, double **top_recv) {
-    *bot_recv = bot;
-    *top_recv = top;
+    *bot_recv = top;
+    *top_recv = bot;
 }
 
 void allreduce_sum(double *buffer, long int size) {

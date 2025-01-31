@@ -6,9 +6,7 @@ import numpy.ctypeslib as npct
 from . import capi
 
 capi.register_function(
-    'solver_initialize', None, [
-        ctypes.c_int,
-    ],
+    'solver_initialize', None, []
 )
 
 # void solverinitialize_grid(int n_grid, double L, double h, double tol, int grid_type) {

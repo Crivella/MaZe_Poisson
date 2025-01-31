@@ -27,9 +27,9 @@ typedef struct mpi_data {
 } mpi_data;
 
 int init_mpi();
-int init_mpi_grid(int n);
 void cleanup_mpi();
 
+mpi_data *get_mpi_data();
 int get_size();
 int get_rank();
 int get_n_loc();

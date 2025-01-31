@@ -7,19 +7,18 @@
 
 
 #ifdef __FFTW
-// int initialized_c = 0;
 int initialized_r = FFTW_BLANK;
-
-// fftw_plan c_fwd_plan;
-// fftw_plan c_bwd_plan;
+double *r_real;
+fftw_complex *r_cmpx;
 fftw_plan r_fwd_plan;
 fftw_plan r_bwd_plan;
 
+// int initialized_c = FFTW_BLANK;
 // fftw_complex *c_in;
 // fftw_complex *c_out;
+// fftw_plan c_fwd_plan;
+// fftw_plan c_bwd_plan;
 
-double *r_real;
-fftw_complex *r_cmpx;
 
 // int FLAG = FFTW_ESTIMATE;
 int FLAG = FFTW_MEASURE;
@@ -51,124 +50,64 @@ int FLAG = FFTW_MEASURE;
 
 #ifdef __FFTW_MPI
 
-// int same = 0;
-
-void init_rfft(int n) {
+void init_rfft(int n, int *n_loc, int *n_start) {
     if (initialized_r != FFTW_BLANK) {
         return;
     }
-    int rank = get_rank();
+    mpi_data *mpid = get_mpi_data();
     initialized_r = FFTW_DOCLEANUP;
 
     int nh = n / 2 + 1;
 
     fftw_mpi_init();
     ptrdiff_t loc0, loc_start, loc_size;
-    loc_size = fftw_mpi_local_size_3d(n, n, nh, MPI_COMM_WORLD, &loc0, &loc_start);
-    // ptrdiff_t fftw_mpi_local_size_many(
-    //     int rnk, const ptrdiff_t *n, ptrdiff_t howmany,
-    //     ptrdiff_t block0, MPI_Comm comm,
-    //     ptrdiff_t *local_n0, ptrdiff_t *local_0_start
-    // );
-    // loc_size = fftw_mpi_local_size_many(
-    //     3, (ptrdiff_t[]){n, n, nh}, 1, n / get_size(), MPI_COMM_WORLD, &loc0, &loc_start
-    // );
+    loc_size = fftw_mpi_local_size_3d(n, n, nh, mpid->comm, &loc0, &loc_start);
 
-    // printf(
-    //     "--- FFTW_MPI (%d): loc0 = %ld, n_loc = %d, loc_start = %ld, n_start = %d size=%d\n",
-    //     rank, loc0, get_n_loc(), loc_start, get_n_start(), loc_size
-    //     );
-
-    int cnt = 0;
-    if (loc0 != get_n_loc() || loc_start != get_n_start()) {
-        cnt = 1;
-    }
-    MPI_Allreduce(MPI_IN_PLACE, &cnt, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    if (cnt > 0) {
-        fprintf(
-            stderr,
-            "FFTW_MPI (%d): loc0 = %ld, n_loc = %d, loc_start = %ld, n_start = %d\n",
-            rank, loc0, get_n_loc(), loc_start, get_n_start()
-        );
-        // fprintf(stderr, "FFTW_MPI: Local size mismatch\n");
-        exit(1);
-    }
-
-    // if (loc_size == n*n*nh) {
-    //     same = 1;
+    // int cnt = loc0 < 1 ? 1 : 0;
+    // MPI_Allreduce(MPI_IN_PLACE, &cnt, 1, MPI_INT, MPI_SUM, mpid->comm);
+    // if (cnt > 0) {
+    //     printf("FFTW_MPI(%d): n_local = %ld, n_start = %ld\n", mpid->rank, loc0, loc_start);
+    //     if (mpid->rank == 0) {
+    //         fprintf(
+    //             stderr,
+    //             "FFTW_MPI: The current #N_GRID and #NPROCS is resulting in\n"
+    //             "          a group with 0 elements (currently not implemented).\n"
+    //             "          Please change the number of grid points or processes.\n"
+    //         );
+    //     }
+    //     exit(1);
     // }
+
+    *n_loc = loc0;
+    *n_start = loc_start;
   
     r_real = fftw_alloc_real(2*loc_size);
     r_cmpx = fftw_alloc_complex(loc_size);
 
-    if (rank == 0) printf("FFTW: Initializing R-C-R plans with MPI\n");
-    r_fwd_plan = fftw_mpi_plan_dft_r2c_3d(n, n, n, r_real, r_cmpx, MPI_COMM_WORLD, FLAG | FFTW_DESTROY_INPUT);
-    r_bwd_plan = fftw_mpi_plan_dft_c2r_3d(n, n, n, r_cmpx, r_real, MPI_COMM_WORLD, FLAG | FFTW_DESTROY_INPUT);
+    if (mpid->rank == 0) printf("FFTW: Initializing R-C-R plans with MPI\n");
+    r_fwd_plan = fftw_mpi_plan_dft_r2c_3d(n, n, n, r_real, r_cmpx, mpid->comm, FLAG | FFTW_DESTROY_INPUT);
+    r_bwd_plan = fftw_mpi_plan_dft_c2r_3d(n, n, n, r_cmpx, r_real, mpid->comm, FLAG | FFTW_DESTROY_INPUT);
 
-    if (rank == 0) printf("FFTW: ...DONE\n");
+    if (mpid->rank == 0) printf("FFTW: ...DONE\n");
 }
-
-// void rfft_solve_even(int n, double *b, double *ig2, double *x) {
-//     int n_loc = get_n_loc();
-//     int n_start = get_n_start();
-//     int nh = n / 2 + 1;
-//     long int size = n_loc * n * n;
-//     long int n3r = n * n * n;
-
-//     int np = 2 * (n / 2 + 1);
-//     long int n2  = n * n;
-//     long int n2p = n * np;
-//     long int n2h = n * nh;
-//     long int i0, j0, i1, j1;
-
-//     #pragma omp parallel for
-//     for (long int i = 0; i < size; i++) {
-//         r_real[i] = b[i];
-//     }
-
-//     fftw_execute(r_fwd_plan);
-
-//     r_cmpx[0] = 0;
-//     #pragma omp parallel for private(i0, j0, i1)
-//     for (int i = 0; i < n_loc; i++) {
-//         i0 = i * n2h;
-//         i1 = (i+n_start) * n2h;
-//         for (int j=0; j < n; j++) {
-//             j0 = j * nh;
-//             for (int k=0; k < nh; k++) {
-//                 r_cmpx[i0 + j0 + k] *= ig2[i1 + j0 + k];
-//             }
-//         }
-//     }
-
-//     fftw_execute(r_bwd_plan);
-
-//     #pragma omp parallel for
-//     for (long int i = 0; i < size; i++) {
-//         x[i] = r_real[i] / n3r;
-//     }
-// }
 
 void rfft_solve(int n, double *b, double *ig2, double *x) {
     int n_loc = get_n_loc();
-    int n_start = get_n_start();
+
     int nh = n / 2 + 1;
+    int npad = 2 * nh;
+
     long int size = n_loc * n * nh;
-    long int n3r = n * n * n;
+    long int i0, j0, j1;
 
-    int np = 2 * (n / 2 + 1);
-    long int n2  = n * n;
-    long int n2p = n * np;
-    long int n2h = n * nh;
-    long int i0, j0, i1, j1;
-
-    #pragma omp parallel for private(i0, j0, i1, j1)
+    // printf("FFTW_MPI(%d): n_local = %d, n_start = %d\n", get_rank(), n_loc, get_n_start());
+    #pragma omp parallel for private(i0, j0, j1)
     for (int i=0; i < n_loc; i++) {
-        i0 = i * n2p;
-        i1 = i * n2;
+        i0 = i * n;
         for (int j=0; j < n; j++) {
-            j0 = i0 + j * np;
-            j1 = i1 + j * n;
+            j0 = i0 + j;
+            j1 = j0 * n;
+            j0 *= npad;
             for (int k=0; k < n; k++) {
                 r_real[j0 + k] = b[j1 + k];
             }
@@ -177,49 +116,40 @@ void rfft_solve(int n, double *b, double *ig2, double *x) {
 
     fftw_execute(r_fwd_plan);
 
-    r_cmpx[0] = 0;
-    #pragma omp parallel for private(i0, j0, i1)
-    for (int i = 0; i < n_loc; i++) {
-        i0 = i * n2h;
-        i1 = (i+n_start) * n2h;
-        for (int j=0; j < n; j++) {
-            j0 = j * nh;
-            for (int k=0; k < nh; k++) {
-                r_cmpx[i0 + j0 + k] *= ig2[i1 + j0 + k];
-            }
-        }
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        r_cmpx[i] *= ig2[i];
     }
 
     fftw_execute(r_bwd_plan);
 
-    #pragma omp parallel for private(i0, j0, i1, j1)
+    #pragma omp parallel for private(i0, j0, j1)
     for (int i = 0; i < n_loc; i++) {
-        i0 = i * n2p;
-        i1 = i * n2;
+        i0 = i * n;
         for (int j=0; j < n; j++) {
-            j0 = i0 + j * np;
-            j1 = i1 + j * n;
+            j0 = i0 + j;
+            j1 = j0 * n;
+            j0 *= npad;
             for (int k=0; k < n; k++) {
-                x[j1 + k] = r_real[j0 + k] / n3r;
+                x[j1 + k] = r_real[j0 + k];  // Normalization moved inside ig2
             }
         }
     }
 }
 
-// void rfft_solve(int n, double *b, double *ig2, double *x) {
-//     if (same == 0) {
-//         rfft_solve_odd(n, b, ig2, x);
-//     } else {
-//         rfft_solve_even(n, b, ig2, x);
-//     }
-// }
-
 #else // __FFTW_MPI not defined
 
-void init_rfft(int n) {
+void init_rfft(int n, int *n_loc, int *n_start) {
+    if (get_size() > 1) {
+        if (get_rank() == 0) fprintf(stderr, "TERMINATING: Linked FFTW compiled without MPI support\n");
+        exit(1);
+    }
     if (initialized_r != FFTW_BLANK) {
         return;
     }
+    *n_loc = n;
+    *n_start = 0;
+
     int nh = n / 2 + 1;
     initialized_r = FFTW_DOCLEANUP;
   
@@ -245,7 +175,6 @@ void rfft_solve(int n, double *b, double *ig2, double *x) {
 
     fftw_execute(r_fwd_plan);
 
-    r_cmpx[0] = 0;
     #pragma omp parallel for
     for (long int i = 1; i < size; i++) {
         r_cmpx[i] *= ig2[i];
@@ -255,7 +184,7 @@ void rfft_solve(int n, double *b, double *ig2, double *x) {
 
     #pragma omp parallel for
     for (long int i = 0; i < n3r; i++) {
-        x[i] = r_real[i] / n3r;
+        x[i] = r_real[i];  // Normalization moved inside ig2
     }
 }
 
@@ -363,7 +292,7 @@ void cleanup_fftw() {
 
 #else // __FFTW
 
-void init_rfft(int n) {
+void init_rfft(int n, int *n_loc, int *n_start) {
     fprintf(stderr, "TERMINATING: Library compiled without FFTW support\n");
     exit(1);
 }

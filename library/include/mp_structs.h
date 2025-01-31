@@ -26,18 +26,18 @@ grid * grid_init(int n, double L, double h, double tol, int type);
 particles * particles_init(int n, int n_p, double L, double h);
 integrator * integrator_init(int n_p, double dt, int type);
 
-void * grid_free(grid *grid);
+void grid_free(grid *grid);
 void * particles_free(particles *p);
 void integrator_free(integrator *integrator);
 
 void lcg_grid_init(grid * grid);
 void lcg_grid_cleanup(grid * grid);
-void * lcg_grid_init_field(grid *grid);
+void lcg_grid_init_field(grid *grid);
 int lcg_grid_update_field(grid *grid);
 
 void fft_grid_init(grid * grid);
 void fft_grid_cleanup(grid * grid);
-void * fft_grid_init_field(grid *grid);
+void fft_grid_init_field(grid *grid);
 int fft_grid_update_field(grid *grid);
 
 double grid_update_charges(grid *grid, particles *p);
@@ -76,18 +76,19 @@ struct grid {
 
     long int size;  // Total number of grid points
     int n_local; // X - Number of grid points per dimension (MPI aware)
+    int n_start; // Start index of the grid in the global array (MPI aware)
 
     double *y;  // Intermediate field constraint
     double *q;  // Charge density
-    double *phi_p;  // Previous potential
+    double *phi_p;  // Previous potential (could be NULL if not needed by the method)
     double *phi_n;  // Last potential
     double *ig2;  // Inverse of the laplacian
 
     double tol;  // Tolerance for the LCG
     long int n_iters;  // Number of iterations for convergence of the LCG
 
-    void *  (*free)( grid *);
-    void *  (*init_field)( grid *);
+    void    (*free)( grid *);
+    void    (*init_field)( grid *);
     int     (*update_field)( grid *);
     double  (*update_charges)( grid *, particles *);
 };
