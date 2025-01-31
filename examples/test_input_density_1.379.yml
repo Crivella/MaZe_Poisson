@@ -4,13 +4,13 @@
 grid_setting:
   N: 100
   N_p: 250 # at N_p=2, rescale=False
-  input_file: "input_files/input_coord250.csv"
-  # restart_file: "restart_files/density_1.379/restart_N100_N_p_250_9999_iter1.csv"
+  # input_file: "input_files/input_coord250.csv"
+  restart_file: "restart_files/density_1.379/restart_N100_N_p_250_9999_iter1.csv"
   # restart_file: "restart.csv"
   # restart_field_file: "restart_field.csv"
 
 md_variables:
-  N_steps: 100000
+  N_steps: 2000
   T: 1550 # Kelvin
   dt_fs: 0.25 # in fs
   # dt_fs: 0.0001 # in fs
@@ -21,13 +21,14 @@ md_variables:
   thermostat: false
   elec: TRUE 
   not_elec: TRUE
+  # method: LCG
   method: FFT
   integrator: OVRVO
 
 output_settings: 
   path: 'Outputs/'
 
-  print_performance: false
+  print_performance: true
 
   print_tot_force: TRUE
   print_field: false
@@ -38,9 +39,9 @@ output_settings:
 
   # print_restart: true
   # print_restart_field: true
-  # restart_step: 199
+  # restart_step: 499
 
-  stride: 20
+  stride: 25
   flushstride: 5
 
   # debug: true
