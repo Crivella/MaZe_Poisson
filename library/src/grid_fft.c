@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "charges.h"
 #include "mpi_base.h"
 #include "mp_structs.h"
 #include "fftw_wrap.h"
@@ -84,7 +85,6 @@ void fft_grid_init(grid * grid) {
     long int size = n_loc * n * n;
     grid->size = size;
 
-    grid->q = (double *)malloc(size * sizeof(double));
     grid->phi_n = (double *)malloc(size * sizeof(double));
     grid->ig2 = (double *)malloc(n_loc * n * nh * sizeof(double));
     
@@ -123,6 +123,7 @@ void fft_grid_init(grid * grid) {
 
     grid->init_field = fft_grid_init_field;
     grid->update_field = fft_grid_update_field;
+    grid->update_charges = fft_grid_update_charges;
 }
 
 void fft_grid_cleanup(grid * grid) {
@@ -130,11 +131,15 @@ void fft_grid_cleanup(grid * grid) {
 }   
 
 void fft_grid_init_field(grid *grid) {
-    rfft_solve(grid->n, grid->q, grid->ig2, grid->phi_n);
+    rfft_solve(grid->n, grid->phi_n, grid->ig2, grid->phi_n);
 }
 
 int fft_grid_update_field(grid *grid) {
-    rfft_solve(grid->n, grid->q, grid->ig2, grid->phi_n);
+    rfft_solve(grid->n, grid->phi_n, grid->ig2, grid->phi_n);
 
     return 0;
+}
+
+double fft_grid_update_charges(grid *grid, particles *p) {
+    return update_charges(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->phi_n);
 }

@@ -23,7 +23,6 @@ double g2(double x, double L, double h) {
 // @param n_p: the number of particles
 // @param h: the grid spacing
 // @param phi: the potential field of size n_grid * n_grid * n_grid
-// @param q: the charge on a grid of size n_grid * n_grid * n_grid
 // @param neighbors: Array (x,y,z) of neighbors indexes for each particle (n_p x 8 x 3)
 // @param charges: the charges on each particle of size n_p
 // @param pos: the positions of the particles of size n_p * 3
@@ -31,7 +30,7 @@ double g2(double x, double L, double h) {
 
 // @return the sum of the charges on the neighbors
 // */
-double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, long int *neighbors, long int *charges, double *pos, double *forces) {
+double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *neighbors, long int *charges, double *pos, double *forces) {
     long int n = n_grid;
     long int n2 = n * n;
 
@@ -133,7 +132,6 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
 // @param n_p: the number of particles
 // @param h: the grid spacing
 // @param phi: the potential field of size n_grid * n_grid * n_grid
-// @param q: the charge on a grid of size n_grid * n_grid * n_grid
 // @param neighbors: Array (x,y,z) of neighbors indexes for each particle (n_p x 8 x 3)
 // @param charges: the charges on each particle of size n_p
 // @param pos: the positions of the particles of size n_p * 3
@@ -141,7 +139,7 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
 
 // @return the sum of the charges on the neighbors
 // */
-double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, long int *neighbors, long int *charges, double *pos, double *forces) {
+double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *neighbors, long int *charges, double *pos, double *forces) {
     long int n = n_grid;
     long int n2 = n * n;
 

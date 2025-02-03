@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "charges.h"
 #include "mp_structs.h"
 
 char grid_type_str[2][16] = {"LCG", "FFT"};
@@ -45,8 +44,6 @@ grid * grid_init(int n, double L, double h, double tol, int type) {
 
     init_func(new);
 
-    new->update_charges = grid_update_charges;
-
     long int size;
 
     new->tol = tol;
@@ -84,8 +81,4 @@ void grid_free(grid *grid) {
             break;
     }
     free(grid);
-}
-
-double grid_update_charges(grid *grid, particles *p) {
-    return update_charges(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
 }

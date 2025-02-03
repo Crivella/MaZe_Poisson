@@ -3,6 +3,7 @@
 #include <string.h>
 #include <math.h>
 
+#include "charges.h"
 #include "laplace.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
@@ -71,6 +72,7 @@ void lcg_grid_init(grid * grid) {
 
     grid->init_field = lcg_grid_init_field;
     grid->update_field = lcg_grid_update_field;
+    grid->update_charges = lcg_grid_update_charges;
 }
 
 void lcg_grid_cleanup(grid * grid) {
@@ -94,3 +96,7 @@ void lcg_grid_init_field(grid *grid) {
 int lcg_grid_update_field(grid *grid) {
     return verlet_poisson(grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y, grid->n);
 }   
+
+double lcg_grid_update_charges(grid *grid, particles *p) {
+    return update_charges(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
+}

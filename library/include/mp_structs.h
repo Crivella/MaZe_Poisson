@@ -34,13 +34,13 @@ void lcg_grid_init(grid * grid);
 void lcg_grid_cleanup(grid * grid);
 void lcg_grid_init_field(grid *grid);
 int lcg_grid_update_field(grid *grid);
+double lcg_grid_update_charges(grid *grid, particles *p);
 
 void fft_grid_init(grid * grid);
 void fft_grid_cleanup(grid * grid);
 void fft_grid_init_field(grid *grid);
 int fft_grid_update_field(grid *grid);
-
-double grid_update_charges(grid *grid, particles *p);
+double fft_grid_update_charges(grid *grid, particles *p);
 
 void * particles_init_potential(particles *p, int pot_type);
 void * particles_init_potential_tf(particles *p);
