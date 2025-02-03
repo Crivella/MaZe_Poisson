@@ -2,8 +2,16 @@
 #include <stdio.h>
 #include <math.h>
 
-
+// #include "charges.h"
 #include "mpi_base.h"
+
+double g2(double x, double L, double h) {
+    x = fabs(x - round(x / L) * L);
+    if (x >= h) {
+        return 0.0;
+    }
+    return 1.0 - x / h;
+}
 
 
 #ifdef __MPI
@@ -17,11 +25,13 @@
 // @param phi: the potential field of size n_grid * n_grid * n_grid
 // @param q: the charge on a grid of size n_grid * n_grid * n_grid
 // @param neighbors: Array (x,y,z) of neighbors indexes for each particle (n_p x 8 x 3)
+// @param charges: the charges on each particle of size n_p
+// @param pos: the positions of the particles of size n_p * 3
 // @param forces: the output forces on each particle of size n_p * 3
 
 // @return the sum of the charges on the neighbors
 // */
-double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, long int *neighbors, double *forces) {
+double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, long int *neighbors, long int *charges, double *pos, double *forces) {
     long int n = n_grid;
     long int n2 = n * n;
 
@@ -35,9 +45,10 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
     int n_loc = get_n_loc();
     int n_start = get_n_start();
 
-    h *= 2.0;
-
+    double const h2 = 2.0 * h;
+    double const L = n * h;
     int n_loc1 = n_loc - 1;
+    double px, py, pz, chg;
     double *ptr_p1 = phi + n2;  // Pointer to the first slice + 1 
     double *ptr_m1 = phi + (n_loc - 2) * n2; // Pointer to the last slice -1
 
@@ -50,15 +61,20 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
     }
 
     double sum_q = 0.0;
-    #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, E, qc, ptr1, ptr2) reduction(+:sum_q)
+    #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, E, qc, px, py, pz, chg, ptr1, ptr2) reduction(+:sum_q)
     for (int ip = 0; ip < n_p; ip++) {
         i0 = ip*24;
         j0 = ip*3;
         forces[j0] = 0.0;
         forces[j0+1] = 0.0;
         forces[j0+2] = 0.0;
-        for (int in = 0; in < 8; in++) {
-            i1 = i0 + in*3;
+        px = pos[j0];
+        py = pos[j0 + 1];
+        pz = pos[j0 + 2];
+        chg = charges[ip];
+        // printf("ip: %d, chg: %f, px: %f, py: %f, pz: %f L: %f, h: %f\n", ip, chg, px, py, pz, L, h);
+        for (int in = 0; in < 24; in += 3) {
+            i1 = i0 + in;
             i = neighbors[i1] - n_start;
             if (i < 0 || i >= n_loc) {
                 continue;
@@ -69,7 +85,10 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
             in2 = i * n2;
             jn = j * n;
 
-            qc = q[in2 + jn + k];
+            // qc = q[in2 + jn + k];
+            // printf("  i: %d, j: %d, k: %d, g_x: %f, g_y: %f, g_z: %f\n", i, j, k, g2(px - (i+n_start)*h, L, h), g2(py - j*h, L, h), g2(pz - k*h, L, h));
+            qc = chg * g2(px - (i+n_start)*h, L, h) * g2(py - j*h, L, h) * g2(pz - k*h, L, h);
+            // printf("  in: %d, qc: %f\n", in, qc);
             sum_q += qc;
             // X
             if (i == 0) {
@@ -82,19 +101,19 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
                 ptr1 = phi + in2 + n2;
                 ptr2 = phi + in2 - n2;
             }
-            E = (ptr2[jn + k] - ptr1[jn + k]) / h;
+            E = (ptr2[jn + k] - ptr1[jn + k]) / h2;
             forces[j0] += qc * E;
             // Y
             i1 = in2;
             j1 = ((j+1) % n) * n;
             j2 = ((j-1 + n) % n) * n;
-            E = (phi[i1 + j2 + k] - phi[i1 + j1 + k]) / h;
+            E = (phi[i1 + j2 + k] - phi[i1 + j1 + k]) / h2;
             forces[j0 + 1] += qc * E;
             // Z
             j1 = i1 + jn;
             k1 = ((k+1) % n);
             k2 = ((k-1 + n) % n);
-            E = (phi[j1 + k2] - phi[j1 + k1]) / h;
+            E = (phi[j1 + k2] - phi[j1 + k1]) / h2;
             forces[j0 + 2] += qc * E;
         }
     }
@@ -116,11 +135,13 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
 // @param phi: the potential field of size n_grid * n_grid * n_grid
 // @param q: the charge on a grid of size n_grid * n_grid * n_grid
 // @param neighbors: Array (x,y,z) of neighbors indexes for each particle (n_p x 8 x 3)
+// @param charges: the charges on each particle of size n_p
+// @param pos: the positions of the particles of size n_p * 3
 // @param forces: the output forces on each particle of size n_p * 3
 
 // @return the sum of the charges on the neighbors
 // */
-double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, long int *neighbors, double *forces) {
+double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, long int *neighbors, long int *charges, double *pos, double *forces) {
     long int n = n_grid;
     long int n2 = n * n;
 
@@ -130,18 +151,23 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
     long int j0, j1, j2;
     long int k0, k1, k2;
 
-    h *= 2.0;
-
+    double const h2 = 2.0 * h;
+    double const L = n * h;
     double E, qc;
+    double px, py, pz, chg;
 
     double sum_q = 0.0;
-    #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, E, qc) reduction(+:sum_q)
+    #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, px, py, pz, chg, E, qc) reduction(+:sum_q)
     for (int ip = 0; ip < n_p; ip++) {
         i0 = ip*24;
         j0 = ip*3;
         forces[j0] = 0.0;
         forces[j0+1] = 0.0;
         forces[j0+2] = 0.0;
+        px = pos[j0];
+        py = pos[j0 + 1];
+        pz = pos[j0 + 2];
+        chg = charges[ip];
         for (int in = 0; in < 8; in++) {
             i1 = i0 + in*3;
             i = neighbors[i1];
@@ -151,24 +177,25 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, double *q, l
             in2 = i * n2;
             jn = j * n;
 
-            qc = q[in2 + jn + k];
+            // qc = q[in2 + jn + k];
+            qc = chg * g2(px - i*h, L, h) * g2(py - j*h, L, h) * g2(pz - k*h, L, h);
             sum_q += qc;
             // X
             i1 = ((i+1) % n) * n2;
             i2 = ((i-1 + n) % n) * n2;
-            E = (phi[i2 + jn + k] - phi[i1 + jn + k]) / h;
+            E = (phi[i2 + jn + k] - phi[i1 + jn + k]) / h2;
             forces[j0] += qc * E;
             // Y
             i1 = in2;
             j1 = ((j+1) % n) * n;
             j2 = ((j-1 + n) % n) * n;
-            E = (phi[i1 + j2 + k] - phi[i1 + j1 + k]) / h;
+            E = (phi[i1 + j2 + k] - phi[i1 + j1 + k]) / h2;
             forces[j0 + 1] += qc * E;
             // Z
             j1 = i1 + jn;
             k1 = ((k+1) % n);
             k2 = ((k-1 + n) % n);
-            E = (phi[j1 + k2] - phi[j1 + k1]) / h;
+            E = (phi[j1 + k2] - phi[j1 + k1]) / h2;
             forces[j0 + 2] += qc * E;
         }
     }

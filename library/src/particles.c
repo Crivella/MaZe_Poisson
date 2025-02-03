@@ -213,7 +213,7 @@ void * particles_update_nearest_neighbors(particles *p) {
 }
 
 double particles_compute_forces_field(particles *p, grid *grid) {
-    return compute_force_fd(p->n, p->n_p, p->h, grid->phi_n, grid->q, p->neighbors, p->fcs_elec);
+    return compute_force_fd(p->n, p->n_p, p->h, grid->phi_n, grid->q, p->neighbors, p->charges, p->pos, p->fcs_elec);
 }
 
 double particles_compute_forces_tf(particles *p) {

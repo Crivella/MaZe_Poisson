@@ -26,14 +26,14 @@ void solver_initialize() {
         printf("******************************************************\n");
         printf("* MAZE_POISSON\n");
         if (size > 0) {
-            printf("*   MPI version    running on %d processes\n", size);
+            printf("*   MPI     enabled  running on %d processes\n", size);
         } else {
-            printf("*   MPI not available\n");
+            printf("*   MPI     not available\n");
         }
         if (n_threads > 0) {
-            printf("*   OpenMP version running on %d threads\n", n_threads);
+            printf("*   OpenMP  enabled  running on %d threads\n", n_threads);
         } else {
-            printf("*   OpenMP not available\n");
+            printf("*   OpenMP  not available\n");
         }
         printf("******************************************************\n");
     }
