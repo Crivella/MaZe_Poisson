@@ -10,7 +10,6 @@
 
 #ifdef __MPI
 void lcg_grid_init_mpi(grid *grid) {
-    printf("!!!!!!!LCG MPI\n");
     mpi_data *mpid = get_mpi_data();
 
     int n = grid->n;
@@ -44,7 +43,6 @@ void lcg_grid_init_mpi(grid *grid) {
         mpid->bot = (double *)malloc(buffer_size * sizeof(double));
         mpid->top = (double *)malloc(buffer_size * sizeof(double));
     }
-    printf("LCG MPI(%d/%d): n_local = %d, n_start = %d\n", rank, size, grid->n_local, grid->n_start);
 }
 
 #else  // __MPI
