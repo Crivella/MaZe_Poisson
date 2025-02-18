@@ -62,7 +62,8 @@ class GridSetting(BaseSettings):
         self.input_file = None
         self.restart_file = None
         self.restart_field_file = None
-        self.L = None
+        self._L = None
+        self._L_ang = None
         self.h = None
         
     @property
@@ -81,8 +82,27 @@ class GridSetting(BaseSettings):
     @N_p.setter
     def N_p(self, value):
         self._N_p = value
-        self.L_ang = np.round((((value*(m_Cl + m_Na)) / (2*density))  **(1/3)) *1.e9, 4) # in A
-        self.L = self.L_ang / a0 # in amu
+        # self.L_ang = np.round((((value*(m_Cl + m_Na)) / (2*density))  **(1/3)) *1.e9, 4) # in A
+        # self.L = self.L_ang / a0 # in amu
+        # if self.N is not None:
+        #     self.h = self.L / self.N
+
+    @property
+    def L(self):
+        return self._L
+    @L.setter
+    def L(self, value):
+        self._L = value
+        self._L_ang = value * a0
+        if self.N is not None:
+            self.h = value / self.N
+    @property
+    def L_ang(self):
+        return self._L_ang
+    @L_ang.setter
+    def L_ang(self, value):
+        self._L_ang = value
+        self._L = value / a0
         if self.N is not None:
             self.h = self.L / self.N
 
