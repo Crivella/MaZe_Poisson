@@ -43,7 +43,7 @@ set(CMAKE_C_FLAGS_RELEASE "-O3")
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g")
 
 # Create the shared library
-add_library(maze_poisson SHARED
+add_library(maze_poisson MODULE
     src/linalg.c
     src/laplace.c
     src/forces.c
@@ -102,14 +102,6 @@ if (MPI_C_FOUND AND MP_USE_MPI)
 endif()
 # Set LAPACK flags
 if (LAPACK_FOUND)
-    target_compile_definitions(maze_poisson PRIVATE __LAPACK)
-    list(APPEND _lapack_libs
-        ${BLAS_LIBRARIES}
-        ${BLAS_LINKER_FLAGS}
-        ${LAPACK_LIBRARIES}
-        ${LAPACK_LINKER_FLAGS})
-    list(REMOVE_DUPLICATES _lapack_libs)
-    target_link_libraries(maze_poisson PRIVATE ${_lapack_libs})
     find_path(
         LAPACK_INCLUDE_DIRS
         NAMES cblas.h
@@ -117,9 +109,22 @@ if (LAPACK_FOUND)
         PATH_SUFFIXES include include/flexiblas/
         NO_DEFAULT_PATH    
     )
-    message(STATUS "LAPACK include dirs: ${LAPACK_INCLUDE_DIRS}")
-    target_include_directories(maze_poisson PRIVATE ${LAPACK_INCLUDE_DIRS})
+    if (NOT LAPACK_INCLUDE_DIRS)
+        message(WARNING "LAPACK include dirs not found")
+    else()
+        message(STATUS "LAPACK include dirs: ${LAPACK_INCLUDE_DIRS}")
+        target_compile_definitions(maze_poisson PRIVATE __LAPACK)
+        list(APPEND _lapack_libs
+            ${BLAS_LIBRARIES}
+            ${BLAS_LINKER_FLAGS}
+            ${LAPACK_LIBRARIES}
+            ${LAPACK_LINKER_FLAGS})
+        list(REMOVE_DUPLICATES _lapack_libs)
+        target_link_libraries(maze_poisson PRIVATE ${_lapack_libs})
+        target_include_directories(maze_poisson PRIVATE ${LAPACK_INCLUDE_DIRS})
+    endif()
 endif()
+
 # Set FFTW flags
 if (FFTW3_FOUND)
     target_compile_definitions(maze_poisson PRIVATE __FFTW)
