@@ -3,6 +3,7 @@
 grid_setting:
   N: 100
   N_p: 250 # at N_p=2, rescale=False
+  L: 39.00697077
   # input_file: "input_files/input_coord250.csv"
   restart_file: "restart_files/density_1.379/restart_N100_N_p_250_9999_iter1.csv"
 
