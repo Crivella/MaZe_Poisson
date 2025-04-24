@@ -110,11 +110,11 @@ class SolutesCSVOutputFile(CSVOutputFile):
 
 class PerformanceCSVOutputFile(CSVOutputFile):
     name =  'performance'
-    headers = ['iter', 'n_iters']
+    headers = ['iter', 'time', 'n_iters']
     def get_data(self, iter: int, solver):
         return pd.DataFrame({
             'iter': [iter],
-            # 'time': [grid.time],
+            'time': [solver.t_iters],
             'n_iters': [solver.n_iters]
         })
 

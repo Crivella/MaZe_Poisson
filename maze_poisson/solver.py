@@ -246,6 +246,7 @@ class SolverMD(Logger):
         if self.mdv.elec:
             self.update_charges()
             self.n_iters = self.update_field()
+            self.t_iters = Clock.get_clock('field').last_call
         self.compute_forces()
         self.integrator_part2()
 

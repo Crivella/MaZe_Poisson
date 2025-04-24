@@ -21,6 +21,7 @@ class Clock(Logger):
         super().__init__()
         self.name = name
         self.cumul = 0
+        self.last_call = 0
         self.num_calls = 0
 
     def __call__(self, func):
@@ -28,8 +29,9 @@ class Clock(Logger):
         def wrapper(*args, **kwargs):
             start = time.time()
             result = func(*args, **kwargs)
+            self.last_call = time.time() - start
+            self.cumul += self.last_call
             self.num_calls += 1
-            self.cumul += time.time() - start
             return result
 
         return wrapper
@@ -51,3 +53,9 @@ class Clock(Logger):
             clock.report()
             total.cumul += clock.cumul
             total.num_calls += clock.num_calls
+
+    @staticmethod
+    def get_clock(name: str) -> 'Clock':
+        if name not in clocks:
+            raise ValueError(f"Clock {name} does not exist")
+        return clocks[name]
