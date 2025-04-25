@@ -15,15 +15,6 @@ N_vector = [30,40,50,60,70,80,90,100,110,120] # will change from 10 to 100 once 
 N_vector = np.array(N_vector)
 N_p_vector = [128,250,432,686,1024,1458]
 
-path = 'Outputs/'
-isExist = os.path.exists(path)
-if not isExist:
-    os.makedirs(path)
-
-path_pdf = path + 'PDFs/'
-isExist = os.path.exists(path_pdf)
-if not isExist:
-    os.makedirs(path_pdf)
 
 def g(x,a,b):
     return a * x**b
@@ -40,10 +31,12 @@ def k(x, a, b):
 # time-vs-n3:  plot of time/iter VS N_grid = N^3
 def plot_time_iterNgrid(N_p):
     path = 'Outputs/'
-    path_pdf = path + 'PDFs/'
+    path_pdf = os.path.join(path, 'PDFs/')
     filename_MaZe=path+'performance_N'
     data1 = "time" 
     data2 = 'n_iters'
+
+    os.makedirs(path_pdf, exist_ok=True)
     
     path_all_files = [(filename_MaZe + str(i) + '_N_p'+str(N_p)+'.csv') for i in N_vector]
     isExist = [os.path.exists(i) for i in path_all_files]
@@ -93,9 +86,11 @@ def f(x,a,b):
 # n-iter-vs-n3: plot of n iterations VS N_grid = N^3
 def plot_convNgrid(N_p):
     path = 'Outputs/'
-    path_pdf = path + 'PDFs/'
+    path_pdf = os.path.join(path, 'PDFs/')
     filename_MaZe=path+'performance_N'
     data1 = "n_iters"
+
+    os.makedirs(path_pdf, exist_ok=True)
 
     path_all_files = [(filename_MaZe + str(i) + '_N_p'+str(N_p)+'.csv') for i in N_vector]
     isExist = [os.path.exists(i) for i in path_all_files]
@@ -144,6 +139,8 @@ def plot_scaling_particles_time_iters():
     path = 'Outputs/'
     path_pdf = path + 'PDFs/'
     
+    os.makedirs(path_pdf, exist_ok=True)
+    
     N_vector = [80, 100, 120, 140, 160, 180]
     N_p=N_p_vector
     N_p = np.array(N_p)
@@ -186,6 +183,8 @@ def plot_scaling_particles_conv():
     filename_MaZe='performance_N'
     path = 'Outputs/'
     path_pdf = path + 'PDFs/'
+    
+    os.makedirs(path_pdf, exist_ok=True)
 
     data1 = "n_iters"
     N_vector = [80, 100, 120, 140, 160, 180]
@@ -227,6 +226,8 @@ def iter_vs_threads():
     filename_MaZe='performance_N100_N_p_250_'
     path = 'Outputs/'
     path_pdf = path + 'PDFs/'
+    
+    os.makedirs(path_pdf, exist_ok=True)
 
     data1 = "n_iters"
     threads = np.array([5, 6, 7, 8, 9, 10, 11, 12])
@@ -264,6 +265,8 @@ def time_vs_threads():
     filename_strong='performance_N100_'
     path = 'Outputs/'
     path_pdf = path + 'PDFs/'
+    
+    os.makedirs(path_pdf, exist_ok=True)
 
     data1 = "time"
     threads = np.array([1, 2, 4, 8, 16, 32, 64])
@@ -306,6 +309,8 @@ def strong_scaling_vs_threads():
     filename_strong='performance_N100_'
     path = 'Outputs/'
     path_pdf = path + 'PDFs/'
+    
+    os.makedirs(path_pdf, exist_ok=True)
 
     data1 = "time"
     threads = np.array([1, 2, 4, 8, 16, 32, 64])
@@ -369,6 +374,8 @@ def weak_scaling_vs_threads():
     filename_strong='performance_N'
     path = 'Outputs/'
     path_pdf = path + 'PDFs/'
+    
+    os.makedirs(path_pdf, exist_ok=True)
 
     data1 = "time"
     data2 = "n_iters"
@@ -416,6 +423,8 @@ def iter_vs_tol():
     filename_MaZe='performance_tol'
     path = 'Outputs/'
     path_pdf = path + 'PDFs/'
+    
+    os.makedirs(path_pdf, exist_ok=True)
 
     data1 = "n_iters"
     tolerance = np.array([1.e-5, 1.e-6, 1.e-7, 1.e-8, 1.e-9, 1.e-10])

@@ -8,19 +8,11 @@ from ...constants import a0, density, m_Cl, m_Na, t_au
 from ...myio.loggers import logger
 from . import get_N, get_Np, get_Np_input
 
-path = 'Outputs/'
-isExist = os.path.exists(path)
-if not isExist:
-    os.makedirs(path)
 
-path_pdf = path + 'PDFs/'
-isExist = os.path.exists(path_pdf)
-if not isExist:
-    os.makedirs(path_pdf)
-
-def PlotT(filename, dt, label='iter'):
-    # Outname as filename but with .pdf
-    outname = os.path.splitext(filename)[0] + '.pdf'
+def PlotT(filename, dt, label='iter', outdir='Outputs'):
+    os.makedirs(outdir, exist_ok=True)
+    fname = os.path.basename(filename)
+    outname = os.path.join(outdir, os.path.splitext(fname)[0] + '.pdf')
     
     df = pd.read_csv(filename)
     N = get_N(filename)
@@ -36,7 +28,7 @@ def PlotT(filename, dt, label='iter'):
     print('std:', np.std(T))
     print('relative error:', rel_err)
     plt.figure(figsize=(15, 6))
-    plt.plot(iter, T, marker='.', color='red', markersize=5, label='T - mean value = ' + str(np.mean(T)) + '$\pm$' + str(np.std(T)))
+    plt.plot(iter, T, marker='.', color='red', markersize=5, label='T - mean value = ' + str(np.mean(T)) + '$\\pm$' + str(np.std(T)))
     plt.title('Temperature - dt =' + str(np.round(dt,4)) + ' fs - N =' + str(N) + '; N_p = '+str(N_p), fontsize=22)
     plt.xlabel('iter', fontsize=15)
     plt.ylabel('T (K)', fontsize=15)
@@ -44,20 +36,22 @@ def PlotT(filename, dt, label='iter'):
     plt.legend()
     plt.grid()
     plt.savefig(outname, format='pdf')
-    logger.info("file saved at "+path_pdf+'T_N' + str(N) + '_dt' + str(np.round(dt,4)) + '_N_p_'+str(N_p)+'.pdf')
+    # logger.info("file saved at "+path_pdf+'T_N' + str(N) + '_dt' + str(np.round(dt,4)) + '_N_p_'+str(N_p)+'.pdf')
     plt.show()
 
-def plot_Etot_trp(filename, dt, N_th=0, upper_lim=None):
-    # Outname as filename but with .pdf
-    outname = os.path.splitext(filename)[0] + '.pdf'
-        
-    N = get_N(filename)
-    N_p = get_Np(filename)
-    L = np.round((((N_p*(m_Cl + m_Na)) / (2*density))  **(1/3)) *1.e9, 4) / a0
+def plot_Etot_trp(filename, filename_solute, dt, N, N_p, L, N_th=0, upper_lim=None, outdir='Outputs'):
+    # N = get_N(filename)
+    # N_p = get_Np(filename)
+    # L = np.round((((N_p*(m_Cl + m_Na)) / (2*density))  **(1/3)) *1.e9, 4) / a0
 
     # File paths
-    work_file = path + 'work_trp_N' + str(N)+'_N_p_'+str(N_p) + '.csv'
-    df_E = pd.read_csv(path + 'energy_N' + str(N)+'_N_p_'+str(N_p) + '.csv')
+    os.makedirs(outdir, exist_ok=True)
+    work_file = os.path.join(outdir, f'work_trp_N{N}_N_p_{N_p}.csv')
+    df_E = pd.read_csv(filename)
+    outname = os.path.basename(outname)
+    outname = os.path.join(outdir, os.path.splitext(outname)[0] + '.pdf')
+    # outdir_pdf = os.path.join(outdir, 'PDFs')
+    # os.makedirs(outdir_pdf, exist_ok=True)
 
     # Energy file columns
     K = df_E['K']
@@ -85,15 +79,15 @@ def plot_Etot_trp(filename, dt, N_th=0, upper_lim=None):
         #raise FileNotFoundError(f"Work file doesnt exist in specified path {work_file}")
     
     N_steps = iterations
-    df = pd.read_csv(path + 'solute_N' + str(N) +'_N_p_'+str(N_p)+ '.csv')
+    df = pd.read_csv(filename_solute)
     if recompute_work:
-        Np = get_Np(filename)
+        Np = N_p
         Ework = np.zeros(N_steps)
         print('Np =', Np)
 
         gb = df.groupby('particle')
         xyz = gb.apply(lambda x: x[['x', 'y', 'z',]]).values.reshape(Np, N_steps, 3)
-        f_xyz = gb.apply(lambda x: x[['fx_elec', 'fy_elec', 'fz_elec',]]).values.reshape(Np, N_steps, 3)
+        f_xyz = gb.apply(lambda x: x[['fx_elec', 'fy_elec', 'fz_elec',]]).values.reshape(Np, N_steps-1, 3)
 
         delta = np.diff(xyz, axis=1)
         delta -= np.rint(delta / L) * L
@@ -124,6 +118,8 @@ def plot_Etot_trp(filename, dt, N_th=0, upper_lim=None):
     # Plotting the distance and kinetic energy in subplots
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 8))
 
+    print('N_th =', N_th, type(N_th))
+    print('upper_lim =', upper_lim, type(upper_lim))
     # Plotting kinetic energy
     ax1.plot(iter_E[N_th:upper_lim], K[N_th:upper_lim], marker='.', color='b', markersize=5, label=f'Kinetic energy - $|\\frac{{<K>}}{{<V_{{elec}}>}}| ={np.abs(mean_K/mean_work):.4f}$')
     ax1.set_xlabel('Iteration')
@@ -142,22 +138,24 @@ def plot_Etot_trp(filename, dt, N_th=0, upper_lim=None):
     ax2.grid(True)
     
     # Plotting total energy
-    ax3.plot(iterations[N_th:upper_lim], E_tot[N_th:upper_lim], marker='.', color='lightgreen', markersize=5, label=f'Tot energy - rel err = {std/mean:.5f}, $\Delta E / \Delta V =$ {std/ np.std(Ework)}')
+    ax3.plot(iterations[N_th:upper_lim], E_tot[N_th:upper_lim], marker='.', color='lightgreen', markersize=5, label=f'Tot energy - rel err = {std/mean:.5f}, $\\Delta E / \\Delta V =$ {std/ np.std(Ework)}')
     ax3.set_xlabel('Iteration')
     ax3.set_ylabel('Tot E')
     ax3.set_title('Total energy over iterations')
     ax3.legend(loc='upper right')
     ax3.grid(True)
     plt.tight_layout()
-    # plt.savefig(outname, format='pdf')
-    logger.info("file saved at "+path_pdf + 'Energy_analysis_trp_N' + str(N) + '_dt_' + str(dt) + '_N_p_'+str(N_p)+'.pdf')
+    plt.savefig(outname, format='pdf')
+    # logger.info("file saved at "+path_pdf + 'Energy_analysis_trp_N' + str(N) + '_dt_' + str(dt) + '_N_p_'+str(N_p)+'.pdf')
     plt.show()
 
-def plot_work_trp(filename, path, N_th, L=19.659 / a0):
+def plot_work_trp(filename, path, N_th, L=19.659 / a0, outdir='Outputs'):
     N = get_N(filename)
     N_p = get_Np(filename)
     # Check if the work file already exists
-    work_file = path + 'work_N' + str(N) +'_N_p_'+str(N_p)+ '.csv'
+    os.makedirs(outdir, exist_ok=True)
+    # work_file = path + 'work_N' + str(N) +'_N_p_'+str(N_p)+ '.csv'
+    work_file = os.path.join(path, f'work_N{N}_N_p_{N_p}.csv')
     if os.path.exists(work_file):
         # If the file exists, read the work from it
         work_df = pd.read_csv(work_file)
@@ -218,16 +216,19 @@ def plot_work_trp(filename, path, N_th, L=19.659 / a0):
     plt.title('Total Work', fontsize=22)
     plt.xlabel('iter', fontsize=15)
     plt.ylabel('Work ($E_H$)', fontsize=15)
+    out_path = os.path.join(outdir, f'Work_trp_N{N}_N_p_{N_p}.pdf')
     plt.legend(loc='upper left')
-    plt.savefig(path_pdf + '/Work_trp_N' + str(N) +'_N_p_'+str(N_p)+ '.pdf', format='pdf')
+    plt.savefig(out_path, format='pdf')
     plt.show()
 
-def store_T_analysys(filename, path, n_runs=10): 
+def store_T_analysys(filename, path, n_runs=10, outdir='Outputs'): 
     N = get_N(filename)
     N_p = get_Np(filename)
     avg_T_list = []
     std_T_list = []
     run_list = list(range(1, n_runs + 1))
+
+    os.makedirs(outdir, exist_ok=True)
 
     # Open a file to store the results
     with open(path + '/temperature_analysis_N' + str(N)+'_N_p_'+str(N_p) + '.txt', 'w') as file:
@@ -259,7 +260,8 @@ def store_T_analysys(filename, path, n_runs=10):
     plt.legend()
     #plt.title('Study of the temperature')
     #plt.grid(True)
-    plt.savefig(path_pdf + 'temperature_study_N' + str(N) +'_N_p_'+str(N_p)+ '.pdf', format='pdf')
+    out_path = os.path.join(outdir, f'temperature_study_N{N}_N_p_{N_p}.pdf')
+    plt.savefig(out_path, format='pdf')
     # Display the plots
     plt.show()
 
@@ -981,7 +983,7 @@ def plot_energy_multiple_dt(path_orig, N, dt_list=[0.025, 0.05, 0.25, 1.25, 2.5]
         std_work_half = np.std(Ework[:int(len(E_tot)/2)])
 
         # Plot total energy for this dt with time on the x-axis
-        plt.plot(time[1:-1], E_tot[1:-1], marker='.', markersize=1, color=color_list[i], label=f'dt = {dt} fs - {mean:.4f}$\pm${std_E:.5f} - RE = {(std_E / mean) * 100 :.4f} % - $\\Delta E / \\Delta V$ = {(std_E / std_work):.4f}')
+        plt.plot(time[1:-1], E_tot[1:-1], marker='.', markersize=1, color=color_list[i], label=f'dt = {dt} fs - {mean:.4f}$\\pm${std_E:.5f} - RE = {(std_E / mean) * 100 :.4f} % - $\\Delta E / \\Delta V$ = {(std_E / std_work):.4f}')
         #plt.plot(time[:-1], E_tot[:-1], marker='.', markersize=5, color=color_list[i], label=f'dt = {dt} fs - {mean:.4f}$\pm${std:.5f} - rel err = {(std / mean) * 100 :.4f} %')
         RE_half = std_E_half / mean_half * 100
         RE_complete =  std_E / mean * 100
@@ -1216,7 +1218,7 @@ def plot_E_trp2(path, second_path, N, dt1, dt2, N_th, L=19.659 / a0, upper_lim=N
     # First subplot
     plt.subplot(2, 1, 1)  # 2 rows, 1 column, first subplot
     plt.plot(iterations1[N_th:upper_lim] * dt1 / 1000, E_tot[N_th:upper_lim], linestyle='-', color='salmon', markersize=5, 
-            label=f'dt = {dt1} fs - $\Delta E / E$ = {std_E/mean:.6f} - $\\Delta E / \\Delta E^W_{{elec}}$ = {(std_E / std_work):.4f}')
+            label=f'dt = {dt1} fs - $\\Delta E / E$ = {std_E/mean:.6f} - $\\Delta E / \\Delta E^W_{{elec}}$ = {(std_E / std_work):.4f}')
     plt.ylabel('Total energy [$E_h$]')
     plt.legend(loc='upper right')
     #plt.title('Energy Comparison for Different Time Steps')
@@ -1224,7 +1226,7 @@ def plot_E_trp2(path, second_path, N, dt1, dt2, N_th, L=19.659 / a0, upper_lim=N
     # Second subplot
     plt.subplot(2, 1, 2)  # 2 rows, 1 column, second subplot
     plt.plot(iterations2[N_th:upper_lim] * dt2 / 1000, E_tot_2[N_th:upper_lim], linestyle='-', color='green', 
-            label=f'dt = {dt2} fs - $\Delta E / E$ = {std_E2/mean2:.6f} - $\\Delta E / \\Delta E^W_{{elec}}$ = {(std_E2 / std_work2):.4f}')
+            label=f'dt = {dt2} fs - $\\Delta E / E$ = {std_E2/mean2:.6f} - $\\Delta E / \\Delta E^W_{{elec}}$ = {(std_E2 / std_work2):.4f}')
     plt.xlabel('Time [ps]')
     plt.ylabel('Total energy [$E_h$]')
     #plt.title('Total Energy Over Time')
@@ -1346,7 +1348,7 @@ def plot_energy_multiple_runs(path_orig, N, dt=0.25, L=19.659 / a0, num_runs=10)
 
         # Plot total energy for this run with time on the x-axis
         plt.plot(time[200:-1], E_tot[200:-1], marker='.', markersize=1, color=color_list[run-1], 
-                 label=f'Run {run} - {mean:.4f}$\pm${std_E:.5f} - RE = {(std_E / mean) * 100 :.4f} % - $\\Delta E / \\Delta V$ = {(std_E / std_work):.4f}')
+                 label=f'Run {run} - {mean:.4f}$\\pm${std_E:.5f} - RE = {(std_E / mean) * 100 :.4f} % - $\\Delta E / \\Delta V$ = {(std_E / std_work):.4f}')
         
         RE_half = std_E_half / mean_half * 100
         RE_complete =  std_E / mean * 100

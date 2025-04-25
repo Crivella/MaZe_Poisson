@@ -2,11 +2,18 @@ import click
 
 from .maze import maze
 from .plotters.plot_force import plot_force, plot_forcemod
-from .plotters.plot_T_E_tot import *
 from .plotters.plot_scaling import *
+from .plotters.plot_T_E_tot import *
 
 filename_argument = click.argument(
     'filename',
+    type=click.Path(exists=True),
+    required=True,
+    metavar='CSV_FILE',
+    )
+
+filename_argument_solute = click.argument(
+    'filename_solute',
     type=click.Path(exists=True),
     required=True,
     metavar='CSV_FILE',
@@ -29,8 +36,22 @@ therm_option = click.option(
 Np_option = click.option(
     '--np', 'np',
     type=int,
-    default=216,
+    default=250,
     help='Value of total number of particles (N_p)',
+    )
+
+N_option = click.option(
+    '--n', 'n',
+    type=int,
+    default=120,
+    help='Value of total number of grid points (N)',
+    )
+
+L_option = click.option(
+    '--l', 'l',
+    type=int,
+    default=20.64,
+    help='Length of box (L)',
     )
 
 @maze.group()
@@ -61,9 +82,13 @@ def temperature(filename, dt, therm):
 @plot.command()
 @filename_argument
 @dt_option
-@therm_option
-def energy(filename, dt, therm):
-    plot_Etot_trp(filename, dt, therm)
+# @therm_option
+@N_option
+@Np_option
+@L_option
+@filename_argument_solute
+def energy(filename, filename_solute, dt, n, np, l):
+    plot_Etot_trp(filename, filename_solute, dt, n, np, l)
 
 @plot.command()
 @Np_option
