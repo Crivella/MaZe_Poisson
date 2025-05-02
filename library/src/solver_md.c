@@ -47,7 +47,7 @@ void solver_initialize_particles(
     int n, double L, double h, int n_p, int pot_type, int cas_type,
     double *pos, double *vel, double *mass, long int *charges
 ) {
-    g_particles = particles_init(n, n_p, L, h, int cas_type);
+    g_particles = particles_init(n, n_p, L, h, cas_type);
 
     memcpy(g_particles->pos, pos, n_p * 3 * sizeof(double));
     memcpy(g_particles->vel, vel, n_p * 3 * sizeof(double));
