@@ -32,7 +32,7 @@ char *get_ca_scheme_type_str(int n) {
 
 void particle_charges_init(particles *p, int cas_type) {
     int n_p = p->n_p;
-    
+
     p->cas_type = cas_type;
     switch (cas_type) {
         case CHARGE_ASS_SCHEME_TYPE_CIC:
@@ -284,7 +284,7 @@ void * particles_update_nearest_neighbors_spline(particles *p) {
     long int i0, i1;
     int ni, nj, nk, nip, njp, nkp;
 
-    #pragma omp parallel for private(i, a, b, c, i0, i1, ni, nj, nk, nip, njp, nkp)
+    #pragma omp parallel for private(i, i0, i1, ni, nj, nk, nip, njp, nkp)
     for (i = 0; i < np; i++) {
         i0 = i * 3;
         i1 = i * 64 * 3;
