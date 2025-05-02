@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <math.h>
 
-// #include "charges.h"
 #include "mpi_base.h"
 
 double g2(double x, double L, double h) {
@@ -84,10 +83,7 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *ne
             in2 = i * n2;
             jn = j * n;
 
-            // qc = q[in2 + jn + k];
-            // printf("  i: %d, j: %d, k: %d, g_x: %f, g_y: %f, g_z: %f\n", i, j, k, g2(px - (i+n_start)*h, L, h), g2(py - j*h, L, h), g2(pz - k*h, L, h));
             qc = chg * g2(px - (i+n_start)*h, L, h) * g2(py - j*h, L, h) * g2(pz - k*h, L, h);
-            // printf("  in: %d, qc: %f\n", in, qc);
             sum_q += qc;
             // X
             if (i == 0) {

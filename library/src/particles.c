@@ -3,10 +3,12 @@
 // #include <string.h>
 #include <math.h>
 
+#include "charges.h"
 #include "constants.h"
 #include "forces.h"
 #include "mp_structs.h"
 
+// Potential types
 char potential_type_str[2][16] = {"TF", "LD"};
 
 int get_potential_type_num() {
@@ -17,7 +19,43 @@ char *get_potential_type_str(int n) {
     return potential_type_str[n];
 }
 
-particles * particles_init(int n, int n_p, double L, double h) {
+// Charge assignment scheme types
+char ca_scheme_type_str[3][16] = {"CIC", "SPL_QUADR", "SPL_CUBIC"};
+
+int get_ca_scheme_type_num() {
+    return CHARGE_ASS_SCHEME_TYPE_NUM;
+}
+
+char *get_ca_scheme_type_str(int n) {
+    return ca_scheme_type_str[n];
+}
+
+void particle_charges_init(particles *p, int cas_type) {
+    p->cas_type = cas_type;
+    switch (cas_type) {
+        case CHARGE_ASS_SCHEME_TYPE_CIC:
+            p->neighbors = (long int *)malloc(n_p * 8 * 3 * sizeof(long int));
+            p->update_nearest_neighbors = particles_update_nearest_neighbors_cic;
+            p->update_charges = particles_update_charges_cic;
+            break;
+        case CHARGE_ASS_SCHEME_TYPE_SPLQUAD:
+            p->neighbors = (long int *)malloc(n_p * 64 * 3 * sizeof(long int));
+            p->update_nearest_neighbors = particles_update_nearest_neighbors_spline;
+            p->update_charges = particles_update_charges_spline_quadratic;
+            break;
+        case CHARGE_ASS_SCHEME_TYPE_SPLCUB:
+            p->neighbors = (long int *)malloc(n_p * 64 * 3 * sizeof(long int));
+            p->update_nearest_neighbors = particles_update_nearest_neighbors_spline;
+            p->update_charges = particles_update_charges_spline_cubic;
+            break;
+        default:
+            fprintf(stderr, "Invalid charge assignment scheme type %d\n", cas_type);
+            exit(1);
+            break;
+    }   
+}
+
+particles * particles_init(int n, int n_p, double L, double h, int cas_type) {
     particles *p = (particles *)malloc(sizeof(particles));
     p->n = n;
     p->n_p = n_p;
@@ -31,7 +69,9 @@ particles * particles_init(int n, int n_p, double L, double h) {
     p->fcs_tot = (double *)calloc(n_p * 3, sizeof(double));
     p->mass = (double *)malloc(n_p * sizeof(double));
     p->charges = (long int *)malloc(n_p * sizeof(long int));
-    p->neighbors = (long int *)malloc(n_p * 24 * sizeof(long int));
+
+    // p->neighbors = (long int *)malloc(n_p * 24 * sizeof(long int));
+    particle_charges_init(p, cas_type);
 
     p->tf_params = NULL;
 
@@ -39,7 +79,7 @@ particles * particles_init(int n, int n_p, double L, double h) {
     p->init_potential = particles_init_potential;
     p->init_potential_tf = particles_init_potential_tf;
     p->init_potential_ld = particles_init_potential_ld;
-    p->update_nearest_neighbors = particles_update_nearest_neighbors;
+    
     p->compute_forces_field = particles_compute_forces_field;
     p->compute_forces_noel = NULL;
     p->compute_forces_tot = particles_compute_forces_tot;
@@ -66,7 +106,20 @@ void * particles_free(particles *p) {
     free(p);
 }
 
+double particles_update_charges_cic(particles *p, grid *grid) {
+    return update_charges_cic(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
+}
+
+double particles_update_charges_spline_quadratic(particles *p, grid *grid) {
+    return update_charges_splquadr(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
+}
+
+double particles_update_charges_spline_cubic(particles *p, grid *grid) {
+    return update_charges_splcubic(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
+}
+
 void * particles_init_potential(particles *p, int pot_type) {
+    p->pot_type = pot_type;
     switch (pot_type) 
     {
     case PARTICLE_POTENTIAL_TYPE_TF:
@@ -75,8 +128,9 @@ void * particles_init_potential(particles *p, int pot_type) {
     case PARTICLE_POTENTIAL_TYPE_LD:
         p->init_potential_ld(p);
         break;
-    
     default:
+        fprintf(stderr, "Invalid potential type %d\n", pot_type);
+        exit(1);
         break;
     }
 }
@@ -161,7 +215,7 @@ void * particles_init_potential_ld(particles *p) {
     p->compute_forces_noel = particles_compute_forces_ld;
 }
 
-void * particles_update_nearest_neighbors(particles *p) {
+void * particles_update_nearest_neighbors_cic(particles *p) {
     int np = p->n_p;
     int n = p->n;
     double h = p->h;
@@ -210,6 +264,45 @@ void * particles_update_nearest_neighbors(particles *p) {
         neighbors[i1 + 21 + 1] = njp;
         neighbors[i1 + 21 + 2] = nkp;
     }
+}
+
+void * particles_update_nearest_neighbors_spline(particles *p) {
+    int np = p->n_p;
+    int n = p->n;
+    double h = p->h;
+    double L = p->L;
+
+    long int *neighbors = p->neighbors;
+    double *pos = p->pos;
+
+    int i;
+    long int i0, i1;
+    int ni, nj, nk, nip, njp, nkp;
+
+    #pragma omp parallel for private(i, a, b, c, i0, i1, ni, nj, nk, nip, njp, nkp)
+    for (i = 0; i < np; i++) {
+        i0 = i * 3;
+        i1 = i * 64 * 3;
+
+        ni = (int)floor(pos[i0] / h);
+        nj = (int)floor(pos[i0 + 1] / h);
+        nk = (int)floor(pos[i0 + 2] / h);
+
+        for (int a=-1; a <= 2; a++) {
+            nip = (ni + a + n) % n;
+            for (int b=-1; b <= 2; b++) {
+                njp = (nj + b + n) % n;
+                for (int c=-1; c <= 2; c++) {
+                    nkp = (nk + c + n) % n;
+
+                    neighbors[i1] = nip;
+                    neighbors[i1 + 1] = njp;
+                    neighbors[i1 + 2] = nkp;
+                    i1 += 3;
+                }
+            }
+        }
+    }    
 }
 
 double particles_compute_forces_field(particles *p, grid *grid) {

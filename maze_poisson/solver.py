@@ -28,6 +28,12 @@ potential_map: Dict[str, int] = {
     # 'LD': 1,
 }
 
+ca_scheme_map: Dict[str, int] = {
+    # 'CIC': 0,
+    # 'SPL_QUADR': 1,
+    # 'SPL_CUBIC': 2,
+}
+
 class SolverMD(Logger):
     """Base class for all solver classes."""
 
@@ -85,6 +91,11 @@ class SolverMD(Logger):
             ptr = capi.get_potential_type_str(i)
             potential_map[ptr.decode('utf-8').upper()] = i
 
+        n = capi.get_ca_scheme_type_num()
+        for i in range(n):
+            ptr = capi.get_ca_scheme_type_str(i)
+            ca_scheme_map[ptr.decode('utf-8').upper()] = i
+
         n = capi.get_integrator_type_num()
         for i in range(n):
             ptr = capi.get_integrator_type_str(i)
@@ -107,6 +118,11 @@ class SolverMD(Logger):
         if not potential in potential_map:
             raise ValueError(f"Potential {potential} not recognized.")
         pot_id = potential_map[potential]
+
+        cas_str = self.gset.charge_assignment.upper()
+        if not cas_str in ca_scheme_map:
+            raise ValueError(f"Charge assignment scheme {cas_str} not recognized.")
+        ca_scheme_id = ca_scheme_map[cas_str]
 
         if self.gset.input_file and self.gset.restart_file:
             self.logger.warning("Both input and restart files provided. Using restart file.")
@@ -132,7 +148,7 @@ class SolverMD(Logger):
                 size=(len(df), 3)
             )
         capi.solver_initialize_particles(
-            self.N, self.L, self.h, self.N_p, pot_id,
+            self.N, self.L, self.h, self.N_p, pot_id, ca_scheme_id,
             pos, vel, mass, charges
         )
 
@@ -280,6 +296,7 @@ class SolverMD(Logger):
         self.logger.info(f'Running a MD simulation with:')
         self.logger.info(f'  N_p = {self.N_p}, N_steps = {self.mdv.N_steps}, tol = {self.mdv.tol}')
         self.logger.info(f'  N = {self.N}, L [a.u.] = {self.L}, h [a.u.] = {self.h}')
+        self.logger.info(f'  Charge assignment scheme: {self.gset.charge_assignment}')
         self.logger.info(f'  density = {density} g/cm^3')
         self.logger.info(f'  Preconditioning: {self.mdv.preconditioning}')
         self.logger.info(f'  Integrator: {self.mdv.integrator},  Method: {self.mdv.method},  dt = {self.mdv.dt}')

@@ -12,9 +12,21 @@ double g(double x, double L, double h) {
     return 1.0 - x / h;
 }
 
+double spline_quadr(double x, double L, double h) {
+    x = fabs(x - round(x / L) * L);
+    if (x >= h) {
+        return 0.0;
+    }
+    if (x < 0.5 * h) {
+        return 1.0 - 4.0 * x * x / (h * h);
+    } else {
+        return 1.0 - 2.0 * (x - h / 2.0) * (x - h / 2.0) / (h * h);
+    }
+}
+
 #ifdef __MPI
 
-double update_charges(
+double update_charges_cic(
     int n_grid, int n_p, double h,
     double *pos, long int *neighbors, long int *charges, double *q
 ) {
@@ -70,8 +82,7 @@ double update_charges(
 #else
 
 
-
-double update_charges(
+double update_charges_cic(
     int n_grid, int n_p, double h,
     double *pos, long int *neighbors, long int *charges, double *q
 ) {
