@@ -131,8 +131,13 @@ class SolverMD(Logger):
 
         df = pd.read_csv(start_file)
         charges = np.ascontiguousarray(df['charge'].values, dtype=np.int64)
-        mass = np.ascontiguousarray(df['mass'].values * conv_mass)
-        pos = np.ascontiguousarray(df[['x', 'y', 'z']].values / a0)
+        mass = np.ascontiguousarray(df['mass'].values * conv_mass, dtype=np.float64)
+        pos = np.ascontiguousarray(df[['x', 'y', 'z']].values / a0, dtype=np.float64)
+
+        if not pos.size:
+            raise ValueError(f"Empty or incorrect input file `{start_file}`.")
+        if len(pos) != self.N_p:
+            raise ValueError(f"Number of particles in file ({len(pos)}) does not match N_p ({self.N_p}).")
 
         self.logger.info(f"Loaded starting positions from file: {start_file}")
         if 'vx' in df.columns:
