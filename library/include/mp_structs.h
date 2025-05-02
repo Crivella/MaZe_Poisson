@@ -39,22 +39,22 @@ void lcg_grid_init(grid * grid);
 void lcg_grid_cleanup(grid * grid);
 void lcg_grid_init_field(grid *grid);
 int lcg_grid_update_field(grid *grid);
-// double lcg_grid_update_charges(grid *grid, particles *p);
+double lcg_grid_update_charges(grid *grid, particles *p);
 
 void fft_grid_init(grid * grid);
 void fft_grid_cleanup(grid * grid);
 void fft_grid_init_field(grid *grid);
 int fft_grid_update_field(grid *grid);
-// double fft_grid_update_charges(grid *grid, particles *p);
+double fft_grid_update_charges(grid *grid, particles *p);
 
 void * particles_init_potential(particles *p, int pot_type);
 void * particles_init_potential_tf(particles *p);
 void * particles_init_potential_ld(particles *p);
 void * particles_update_nearest_neighbors_cic(particles *p);
 void * particles_update_nearest_neighbors_spline(particles *p);
-double particles_update_charges_cic(particles *p, grid *grid);
-double particles_update_charges_spline_quadratic(particles *p, grid *grid);
-double particles_update_charges_spline_cubic(particles *p, grid *grid);
+// double particles_update_charges_cic(particles *p, grid *grid);
+// double particles_update_charges_spline_quadratic(particles *p, grid *grid);
+// double particles_update_charges_spline_cubic(particles *p, grid *grid);
 double particles_compute_forces_field(particles *p, grid *grid);
 double particles_compute_forces_tf(particles *p);
 double particles_compute_forces_ld(particles *p);
@@ -103,7 +103,7 @@ struct grid {
     void    (*free)( grid *);
     void    (*init_field)( grid *);
     int     (*update_field)( grid *);
-    // double  (*update_charges)( grid *, particles *);
+    double  (*update_charges)( grid *, particles *);
 };
 
 struct particles {
@@ -139,6 +139,7 @@ struct particles {
 
     void *  (*update_nearest_neighbors)( particles *);
     double  (*update_charges)( grid *, particles *);
+    double  (*charges_spread_func)( double, double, double);
 
     double  (*compute_forces_field)( particles *, grid *);
     double  (*compute_forces_noel)( particles *);

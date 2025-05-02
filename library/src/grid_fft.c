@@ -124,7 +124,7 @@ void fft_grid_init(grid * grid) {
 
     grid->init_field = fft_grid_init_field;
     grid->update_field = fft_grid_update_field;
-    // grid->update_charges = fft_grid_update_charges;
+    grid->update_charges = fft_grid_update_charges;
 }
 
 void fft_grid_cleanup(grid * grid) {
@@ -141,6 +141,9 @@ int fft_grid_update_field(grid *grid) {
     return 0;
 }
 
-// double fft_grid_update_charges(grid *grid, particles *p) {
-//     return update_charges(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
-// }
+double fft_grid_update_charges(grid *grid, particles *p) {
+    return update_charges(
+        grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q,
+        p->charges_spread_func
+    );
+}

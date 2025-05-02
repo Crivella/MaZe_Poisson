@@ -31,22 +31,27 @@ char *get_ca_scheme_type_str(int n) {
 }
 
 void particle_charges_init(particles *p, int cas_type) {
+    int n_p = p->n_p;
+    
     p->cas_type = cas_type;
     switch (cas_type) {
         case CHARGE_ASS_SCHEME_TYPE_CIC:
             p->neighbors = (long int *)malloc(n_p * 8 * 3 * sizeof(long int));
             p->update_nearest_neighbors = particles_update_nearest_neighbors_cic;
-            p->update_charges = particles_update_charges_cic;
+            // p->update_charges = particles_update_charges_cic;
+            p->charges_spread_func = spread_cic;
             break;
         case CHARGE_ASS_SCHEME_TYPE_SPLQUAD:
             p->neighbors = (long int *)malloc(n_p * 64 * 3 * sizeof(long int));
             p->update_nearest_neighbors = particles_update_nearest_neighbors_spline;
-            p->update_charges = particles_update_charges_spline_quadratic;
+            // p->update_charges = particles_update_charges_spline_quadratic;
+            p->charges_spread_func = spread_spline_quadr;
             break;
         case CHARGE_ASS_SCHEME_TYPE_SPLCUB:
             p->neighbors = (long int *)malloc(n_p * 64 * 3 * sizeof(long int));
             p->update_nearest_neighbors = particles_update_nearest_neighbors_spline;
-            p->update_charges = particles_update_charges_spline_cubic;
+            // p->update_charges = particles_update_charges_spline_cubic;
+            p->charges_spread_func = spread_spline_cubic;
             break;
         default:
             fprintf(stderr, "Invalid charge assignment scheme type %d\n", cas_type);
@@ -106,17 +111,17 @@ void * particles_free(particles *p) {
     free(p);
 }
 
-double particles_update_charges_cic(particles *p, grid *grid) {
-    return update_charges_cic(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
-}
+// double particles_update_charges_cic(particles *p, grid *grid) {
+//     return update_charges_cic(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
+// }
 
-double particles_update_charges_spline_quadratic(particles *p, grid *grid) {
-    return update_charges_splquadr(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
-}
+// double particles_update_charges_spline_quadratic(particles *p, grid *grid) {
+//     return update_charges_splquadr(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
+// }
 
-double particles_update_charges_spline_cubic(particles *p, grid *grid) {
-    return update_charges_splcubic(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
-}
+// double particles_update_charges_spline_cubic(particles *p, grid *grid) {
+//     return update_charges_splcubic(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
+// }
 
 void * particles_init_potential(particles *p, int pot_type) {
     p->pot_type = pot_type;
