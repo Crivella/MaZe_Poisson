@@ -4,15 +4,6 @@
 
 #include "mpi_base.h"
 
-double g2(double x, double L, double h) {
-    x = fabs(x - round(x / L) * L);
-    if (x >= h) {
-        return 0.0;
-    }
-    return 1.0 - x / h;
-}
-
-
 #ifdef __MPI
 // /*
 // Compute the forces on each particle by computing the field from the potential using finite differences.
@@ -29,7 +20,11 @@ double g2(double x, double L, double h) {
 
 // @return the sum of the charges on the neighbors
 // */
-double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *neighbors, long int *charges, double *pos, double *forces) {
+double compute_force_fd(
+    int n_grid, int n_p, double h,
+    double *phi, long int *neighbors, long int *charges, double *pos, double *forces,
+    double (*g)(double, double, double)
+) {
     long int n = n_grid;
     long int n2 = n * n;
 
@@ -83,7 +78,7 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *ne
             in2 = i * n2;
             jn = j * n;
 
-            qc = chg * g2(px - (i+n_start)*h, L, h) * g2(py - j*h, L, h) * g2(pz - k*h, L, h);
+            qc = chg * g(px - (i+n_start)*h, L, h) * g(py - j*h, L, h) * g(pz - k*h, L, h);
             sum_q += qc;
             // X
             if (i == 0) {
@@ -135,7 +130,11 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *ne
 
 // @return the sum of the charges on the neighbors
 // */
-double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *neighbors, long int *charges, double *pos, double *forces) {
+double compute_force_fd(
+    int n_grid, int n_p, double h,
+    double *phi, long int *neighbors, long int *charges, double *pos, double *forces,
+    double (*g)(double, double, double)
+) {
     long int n = n_grid;
     long int n2 = n * n;
 
@@ -172,7 +171,7 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *ne
             jn = j * n;
 
             // qc = q[in2 + jn + k];
-            qc = chg * g2(px - i*h, L, h) * g2(py - j*h, L, h) * g2(pz - k*h, L, h);
+            qc = chg * g(px - i*h, L, h) * g(py - j*h, L, h) * g(pz - k*h, L, h);
             sum_q += qc;
             // X
             i1 = ((i+1) % n) * n2;
