@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-// #include "charges.h"
+#include "charges.h"
 #include "mpi_base.h"
 #include "mp_structs.h"
 #include "fftw_wrap.h"

@@ -3,7 +3,7 @@
 #include <string.h>
 #include <math.h>
 
-// #include "charges.h"
+#include "charges.h"
 #include "laplace.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
