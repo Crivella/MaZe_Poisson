@@ -39,10 +39,11 @@ double spread_spline_cubic(double x, double L, double h) {
 #ifdef __MPI
 
 double update_charges(
-    int n_grid, int n_p, double h,
+    int n_grid, int n_p, double h, int num_neigh,
     double *pos, long int *neighbors, long int *charges, double *q,
     double (*g)(double, double, double)
 ) {
+    int nn3 = num_neigh * 3;
     int n_loc = get_n_loc();
     int n_loc_start = get_n_start();
 
@@ -66,13 +67,13 @@ double update_charges(
     #pragma omp parallel for private(i1, i2, ni, nj, nk, ni_loc, px, py, pz, app, upd, chg) reduction(+:q_tot)
     for (long int i=0; i<n_p; i++) {
         i1 = i * 3;
-        i2 = i * 24;
+        i2 = i * nn3;
 
         chg = charges[i];
         px = pos[i1 + 0];
         py = pos[i1 + 1];
         pz = pos[i1 + 2];
-        for (int j=0; j < 24; j+=3) {
+        for (int j=0; j < nn3; j+=3) {
             ni = neighbors[i2 + j + 0];
             ni_loc = ni - n_loc_start;
             if (ni_loc < 0 || ni_loc >= n_loc) {
@@ -96,10 +97,11 @@ double update_charges(
 
 
 double update_charges(
-    int n_grid, int n_p, double h,
+    int n_grid, int n_p, double h, int num_neigh,
     double *pos, long int *neighbors, long int *charges, double *q,
     double (*g)(double, double, double)
 ) {
+    int nn3 = num_neigh * 3;
     long int ni, nj, nk;
     long int i, i1, i2;
     long int n2 = n_grid * n_grid;
@@ -120,13 +122,13 @@ double update_charges(
     #pragma omp parallel for private(i1, i2, ni, nj, nk, px, py, pz, app, upd, chg) reduction(+:q_tot)
     for (i=0; i<n_p; i++) {
         i1 = i * 3;
-        i2 = i * 24;
+        i2 = i * nn3;
 
         chg = charges[i];
         px = pos[i1 + 0];
         py = pos[i1 + 1];
         pz = pos[i1 + 2];
-        for (int j=0; j < 24; j+=3) {
+        for (int j=0; j < nn3; j+=3) {
             ni = neighbors[i2 + j + 0];
             nj = neighbors[i2 + j + 1];
             nk = neighbors[i2 + j + 2];

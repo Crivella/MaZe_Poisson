@@ -52,9 +52,6 @@ void * particles_init_potential_tf(particles *p);
 void * particles_init_potential_ld(particles *p);
 void * particles_update_nearest_neighbors_cic(particles *p);
 void * particles_update_nearest_neighbors_spline(particles *p);
-// double particles_update_charges_cic(particles *p, grid *grid);
-// double particles_update_charges_spline_quadratic(particles *p, grid *grid);
-// double particles_update_charges_spline_cubic(particles *p, grid *grid);
 double particles_compute_forces_field(particles *p, grid *grid);
 double particles_compute_forces_tf(particles *p);
 double particles_compute_forces_ld(particles *p);
@@ -63,10 +60,6 @@ double particles_get_temperature(particles *p);
 double particles_get_kinetic_energy(particles *p);
 void * particles_get_momentum(particles *p, double *out);
 void * particles_rescale_velocities(particles *p);
-// void particles_cas_init_cic(particles *p);
-// void particles_cas_init_splquad(particles *p);
-// void particles_cas_init_splcub(particles *p);
-// void particles_cas_free(particles *p);
 
 void ovrvo_integrator_init(integrator *integrator);
 void ovrvo_integrator_part1(integrator *integrator, particles *p);
@@ -138,7 +131,6 @@ struct particles {
     void *  (*init_potential_ld)( particles *);
 
     void *  (*update_nearest_neighbors)( particles *);
-    double  (*update_charges)( grid *, particles *);
     double  (*charges_spread_func)( double, double, double);
 
     double  (*compute_forces_field)( particles *, grid *);
