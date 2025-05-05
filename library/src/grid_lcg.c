@@ -96,5 +96,9 @@ int lcg_grid_update_field(grid *grid) {
 }   
 
 double lcg_grid_update_charges(grid *grid, particles *p) {
-    return update_charges(grid->n, p->n_p, grid->h, p->pos, p->neighbors, p->charges, grid->q);
+    return update_charges(
+        grid->n, p->n_p, grid->h, p->num_neighbors,
+        p->pos, p->neighbors, p->charges, grid->q,
+        p->charges_spread_func
+    );
 }

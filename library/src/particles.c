@@ -3,10 +3,12 @@
 // #include <string.h>
 #include <math.h>
 
+#include "charges.h"
 #include "constants.h"
 #include "forces.h"
 #include "mp_structs.h"
 
+// Potential types
 char potential_type_str[2][16] = {"TF", "LD"};
 
 int get_potential_type_num() {
@@ -17,7 +19,48 @@ char *get_potential_type_str(int n) {
     return potential_type_str[n];
 }
 
-particles * particles_init(int n, int n_p, double L, double h) {
+// Charge assignment scheme types
+char ca_scheme_type_str[3][16] = {"CIC", "SPL_QUADR", "SPL_CUBIC"};
+
+int get_ca_scheme_type_num() {
+    return CHARGE_ASS_SCHEME_TYPE_NUM;
+}
+
+char *get_ca_scheme_type_str(int n) {
+    return ca_scheme_type_str[n];
+}
+
+void particle_charges_init(particles *p, int cas_type) {
+    int n_p = p->n_p;
+
+    p->cas_type = cas_type;
+    switch (cas_type) {
+        case CHARGE_ASS_SCHEME_TYPE_CIC:
+            p->num_neighbors = 8;
+            p->neighbors = (long int *)malloc(n_p * 8 * 3 * sizeof(long int));
+            p->update_nearest_neighbors = particles_update_nearest_neighbors_cic;
+            p->charges_spread_func = spread_cic;
+            break;
+        case CHARGE_ASS_SCHEME_TYPE_SPLQUAD:
+            p->num_neighbors = 64;
+            p->neighbors = (long int *)malloc(n_p * 64 * 3 * sizeof(long int));
+            p->update_nearest_neighbors = particles_update_nearest_neighbors_spline;
+            p->charges_spread_func = spread_spline_quadr;
+            break;
+        case CHARGE_ASS_SCHEME_TYPE_SPLCUB:
+            p->num_neighbors = 64;
+            p->neighbors = (long int *)malloc(n_p * 64 * 3 * sizeof(long int));
+            p->update_nearest_neighbors = particles_update_nearest_neighbors_spline;
+            p->charges_spread_func = spread_spline_cubic;
+            break;
+        default:
+            fprintf(stderr, "Invalid charge assignment scheme type %d\n", cas_type);
+            exit(1);
+            break;
+    }   
+}
+
+particles * particles_init(int n, int n_p, double L, double h, int cas_type) {
     particles *p = (particles *)malloc(sizeof(particles));
     p->n = n;
     p->n_p = n_p;
@@ -31,7 +74,9 @@ particles * particles_init(int n, int n_p, double L, double h) {
     p->fcs_tot = (double *)calloc(n_p * 3, sizeof(double));
     p->mass = (double *)malloc(n_p * sizeof(double));
     p->charges = (long int *)malloc(n_p * sizeof(long int));
-    p->neighbors = (long int *)malloc(n_p * 24 * sizeof(long int));
+
+    // p->neighbors = (long int *)malloc(n_p * 24 * sizeof(long int));
+    particle_charges_init(p, cas_type);
 
     p->tf_params = NULL;
 
@@ -39,7 +84,7 @@ particles * particles_init(int n, int n_p, double L, double h) {
     p->init_potential = particles_init_potential;
     p->init_potential_tf = particles_init_potential_tf;
     p->init_potential_ld = particles_init_potential_ld;
-    p->update_nearest_neighbors = particles_update_nearest_neighbors;
+    
     p->compute_forces_field = particles_compute_forces_field;
     p->compute_forces_noel = NULL;
     p->compute_forces_tot = particles_compute_forces_tot;
@@ -51,7 +96,7 @@ particles * particles_init(int n, int n_p, double L, double h) {
     return p;
 }
 
-void * particles_free(particles *p) {
+void particles_free(particles *p) {
     free(p->pos);
     free(p->vel);
     free(p->fcs_elec);
@@ -66,7 +111,8 @@ void * particles_free(particles *p) {
     free(p);
 }
 
-void * particles_init_potential(particles *p, int pot_type) {
+void particles_init_potential(particles *p, int pot_type) {
+    p->pot_type = pot_type;
     switch (pot_type) 
     {
     case PARTICLE_POTENTIAL_TYPE_TF:
@@ -75,8 +121,9 @@ void * particles_init_potential(particles *p, int pot_type) {
     case PARTICLE_POTENTIAL_TYPE_LD:
         p->init_potential_ld(p);
         break;
-    
     default:
+        fprintf(stderr, "Invalid potential type %d\n", pot_type);
+        exit(1);
         break;
     }
 }
@@ -110,7 +157,7 @@ double tf_dict[5][4] = {
     {A_NaNa, C_NaNa, D_NaNa, sigma_TF_NaNa}
 };
 
-void * particles_init_potential_tf(particles *p) {
+void particles_init_potential_tf(particles *p) {
     int np = p->n_p;
     long int np2 = np * np;
 
@@ -153,7 +200,7 @@ void * particles_init_potential_tf(particles *p) {
     p->compute_forces_noel = particles_compute_forces_tf;
 }
 
-void * particles_init_potential_ld(particles *p) {
+void particles_init_potential_ld(particles *p) {
     p->sigma = 3.00512 * 2 / a0;
     p->epsilon = 5.48 * 1e-4;
     p->r_cut = 2.5 * p->sigma;
@@ -161,7 +208,7 @@ void * particles_init_potential_ld(particles *p) {
     p->compute_forces_noel = particles_compute_forces_ld;
 }
 
-void * particles_update_nearest_neighbors(particles *p) {
+void particles_update_nearest_neighbors_cic(particles *p) {
     int np = p->n_p;
     int n = p->n;
     double h = p->h;
@@ -212,8 +259,51 @@ void * particles_update_nearest_neighbors(particles *p) {
     }
 }
 
+void particles_update_nearest_neighbors_spline(particles *p) {    
+    int np = p->n_p;
+    int n = p->n;
+    double h = p->h;
+    double L = p->L;
+
+    long int *neighbors = p->neighbors;
+    double *pos = p->pos;
+
+    int i;
+    long int i0, i1;
+    int ni, nj, nk, nip, njp, nkp;
+
+    #pragma omp parallel for private(i, i0, i1, ni, nj, nk, nip, njp, nkp)
+    for (i = 0; i < np; i++) {
+        i0 = i * 3;
+        i1 = i * 64 * 3;
+
+        ni = (int)floor(pos[i0] / h);
+        nj = (int)floor(pos[i0 + 1] / h);
+        nk = (int)floor(pos[i0 + 2] / h);
+
+        for (int a=-1; a <= 2; a++) {
+            nip = (ni + a + n) % n;
+            for (int b=-1; b <= 2; b++) {
+                njp = (nj + b + n) % n;
+                for (int c=-1; c <= 2; c++) {
+                    nkp = (nk + c + n) % n;
+
+                    neighbors[i1] = nip;
+                    neighbors[i1 + 1] = njp;
+                    neighbors[i1 + 2] = nkp;
+                    i1 += 3;
+                }
+            }
+        }
+    }    
+}
+
 double particles_compute_forces_field(particles *p, grid *grid) {
-    return compute_force_fd(p->n, p->n_p, p->h, grid->phi_n, p->neighbors, p->charges, p->pos, p->fcs_elec);
+    return compute_force_fd(
+        p->n, p->n_p, p->h, p->num_neighbors,
+        grid->phi_n, p->neighbors, p->charges, p->pos, p->fcs_elec,
+        p->charges_spread_func
+    );
 }
 
 double particles_compute_forces_tf(particles *p) {
@@ -224,7 +314,7 @@ double particles_compute_forces_ld(particles *p) {
     return 0.0;
 }
 
-void * particles_compute_forces_tot(particles *p) {
+void particles_compute_forces_tot(particles *p) {
     int ni;
     #pragma omp parallel for private(ni)
     for (int i = 0; i < p->n_p; i++) {
@@ -260,7 +350,7 @@ double particles_get_kinetic_energy(particles *p) {
     return 0.5 * kin;
 }
 
-void * particles_get_momentum(particles *p, double *out) {
+void particles_get_momentum(particles *p, double *out) {
     int ni;
     double mass;
     double px = 0.0, py = 0.0, pz = 0.0;
@@ -280,7 +370,7 @@ void * particles_get_momentum(particles *p, double *out) {
 }
 
 // This also needs to be generalized
-void * particles_rescale_velocities(particles *p) {
+void particles_rescale_velocities(particles *p) {
     long int min_charge = -1;
     double init_vel[3][3] = {
         {0.0, 0.0, 0.0},  // Cl

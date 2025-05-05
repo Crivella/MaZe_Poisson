@@ -28,6 +28,12 @@ potential_map: Dict[str, int] = {
     # 'LD': 1,
 }
 
+ca_scheme_map: Dict[str, int] = {
+    # 'CIC': 0,
+    # 'SPL_QUADR': 1,
+    # 'SPL_CUBIC': 2,
+}
+
 class SolverMD(Logger):
     """Base class for all solver classes."""
 
@@ -85,6 +91,11 @@ class SolverMD(Logger):
             ptr = capi.get_potential_type_str(i)
             potential_map[ptr.decode('utf-8').upper()] = i
 
+        n = capi.get_ca_scheme_type_num()
+        for i in range(n):
+            ptr = capi.get_ca_scheme_type_str(i)
+            ca_scheme_map[ptr.decode('utf-8').upper()] = i
+
         n = capi.get_integrator_type_num()
         for i in range(n):
             ptr = capi.get_integrator_type_str(i)
@@ -108,6 +119,11 @@ class SolverMD(Logger):
             raise ValueError(f"Potential {potential} not recognized.")
         pot_id = potential_map[potential]
 
+        cas_str = self.gset.charge_assignment.upper()
+        if not cas_str in ca_scheme_map:
+            raise ValueError(f"Charge assignment scheme {cas_str} not recognized.")
+        ca_scheme_id = ca_scheme_map[cas_str]
+
         if self.gset.input_file and self.gset.restart_file:
             self.logger.warning("Both input and restart files provided. Using restart file.")
         start_file = self.gset.restart_file or self.gset.input_file
@@ -115,8 +131,13 @@ class SolverMD(Logger):
 
         df = pd.read_csv(start_file)
         charges = np.ascontiguousarray(df['charge'].values, dtype=np.int64)
-        mass = np.ascontiguousarray(df['mass'].values * conv_mass)
-        pos = np.ascontiguousarray(df[['x', 'y', 'z']].values / a0)
+        mass = np.ascontiguousarray(df['mass'].values * conv_mass, dtype=np.float64)
+        pos = np.ascontiguousarray(df[['x', 'y', 'z']].values / a0, dtype=np.float64)
+
+        if not pos.size:
+            raise ValueError(f"Empty or incorrect input file `{start_file}`.")
+        if len(pos) != self.N_p:
+            raise ValueError(f"Number of particles in file ({len(pos)}) does not match N_p ({self.N_p}).")
 
         self.logger.info(f"Loaded starting positions from file: {start_file}")
         if 'vx' in df.columns:
@@ -132,7 +153,7 @@ class SolverMD(Logger):
                 size=(len(df), 3)
             )
         capi.solver_initialize_particles(
-            self.N, self.L, self.h, self.N_p, pot_id,
+            self.N, self.L, self.h, self.N_p, pot_id, ca_scheme_id,
             pos, vel, mass, charges
         )
 
@@ -280,6 +301,7 @@ class SolverMD(Logger):
         self.logger.info(f'Running a MD simulation with:')
         self.logger.info(f'  N_p = {self.N_p}, N_steps = {self.mdv.N_steps}, tol = {self.mdv.tol}')
         self.logger.info(f'  N = {self.N}, L [a.u.] = {self.L}, h [a.u.] = {self.h}')
+        self.logger.info(f'  Charge assignment scheme: {self.gset.charge_assignment}')
         self.logger.info(f'  density = {density} g/cm^3')
         self.logger.info(f'  Preconditioning: {self.mdv.preconditioning}')
         self.logger.info(f'  Integrator: {self.mdv.integrator},  Method: {self.mdv.method},  dt = {self.mdv.dt}')

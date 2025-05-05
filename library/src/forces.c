@@ -2,17 +2,7 @@
 #include <stdio.h>
 #include <math.h>
 
-// #include "charges.h"
 #include "mpi_base.h"
-
-double g2(double x, double L, double h) {
-    x = fabs(x - round(x / L) * L);
-    if (x >= h) {
-        return 0.0;
-    }
-    return 1.0 - x / h;
-}
-
 
 #ifdef __MPI
 // /*
@@ -30,7 +20,12 @@ double g2(double x, double L, double h) {
 
 // @return the sum of the charges on the neighbors
 // */
-double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *neighbors, long int *charges, double *pos, double *forces) {
+double compute_force_fd(
+    int n_grid, int n_p, double h, int num_neigh,
+    double *phi, long int *neighbors, long int *charges, double *pos, double *forces,
+    double (*g)(double, double, double)
+) {
+    int nn3 = num_neigh * 3;
     long int n = n_grid;
     long int n2 = n * n;
 
@@ -62,7 +57,7 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *ne
     double sum_q = 0.0;
     #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, E, qc, px, py, pz, chg, ptr1, ptr2) reduction(+:sum_q)
     for (int ip = 0; ip < n_p; ip++) {
-        i0 = ip*24;
+        i0 = ip * nn3;
         j0 = ip*3;
         forces[j0] = 0.0;
         forces[j0+1] = 0.0;
@@ -72,7 +67,7 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *ne
         pz = pos[j0 + 2];
         chg = charges[ip];
         // printf("ip: %d, chg: %f, px: %f, py: %f, pz: %f L: %f, h: %f\n", ip, chg, px, py, pz, L, h);
-        for (int in = 0; in < 24; in += 3) {
+        for (int in = 0; in < nn3; in += 3) {
             i1 = i0 + in;
             i = neighbors[i1] - n_start;
             if (i < 0 || i >= n_loc) {
@@ -84,10 +79,7 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *ne
             in2 = i * n2;
             jn = j * n;
 
-            // qc = q[in2 + jn + k];
-            // printf("  i: %d, j: %d, k: %d, g_x: %f, g_y: %f, g_z: %f\n", i, j, k, g2(px - (i+n_start)*h, L, h), g2(py - j*h, L, h), g2(pz - k*h, L, h));
-            qc = chg * g2(px - (i+n_start)*h, L, h) * g2(py - j*h, L, h) * g2(pz - k*h, L, h);
-            // printf("  in: %d, qc: %f\n", in, qc);
+            qc = chg * g(px - (i+n_start)*h, L, h) * g(py - j*h, L, h) * g(pz - k*h, L, h);
             sum_q += qc;
             // X
             if (i == 0) {
@@ -139,7 +131,12 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *ne
 
 // @return the sum of the charges on the neighbors
 // */
-double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *neighbors, long int *charges, double *pos, double *forces) {
+double compute_force_fd(
+    int n_grid, int n_p, double h, int num_neigh,
+    double *phi, long int *neighbors, long int *charges, double *pos, double *forces,
+    double (*g)(double, double, double)
+) {
+    int nn3 = num_neigh * 3;
     long int n = n_grid;
     long int n2 = n * n;
 
@@ -157,7 +154,7 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *ne
     double sum_q = 0.0;
     #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, px, py, pz, chg, E, qc) reduction(+:sum_q)
     for (int ip = 0; ip < n_p; ip++) {
-        i0 = ip*24;
+        i0 = ip * nn3;
         j0 = ip*3;
         forces[j0] = 0.0;
         forces[j0+1] = 0.0;
@@ -166,7 +163,7 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *ne
         py = pos[j0 + 1];
         pz = pos[j0 + 2];
         chg = charges[ip];
-        for (int in = 0; in < 8; in++) {
+        for (int in = 0; in < nn3; in++) {
             i1 = i0 + in*3;
             i = neighbors[i1];
             j = neighbors[i1 + 1];
@@ -176,7 +173,7 @@ double compute_force_fd(int n_grid, int n_p, double h, double *phi, long int *ne
             jn = j * n;
 
             // qc = q[in2 + jn + k];
-            qc = chg * g2(px - i*h, L, h) * g2(py - j*h, L, h) * g2(pz - k*h, L, h);
+            qc = chg * g(px - i*h, L, h) * g(py - j*h, L, h) * g(pz - k*h, L, h);
             sum_q += qc;
             // X
             i1 = ((i+1) % n) * n2;

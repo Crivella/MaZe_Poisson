@@ -55,7 +55,7 @@ class OutputSettings(BaseSettings):
         self.restart_step = None
 
 class GridSetting(BaseSettings):
-    tocheck = ['N', 'N_p', 'L', 'h', 'file']
+    tocheck = ['N', 'N_p', 'L', 'h', 'file', 'charge_assignment']
     def defaults(self):
         """Set default values."""
         self._N = None
@@ -65,6 +65,7 @@ class GridSetting(BaseSettings):
         self._L = None
         self._L_ang = None
         self.h = None
+        self.charge_assignment = 'CIC'
         
     @property
     def N(self):

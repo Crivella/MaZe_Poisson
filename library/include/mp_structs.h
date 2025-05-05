@@ -9,6 +9,11 @@
 #define PARTICLE_POTENTIAL_TYPE_TF 0
 #define PARTICLE_POTENTIAL_TYPE_LD 1
 
+#define CHARGE_ASS_SCHEME_TYPE_NUM 3
+#define CHARGE_ASS_SCHEME_TYPE_CIC 0
+#define CHARGE_ASS_SCHEME_TYPE_SPLQUAD 1
+#define CHARGE_ASS_SCHEME_TYPE_SPLCUB 2
+
 #define INTEGRATOR_TYPE_NUM 2
 #define INTEGRATOR_TYPE_OVRVO 0
 #define INTEGRATOR_TYPE_VERLET 1
@@ -23,11 +28,11 @@ typedef struct integrator integrator;
 
 // Struct function definitions
 grid * grid_init(int n, double L, double h, double tol, int type);
-particles * particles_init(int n, int n_p, double L, double h);
+particles * particles_init(int n, int n_p, double L, double h, int cas_type);
 integrator * integrator_init(int n_p, double dt, int type);
 
 void grid_free(grid *grid);
-void * particles_free(particles *p);
+void particles_free(particles *p);
 void integrator_free(integrator *integrator);
 
 void lcg_grid_init(grid * grid);
@@ -42,18 +47,19 @@ void fft_grid_init_field(grid *grid);
 int fft_grid_update_field(grid *grid);
 double fft_grid_update_charges(grid *grid, particles *p);
 
-void * particles_init_potential(particles *p, int pot_type);
-void * particles_init_potential_tf(particles *p);
-void * particles_init_potential_ld(particles *p);
-void * particles_update_nearest_neighbors(particles *p);
+void particles_init_potential(particles *p, int pot_type);
+void particles_init_potential_tf(particles *p);
+void particles_init_potential_ld(particles *p);
+void particles_update_nearest_neighbors_cic(particles *p);
+void particles_update_nearest_neighbors_spline(particles *p);
 double particles_compute_forces_field(particles *p, grid *grid);
 double particles_compute_forces_tf(particles *p);
 double particles_compute_forces_ld(particles *p);
-void * particles_compute_forces_tot(particles *p);
+void particles_compute_forces_tot(particles *p);
 double particles_get_temperature(particles *p);
 double particles_get_kinetic_energy(particles *p);
-void * particles_get_momentum(particles *p, double *out);
-void * particles_rescale_velocities(particles *p);
+void particles_get_momentum(particles *p, double *out);
+void particles_rescale_velocities(particles *p);
 
 void ovrvo_integrator_init(integrator *integrator);
 void ovrvo_integrator_part1(integrator *integrator, particles *p);
@@ -99,6 +105,11 @@ struct particles {
     double L;  // Length of the grid
     double h;  // Grid spacing
 
+    int num_neighbors;  // Number of neighbors per particle
+
+    int pot_type;  // Type of the potential
+    int cas_type;  // Type of the charge assignment scheme
+
     double *pos;  // Particle positions (n_p x 3)
     double *vel;  // Particle velocities (n_p x 3)
     double *fcs_elec;  // Particle electric forces (n_p x 3)
@@ -113,23 +124,24 @@ struct particles {
     double epsilon;
     double *tf_params;  // Parameters for the TF potential (6 x n_p x n_p)
 
-    void *  (*free)( particles *);
+    void    (*free)( particles *);
 
-    void *  (*init_potential)( particles *, int pot_type);
-    void *  (*init_potential_tf)( particles *);
-    void *  (*init_potential_ld)( particles *);
+    void    (*init_potential)( particles *, int pot_type);
+    void    (*init_potential_tf)( particles *);
+    void    (*init_potential_ld)( particles *);
 
-    void *  (*update_nearest_neighbors)( particles *);
+    void    (*update_nearest_neighbors)( particles *);
+    double  (*charges_spread_func)( double, double, double);
 
     double  (*compute_forces_field)( particles *, grid *);
     double  (*compute_forces_noel)( particles *);
-    void *  (*compute_forces_tot)( particles *);
+    void    (*compute_forces_tot)( particles *);
 
     double  (*get_temperature)( particles *);
     double  (*get_kinetic_energy)( particles *);
-    void *  (*get_momentum)( particles *, double *);
+    void    (*get_momentum)( particles *, double *);
 
-    void *  (*rescale_velocities)( particles *);
+    void    (*rescale_velocities)( particles *);
 };
 
 struct integrator {
