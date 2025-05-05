@@ -36,6 +36,7 @@ int get_n_loc();
 int get_n_start();
 void exchange_bot_top(double *bot, double *top, double **bot_recv, double **top_recv);
 
+void bcast_double(double *buffer, long int size, int root);
 void allreduce_sum(double *buffer, long int size);
 void collect_grid_buffer(double *data, double *recv, int n);
 

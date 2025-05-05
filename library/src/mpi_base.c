@@ -111,6 +111,12 @@ void allreduce_sum(double *buffer, long int count) {
     }
 }
 
+void bcast_double(double *buffer, long int size, int root) {
+    if (global_mpi_data->size > 1) {
+        MPI_Bcast(buffer, size, MPI_DOUBLE, root, global_mpi_data->comm);
+    }
+}
+
 void collect_grid_buffer(double *data, double *recv, int n) {
     int n_loc = global_mpi_data->n_loc;
     int n_loc_start;
@@ -155,6 +161,10 @@ void cleanup_mpi() {
 void exchange_bot_top(double *bot, double *top, double **bot_recv, double **top_recv) {
     *bot_recv = top;
     *top_recv = bot;
+}
+
+void bcast_double(double *buffer, long int size, int root) {
+    // Do nothing
 }
 
 void allreduce_sum(double *buffer, long int size) {
