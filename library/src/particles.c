@@ -8,6 +8,9 @@
 #include "forces.h"
 #include "mp_structs.h"
 
+#define NUM_NEIGH_CIC 8
+#define NUM_NEIGH_SPLINE 64
+
 // Potential types
 char potential_type_str[2][16] = {"TF", "LD"};
 
@@ -36,20 +39,20 @@ void particle_charges_init(particles *p, int cas_type) {
     p->cas_type = cas_type;
     switch (cas_type) {
         case CHARGE_ASS_SCHEME_TYPE_CIC:
-            p->num_neighbors = 8;
-            p->neighbors = (long int *)malloc(n_p * 8 * 3 * sizeof(long int));
+            p->num_neighbors = NUM_NEIGH_CIC;
+            p->neighbors = (long int *)malloc(n_p * NUM_NEIGH_CIC * 3 * sizeof(long int));
             p->update_nearest_neighbors = particles_update_nearest_neighbors_cic;
             p->charges_spread_func = spread_cic;
             break;
         case CHARGE_ASS_SCHEME_TYPE_SPLQUAD:
-            p->num_neighbors = 64;
-            p->neighbors = (long int *)malloc(n_p * 64 * 3 * sizeof(long int));
+            p->num_neighbors = NUM_NEIGH_SPLINE;
+            p->neighbors = (long int *)malloc(n_p * NUM_NEIGH_SPLINE * 3 * sizeof(long int));
             p->update_nearest_neighbors = particles_update_nearest_neighbors_spline;
             p->charges_spread_func = spread_spline_quadr;
             break;
         case CHARGE_ASS_SCHEME_TYPE_SPLCUB:
-            p->num_neighbors = 64;
-            p->neighbors = (long int *)malloc(n_p * 64 * 3 * sizeof(long int));
+            p->num_neighbors = NUM_NEIGH_SPLINE;
+            p->neighbors = (long int *)malloc(n_p * NUM_NEIGH_SPLINE * 3 * sizeof(long int));
             p->update_nearest_neighbors = particles_update_nearest_neighbors_spline;
             p->charges_spread_func = spread_spline_cubic;
             break;
@@ -224,7 +227,7 @@ void particles_update_nearest_neighbors_cic(particles *p) {
     #pragma omp parallel for private(i, j, i0, i1, ni, nj, nk, nip, njp, nkp)
     for (i = 0; i < np; i++) {
         i0 = i * 3;
-        i1 = i * 24;
+        i1 = i * NUM_NEIGH_CIC * 3;
 
         ni = (int)floor(pos[i0] / h);
         nj = (int)floor(pos[i0 + 1] / h);
@@ -275,7 +278,7 @@ void particles_update_nearest_neighbors_spline(particles *p) {
     #pragma omp parallel for private(i, i0, i1, ni, nj, nk, nip, njp, nkp)
     for (i = 0; i < np; i++) {
         i0 = i * 3;
-        i1 = i * 64 * 3;
+        i1 = i * NUM_NEIGH_SPLINE * 3;
 
         ni = (int)floor(pos[i0] / h);
         nj = (int)floor(pos[i0 + 1] / h);
