@@ -77,8 +77,8 @@ class OutputFiles:
         self.base_path = oset.path
         self.fmt = oset.format
 
-        if not os.path.exists(self.base_path):
-            os.makedirs(self.base_path)
+        if not os.path.exists(self.base_path) and get_enabled_io():
+            os.makedirs(self.base_path, exist_ok=True)
 
         self.out_stride = oset.stride
         self.out_flushstride = (oset.flushstride or 0) * oset.stride
