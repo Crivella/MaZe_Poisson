@@ -12,11 +12,13 @@
 // @param n_grid: the number of grid points in each dimension
 // @param n_p: the number of particles
 // @param h: the grid spacing
+// @param num_neigh: the number of neighbors for each particle
 // @param phi: the potential field of size n_grid * n_grid * n_grid
 // @param neighbors: Array (x,y,z) of neighbors indexes for each particle (n_p x 8 x 3)
 // @param charges: the charges on each particle of size n_p
 // @param pos: the positions of the particles of size n_p * 3
 // @param forces: the output forces on each particle of size n_p * 3
+// @param g: the function to compute the charge assignment
 
 // @return the sum of the charges on the neighbors
 // */
@@ -123,11 +125,13 @@ double compute_force_fd(
 // @param n_grid: the number of grid points in each dimension
 // @param n_p: the number of particles
 // @param h: the grid spacing
+// @param num_neigh: the number of neighbors per particle
 // @param phi: the potential field of size n_grid * n_grid * n_grid
 // @param neighbors: Array (x,y,z) of neighbors indexes for each particle (n_p x 8 x 3)
 // @param charges: the charges on each particle of size n_p
 // @param pos: the positions of the particles of size n_p * 3
 // @param forces: the output forces on each particle of size n_p * 3
+// @param g: the function to compute the charge assignment
 
 // @return the sum of the charges on the neighbors
 // */
@@ -163,7 +167,7 @@ double compute_force_fd(
         py = pos[j0 + 1];
         pz = pos[j0 + 2];
         chg = charges[ip];
-        for (int in = 0; in < nn3; in++) {
+        for (int in = 0; in < num_neigh; in++) {
             i1 = i0 + in*3;
             i = neighbors[i1];
             j = neighbors[i1 + 1];
