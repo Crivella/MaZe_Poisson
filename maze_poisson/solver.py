@@ -1,5 +1,6 @@
 """Implement a base solver Class for maze_poisson."""
 import atexit
+import logging
 from typing import Dict
 
 import numpy as np
@@ -8,8 +9,9 @@ import pandas as pd
 from .c_api import capi
 from .clocks import Clock
 from .constants import a0, conv_mass
-from .myio import Logger, OutputFiles, ProgressBar
+from .myio import OutputFiles, ProgressBar
 from .myio.input import GridSetting, MDVariables, OutputSettings
+from .myio.loggers import Logger, set_log_level
 
 np.random.seed(42)
 
@@ -56,8 +58,7 @@ class SolverMD(Logger):
         self.out_stride = outset.stride
         self.out_flushstride = outset.flushstride * outset.stride
         if self.outset.debug:
-            for handler in self.logger.handlers:
-                handler.setLevel(0)
+            set_log_level(logging.DEBUG)
             self.logger.debug("Set verbosity to DEBUG")
 
     @Clock('initialize')
@@ -178,25 +179,25 @@ class SolverMD(Logger):
         ffile = self.gset.restart_field_file
         if ffile is None or self.mdv.invert_time:
             # STEP 0 Verlet
-            # self.logger.info("---- Udpating charges")
+            self.logger.debug("---- Udpating charges")
             self.update_charges()
             if self.mdv.preconditioning:
-                # self.logger.info("---- Initializing field")
+                self.logger.debug("---- Initializing field")
                 self.initialize_field()
-            # self.logger.info("---- Computing forces")
+            self.logger.debug("---- Computing forces")
             self.compute_forces()
 
             # STEP 1 Verlet
-            # self.logger.info("---- Integrator part 1")
+            self.logger.debug("---- Integrator part 1")
             self.integrator_part1()
-            # self.logger.info("---- Updating charges")
+            self.logger.debug("---- Updating charges")
             self.update_charges()
             if self.mdv.preconditioning:
-                # self.logger.info("---- Initializing field")
+                self.logger.debug("---- Initializing field")
                 self.initialize_field()
-            # self.logger.info("---- Computing forces")
+            self.logger.debug("---- Computing forces")
             self.compute_forces()
-            # self.logger.info("---- Integrator part 2")
+            self.logger.debug("---- Integrator part 2")
             self.integrator_part2()
         elif ffile:
             df = pd.read_csv(ffile)
@@ -281,6 +282,9 @@ class SolverMD(Logger):
             self.logger.info("Running MD loop initialization steps...")
             for i in ProgressBar(self.mdv.init_steps):
                 self.md_loop_iter()
+
+        temp = capi.get_temperature()
+        self.logger.info(f"Temperature: {temp} K")
 
         self.logger.info("Running MD loop...")
         for i in ProgressBar(self.mdv.N_steps):

@@ -36,6 +36,10 @@ logger.setLevel(logging.DEBUG)  # Set the logging level
 add_file_handler(logger)
 add_stream_handler(logger)
 
+def set_log_level(level: int):
+    """Set the log level for the main logger and all its children."""
+    for handler in logger.handlers:
+        handler.setLevel(level)
 
 # Function to set up the logger
 def setup_logger(name, level: int = None):
