@@ -4,35 +4,36 @@
 
 #include "mp_structs.h"
 #include "constants.h"
+#include "mpi_base.h"
 
-// double randn (double mu, double sigma)
-// {
-//   double U1, U2, W, mult;
-//   static double X1, X2;
-//   static int call = 0;
+// Generated independent random numbers from a uniform distribution using
+// Box-Muller transform.
+// https://literateprograms.org/box-muller_transform__c_.html
+double randn() {
+    double U1, U2, R, mult;
+    static double X2;
+    static int call = 0;
 
-//   if (call == 1)
-//     {
-//       call = !call;
-//       return (mu + sigma * (double) X2);
-//     }
+    if (call == 1) {
+        call = !call;
+        return X2;
+    }
 
-//   do
-//     {
-//       U1 = -1 + ((double) rand () / RAND_MAX) * 2;
-//       U2 = -1 + ((double) rand () / RAND_MAX) * 2;
-//       W = pow (U1, 2) + pow (U2, 2);
-//     }
-//   while (W >= 1 || W == 0);
+    do {
+        U1 = 2.0 * rand () / RAND_MAX - 1;
+        U2 = 2.0 * rand () / RAND_MAX - 1;
+        R = pow (U1, 2) + pow (U2, 2);
+    }
+    while (R >= 1 || R == 0);
 
-//   mult = sqrt ((-2 * log (W)) / W);
-//   X1 = U1 * mult;
-//   X2 = U2 * mult;
+    mult = sqrt(-2 * log (R) / R);
 
-//   call = !call;
+    X2 = U2 * mult;
 
-//   return (mu + sigma * (double) X1);
-// }
+    call = !call;
+
+    return U1 * mult;
+}
 
 void ovrvo_integrator_init(integrator *integrator) {
     integrator->part1 = ovrvo_integrator_part1;
@@ -42,38 +43,38 @@ void ovrvo_integrator_init(integrator *integrator) {
 }
 
 void o_block(integrator *integrator, particles *p) {
-    fprintf(stderr, "O block not implemented\n");
-    exit(1);
+    // This function needs to be MPI aware as it is possible for every process to generate
+    // different random numbers leading to very process working with desynchronized velocities/positions.
+    int rank = get_rank();
+    long int ni;
     double dt = integrator->dt;
     double c1 = integrator->c1;
     double T = integrator->T;
+    double var1, var2;
     
     int n_p = p->n_p;
     double *vel = p->vel;
     double *masses = p->mass;
-    // c1 = self.c1
-    // rnd = np.random.multivariate_normal(
-    //     mean=[0.0, 0.0, 0.0],
-    //     cov=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-    //     size=vel.shape[0]
-    // )
-    double c1_sqrt = sqrt(c1);
-    double cm1_sqrt = sqrt(1 - c1);
-    // double rnd = 0;
-    double rnd[3] = {0.0, 0.0, 0.0};
-    // for 
 
-    long int ni;
-    #pragma omp parallel for private(ni)
-    for (int i = 0; i < n_p; i++) {
-        ni = i * 3;
-        for (int j = 0; j < 3; j++) {
-            vel[ni + j] = c1_sqrt * vel[ni + j] + cm1_sqrt * kB * T / masses[i] * rnd[j];
+    double c1_sqrt = sqrt(c1);
+
+    if (rank == 0) {
+        // The original call to multivariate_normal had a diagonal covariance so we are fine
+        // with using randn for each component to generate 3 independent random numbers with the respective
+        // mean = 0.0 and variance = 1.0.
+        var2 = (1 - c1) * kB * T;
+        #pragma omp parallel for private(ni, var1)
+        for (int i = 0; i < n_p; i++) {
+            ni = i * 3;
+            var1 = sqrt(var2 / masses[i]);
+            for (int j = 0; j < 3; j++) {
+                vel[ni + j] *= c1_sqrt;
+                vel[ni + j] += var1 * randn();
+            }
         }
-        vel[i * 3]     = 0.0;
-        vel[i * 3 + 1] = 0.0;
-        vel[i * 3 + 2] = 0.0;
     }
+
+    bcast_double(vel, n_p * 3, 0);
 }
 
 void v_block(integrator *integrator, particles *p) {
