@@ -4,6 +4,7 @@
 #include "mpi_base.h"
 
 
+// CIC weight function as defined in the paper Im et al. (1998) - eqn 24
 double spread_cic(double x, double L, double h) {
     x = fabs(x - round(x / L) * L);
     if (x >= h) {
@@ -31,7 +32,7 @@ double spread_spline_cubic(double x, double L, double h) {
         return (4.0 - 6.0 * pow(x, 2) + 3.0 * pow(x, 3)) / 6.0;
     } 
     if (x < 2) {
-        return (2.0 - pow(2 - x, 3)) / 6.0;
+        return pow(2 - x, 3) / 6.0;
     }
     return 0.0;
 }
