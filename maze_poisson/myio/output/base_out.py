@@ -1,4 +1,5 @@
 import atexit
+import json
 import os
 from abc import ABC, abstractmethod
 from io import StringIO
@@ -9,6 +10,19 @@ from ...myio.loggers import Logger
 from .. import get_enabled_io
 from ..input import OutputSettings
 
+
+def save_json(path: str, data: dict, overwrite: bool = True):
+    """Save a dictionary to a JSON file."""
+    enabled = get_enabled_io()
+    if not enabled:
+        return
+    if os.path.exists(path):
+        if overwrite:
+            os.remove(path)
+        else:
+            raise ValueError(f"File {path} already exists")
+    with open(path, 'w') as f:
+        json.dump(data, f, indent=2)
 
 class BaseOutputFile(Logger, ABC):
     name = None
@@ -120,6 +134,11 @@ class OutputFiles:
                 if force or (self.out_flushstride and itr % self.out_flushstride == 0):
                     self.flush()
         if self.restart_step == itr:
+            # for name in self.files_restart:
+            #     file = getattr(self, name)
+            #     if file:
+            #         file.write_data(itr, solver, mode='w')
+            #         file.flush()
             self.restart.write_data(itr, solver, mode='w')
             self.restart_field.write_data(itr, solver, mode='w', mpi_bypass=True)
             self.restart.flush()

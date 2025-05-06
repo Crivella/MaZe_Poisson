@@ -32,6 +32,15 @@ class BaseSettings(ABC):
             setattr(obj, key, value)
         return obj
 
+    def to_dict(self) -> dict:
+        """Convert the object to a dictionary."""
+        res = {k:v for k, v in self.__dict__.items() if not k.startswith('_') and v is not None}
+        for key in self.tocheck:
+            val = getattr(self, key, None)
+            if val:
+                res[key] = val
+        return res
+
 class OutputSettings(BaseSettings):
     tocheck = []
 

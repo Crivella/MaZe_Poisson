@@ -1,6 +1,7 @@
 """Implement a base solver Class for maze_poisson."""
 import atexit
 import logging
+import os
 from typing import Dict
 
 import numpy as np
@@ -11,7 +12,8 @@ from .clocks import Clock
 from .constants import a0, conv_mass
 from .myio import OutputFiles, ProgressBar
 from .myio.input import GridSetting, MDVariables, OutputSettings
-from .myio.loggers import Logger, set_log_level
+from .myio.loggers import Logger
+from .myio.output import save_json
 
 np.random.seed(42)
 
@@ -57,9 +59,15 @@ class SolverMD(Logger):
         self.ofiles = OutputFiles(self.outset)
         self.out_stride = outset.stride
         self.out_flushstride = outset.flushstride * outset.stride
+
+        # Logging
+        out_log = os.path.join(outset.path, 'log.txt')
+        self.add_file_handler(out_log, level=logging.DEBUG)
         if self.outset.debug:
-            set_log_level(logging.DEBUG)
+            self.set_log_level(logging.DEBUG)
             self.logger.debug("Set verbosity to DEBUG")
+
+        self.save_input()
 
     @Clock('initialize')
     def initialize(self):
@@ -154,7 +162,8 @@ class SolverMD(Logger):
                 size=(len(df), 3)
             )
         capi.solver_initialize_particles(
-            self.N, self.L, self.h, self.N_p, pot_id, ca_scheme_id,
+            self.N, self.L, self.h, self.N_p,
+            pot_id, ca_scheme_id,
             pos, vel, mass, charges
         )
 
@@ -284,7 +293,7 @@ class SolverMD(Logger):
                 self.md_loop_iter()
 
         temp = capi.get_temperature()
-        self.logger.info(f"Temperature: {temp} K")
+        self.logger.info(f"Temperature: {temp:.2f} K")
 
         self.logger.info("Running MD loop...")
         for i in ProgressBar(self.mdv.N_steps):
@@ -298,6 +307,17 @@ class SolverMD(Logger):
         self.initialize()
         self.md_loop()
         self.md_loop_output(self.mdv.N_steps, force=True)
+
+    def save_input(self):
+        """Save the input parameters to a file."""
+        filename = os.path.join(self.outset.path, 'input.json')
+        self.logger.info(f"Saving input parameters to file {filename}")
+        dct = {}
+        dct['grid_setting'] = self.gset.to_dict()
+        dct['md_variables'] = self.mdv.to_dict()
+        dct['output_settings'] = self.outset.to_dict()
+
+        save_json(filename, dct)
 
     def init_info(self):
         """Print information about the initialization."""
