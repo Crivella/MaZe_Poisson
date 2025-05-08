@@ -252,16 +252,16 @@ void get_masses(double *recv) {
 }
 
 void get_field(double *recv) {
-    collect_grid_buffer(g_grid->phi_n, recv, g_grid->n);
+    grid_collect_buffer(g_grid->phi_n, recv, g_grid->n);
 }
 
 void get_field_prev(double *recv) {
     double *ptr = g_grid->phi_p !=  NULL ? g_grid->phi_p : g_grid->phi_n;
-    collect_grid_buffer(ptr, recv, g_grid->n);
+    grid_collect_buffer(ptr, recv, g_grid->n);
 }
 
 void get_q(double *recv) {
-    collect_grid_buffer(g_grid->q, recv, g_grid->n);
+    grid_collect_buffer(g_grid->q, recv, g_grid->n);
 }
 
 double get_kinetic_energy() {

@@ -30,10 +30,11 @@ int get_size();
 int get_rank();
 int get_n_loc();
 int get_n_start();
-void grid_exchange_bot_top(double *grid, int n);
 
 void bcast_double(double *buffer, long int size, int root);
 void allreduce_sum(double *buffer, long int size);
-void collect_grid_buffer(double *data, double *recv, int n);
+
+void grid_exchange_bot_top(double *grid, int n);
+void grid_collect_buffer(double *data, double *recv, int n);
 
 #endif

@@ -89,8 +89,6 @@ void grid_exchange_bot_top(double *grid, int n) {
         memcpy(top_recv, bot, n2 * sizeof(double));
         memcpy(bot_recv, top, n2 * sizeof(double));
     } else {
-        double *bot_recv = bot - n2;
-        double *top_recv = top + n2;
         MPI_Sendrecv(
             top, n2, MPI_DOUBLE, global_mpi_data->next_rank, 0,
             bot_recv, n2, MPI_DOUBLE, global_mpi_data->prev_rank, 0,
@@ -116,7 +114,7 @@ void bcast_double(double *buffer, long int size, int root) {
     }
 }
 
-void collect_grid_buffer(double *data, double *recv, int n) {
+void grid_collect_buffer(double *data, double *recv, int n) {
     int n_loc = global_mpi_data->n_loc;
     int n_loc_start;
     int size = global_mpi_data->size;
