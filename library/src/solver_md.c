@@ -102,6 +102,7 @@ void solver_set_field(double *phi) {
     int n = g_grid->n;
     long int n2 = n * n;
     int n_start = get_n_start();
+
     memcpy(g_grid->phi_n, phi + n_start * n2, g_grid->size * sizeof(double));
 }
 
@@ -110,6 +111,7 @@ void solver_set_field_prev(double *phi) {
         int n = g_grid->n;
         long int n2 = n * n;
         int n_start = get_n_start();
+
         memcpy(g_grid->phi_p, phi + n_start * n2, g_grid->size * sizeof(double));
     }
 }

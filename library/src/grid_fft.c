@@ -14,9 +14,6 @@ void fft_grid_init_mpi(grid *grid) {
     int n = grid->n;
     int rank = mpid->rank;
     int size = mpid->size;
-    long int buffer_size = n * n;
-
-    // int div, mod;
     int n_loc, n_start;
 
     mpid->n_loc = grid->n_local;
@@ -51,11 +48,6 @@ void fft_grid_init_mpi(grid *grid) {
     //     "FFT MPI(%d): n_local = %d, n_start = %d, prev_rank=%d, nxt_rank=%d\n",
     //     rank, grid->n_local, grid->n_start, mpid->prev_rank, mpid->next_rank
     // );
-    mpid->buffer_size = buffer_size;
-    if (size > 1) {
-        mpid->bot = (double *)malloc(buffer_size * sizeof(double));
-        mpid->top = (double *)malloc(buffer_size * sizeof(double));
-    }
 }
 
 #else  // __MPI
@@ -75,6 +67,8 @@ void fft_grid_init(grid * grid) {
     double L = grid->L;
     double h = grid->h;
 
+    long int n2 = n * n;
+
     int n_loc, n_start;
     init_rfft(n, &n_loc, &n_start);
     grid->n_local = n_loc;
@@ -82,11 +76,12 @@ void fft_grid_init(grid * grid) {
     fft_grid_init_mpi(grid);
 
     int nh = n / 2 + 1;
-    long int size = n_loc * n * n;
-    grid->size = size;
+    long int size1 = n_loc * n2;
+    long int size2 = (n_loc+2) * n2;
+    grid->size = size1;
 
-    grid->q = (double *)malloc(size * sizeof(double));
-    grid->phi_n = (double *)malloc(size * sizeof(double));
+    grid->q = (double *)malloc(size1 * sizeof(double));
+    grid->phi_n = (double *)malloc(size2 * sizeof(double)) + n2;
     grid->ig2 = (double *)malloc(n_loc * n * nh * sizeof(double));
     
     double const pi2 = 2 * M_PI;
@@ -128,7 +123,14 @@ void fft_grid_init(grid * grid) {
 }
 
 void fft_grid_cleanup(grid * grid) {
+    int n = grid->n;
+    long int n2 = n * n;
+
     cleanup_fftw();
+
+    free(grid->q);
+    free(grid->ig2);
+    free(grid->phi_n - n2);
 }   
 
 void fft_grid_init_field(grid *grid) {

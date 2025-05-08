@@ -55,21 +55,6 @@ grid * grid_init(int n, double L, double h, double tol, int type) {
 }
 
 void grid_free(grid *grid) {
-    if (grid->ig2 != NULL) {
-        free(grid->ig2);
-    }
-    if (grid->phi_p != NULL) {
-        free(grid->phi_p);
-    }
-    if (grid->y != NULL) {
-        free(grid->y);
-    }
-    if (grid->q != NULL) {
-        free(grid->q);
-    }
-    if (grid->phi_n != NULL) {
-        free(grid->phi_n);
-    }
     switch (grid->type) {
         case GRID_TYPE_LCG:
             lcg_grid_cleanup(grid);

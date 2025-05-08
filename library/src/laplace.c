@@ -12,26 +12,28 @@
 #endif
 
 
-#ifdef __MPI
 /*
 Apply a 3-D Laplace filter to a 3-D array with cyclic boundary conditions
+The code uses an input array of shape (n+2, n, n) and output array of shape (n, n, n)
+The +2 is used to either use memcpy to swap the top and bottom slices (skipping the % in the first loop)
+or uses MPI to exchange the top and bottom slices between processes
 @param u: the input array
 @param u_new: the output array
 @param n: the size of the array in each dimension
 */
 void laplace_filter(double *u, double *u_new, int n) {
+    int n_loc = get_n_loc();
+
     long int i, j, k;
     long int i0, i1, i2;
     long int j0, j1, j2;
     long int n2 = n * n;
 
-    int n_loc = get_n_loc();
-    int n_loc1 = n_loc - 1;
-    double *bot, *top;
-    exchange_bot_top(u, u + n_loc1 * n2, &bot, &top);
+    // Exchange the top and bottom slices
+    grid_exchange_bot_top(u, n);
 
     #pragma omp parallel for private(i, j, k, i0, i1, i2, j0, j1, j2)
-    for (i = 1; i < n_loc1; i++) {
+    for (i = 0; i < n_loc; i++) {
         i0 = i * n2;
         i1 = (i+1) * n2;
         i2 = (i-1) * n2;
@@ -52,88 +54,7 @@ void laplace_filter(double *u, double *u_new, int n) {
             }
         }
     }
-
-    // i0 = 0;  // Ignored because 0
-    i1 = 1 * n2;
-    // i2 = n_loc - 1; //Ignored in favor of bot
-    #pragma omp parallel for private(j, k, j0, j1, j2)
-    for (j = 0; j < n; j++) {
-        j0 = j * n;
-        j1 = ((j+1) % n) * n;
-        j2 = ((j-1 + n) % n) * n;
-        for (k = 0; k < n; k++) {
-            u_new[j0 + k] = (
-                u[i1 + j0 + k] +
-                bot[j0 + k] +
-                u[j1 + k] +
-                u[j2 + k] +
-                u[j0 + ((k+1) % n)] +
-                u[j0 + ((k-1 + n) % n)] -
-                u[j0 + k] * 6.0
-                );
-        }
-    }
-
-    i0 = n_loc1 * n2;
-    // i1 = 0;  // Ignored in favor of top
-    i2 = (n_loc1 - 1) * n2;
-    #pragma omp parallel for private(j, k, j0, j1, j2)
-    for (j = 0; j < n; j++) {
-        j0 = j * n;
-        j1 = ((j+1) % n) * n;
-        j2 = ((j-1 + n) % n) * n;
-        for (k = 0; k < n; k++) {
-            u_new[i0 + j0 + k] = (
-                top[j0 + k] +
-                u[i2 + j0 + k] +
-                u[i0 + j1 + k] +
-                u[i0 + j2 + k] +
-                u[i0 + j0 + ((k+1) % n)] +
-                u[i0 + j0 + ((k-1 + n) % n)] -
-                u[i0 + j0 + k] * 6.0
-                );
-        }
-    }
 }
-
-#else
-/*
-Apply a 3-D Laplace filter to a 3-D array with cyclic boundary conditions
-@param u: the input array
-@param u_new: the output array
-@param n: the size of the array in each dimension
-*/
-void laplace_filter(double *u, double *u_new, int n) {
-    long int i, j, k;
-    long int i0, i1, i2;
-    long int j0, j1, j2;
-    long int n2 = n * n;
-
-    #pragma omp parallel for private(i, j, k, i0, i1, i2, j0, j1, j2)
-    for (i = 0; i < n; i++) {
-        i0 = i * n2;
-        i1 = ((i+1) % n) * n2;
-        i2 = ((i-1 + n) % n) * n2;
-        for (j = 0; j < n; j++) {
-            j0 = j*n;
-            j1 = ((j+1) % n) * n;
-            j2 = ((j-1 + n) % n) * n;
-            for (k = 0; k < n; k++) {
-                u_new[i0 + j0 + k] = (
-                    u[i1 + j0 + k] +
-                    u[i2 + j0 + k] +
-                    u[i0 + j1 + k] +
-                    u[i0 + j2 + k] +
-                    u[i0 + j0 + ((k+1) % n)] +
-                    u[i0 + j0 + ((k-1 + n) % n)] -
-                    u[i0 + j0 + k] * 6.0
-                    );
-            }
-        }
-    }
-}
-
-#endif
 
 /*
 Solve the system of linear equations Ax = b using the conjugate gradient method where A is the Laplace filter
@@ -144,16 +65,19 @@ Solve the system of linear equations Ax = b using the conjugate gradient method 
 @param n: the size of the arrays (n_tot = n * n * n)
 */
 int conj_grad(double *b, double *x0, double *x, double tol, int n) {
+    int n_loc = get_n_loc();
     long int i;
-    long int n3 = get_n_loc() * n * n;
-    long int limit = n * n;
+    long int n2 = n * n;
+    long int n3 = n_loc * n2;
+    long int limit = n2;
     long int iter = 0, res = -1;
 
     // printf("Running conjugate gradient with %d elements\n", n3);
 
     double *r = (double *)malloc(n3 * sizeof(double));
-    double *p = (double *)malloc(n3 * sizeof(double));
     double *Ap = (double *)malloc(n3 * sizeof(double));
+    // + 2 for in place swapping of top/bot slices
+    double *p = (double *)malloc(((n_loc + 2) * n2) * sizeof(double)) + n2;
     double alpha, beta, r_dot_v, rn_dot_rn, rn_dot_vn;
 
     // Allow for inplace computation by having b == x
@@ -203,7 +127,7 @@ int conj_grad(double *b, double *x0, double *x, double tol, int n) {
     }
 
     free(r);
-    free(p);
+    free(p - n2);
     free(Ap);
 
     return res;
@@ -226,7 +150,8 @@ EXTERN_C int verlet_poisson(double tol, double h, double* phi, double* phi_prev,
     int iter_conv;
 
     long int i;
-    long int n3 = get_n_loc() * n_grid * n_grid;
+    long int n2 = n_grid * n_grid;
+    long int n3 = get_n_loc() * n2;
 
     double app;
     double *tmp = (double*)malloc(n3 * sizeof(double));

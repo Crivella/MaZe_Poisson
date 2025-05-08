@@ -15,7 +15,6 @@ void lcg_grid_init_mpi(grid *grid) {
     int n = grid->n;
     int rank = mpid->rank;
     int size = mpid->size;
-    long int buffer_size = n * n;
 
     int div, mod;
     int n_loc, n_start;
@@ -38,11 +37,6 @@ void lcg_grid_init_mpi(grid *grid) {
     grid->n_start = mpid->n_start_list[rank];
     mpid->n_loc = grid->n_local;
     mpid->n_start = grid->n_start;
-    mpid->buffer_size = buffer_size;
-    if (size > 1) {
-        mpid->bot = (double *)malloc(buffer_size * sizeof(double));
-        mpid->top = (double *)malloc(buffer_size * sizeof(double));
-    }
 }
 
 #else  // __MPI
@@ -58,15 +52,18 @@ void lcg_grid_init_mpi(grid *grid) {
 void lcg_grid_init(grid * grid) {
     int n = grid->n;
 
+    long int n2 = n * n;
+
     lcg_grid_init_mpi(grid);
 
-    long int size = grid->n_local * n * n;
-    grid->size = size;
+    long int size1 = grid->n_local * n2;
+    long int size2 = (grid->n_local + 2) * n2;
+    grid->size = size1;
 
-    grid->y = (double *)malloc(size * sizeof(double));
-    grid->phi_p = (double *)malloc(size * sizeof(double));
-    grid->q = (double *)malloc(size * sizeof(double));
-    grid->phi_n = (double *)malloc(size * sizeof(double));
+    grid->q = (double *)malloc(size1 * sizeof(double));
+    grid->y = (double *)malloc(size2 * sizeof(double)) + n2;
+    grid->phi_p = (double *)malloc(size2 * sizeof(double)) + n2;
+    grid->phi_n = (double *)malloc(size2 * sizeof(double)) + n2;
 
     grid->init_field = lcg_grid_init_field;
     grid->update_field = lcg_grid_update_field;
@@ -74,6 +71,13 @@ void lcg_grid_init(grid * grid) {
 }
 
 void lcg_grid_cleanup(grid * grid) {
+    int n = grid->n;
+    long int n2 = n * n;
+
+    free(grid->q);
+    free(grid->y - n2);
+    free(grid->phi_p - n2);
+    free(grid->phi_n - n2);
 }
 
 void lcg_grid_init_field(grid *grid) {

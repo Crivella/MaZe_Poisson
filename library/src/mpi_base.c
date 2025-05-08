@@ -54,20 +54,11 @@ int init_mpi() {
     global_mpi_data->n_loc_list = (int *)malloc(size * sizeof(int));
     global_mpi_data->n_start_list = (int *)malloc(size * sizeof(int));
 
-    global_mpi_data->bot = NULL;
-    global_mpi_data->top = NULL;
-
     return global_mpi_data->size;
 }
 
 void cleanup_mpi() {
     if (global_mpi_data != NULL) {
-        if (global_mpi_data->bot != NULL) {
-            free(global_mpi_data->bot);
-        }
-        if (global_mpi_data->top != NULL) {
-            free(global_mpi_data->top);
-        }
         if (global_mpi_data->n_loc_list != NULL) {
             free(global_mpi_data->n_loc_list);
         }
@@ -80,28 +71,57 @@ void cleanup_mpi() {
     }
 }
 
-void exchange_bot_top(double *bot, double *top, double **bot_recv, double **top_recv) {
+#else
+
+int init_mpi() {
+    if (global_mpi_data == NULL) {
+        global_mpi_data = (mpi_data *)malloc(sizeof(mpi_data));
+    }
+    global_mpi_data->rank = 0;
+    global_mpi_data->size = 1;
+
+    return 0;
+}
+
+void cleanup_mpi() {
+    if (global_mpi_data != NULL) {
+        free(global_mpi_data);
+        global_mpi_data = NULL;
+    }
+}
+
+#endif
+
+void grid_exchange_bot_top(double *grid, int n) {
     // Skip loop communication if the processor is holding no data
     if (global_mpi_data->n_loc == 0) {
         return;
     }
-    if (global_mpi_data->size == 1) {
-        *bot_recv = top;
-        *top_recv = bot;
-    } else {
-        MPI_Sendrecv(
-            top, global_mpi_data->buffer_size, MPI_DOUBLE, global_mpi_data->next_rank, 0,
-            global_mpi_data->bot, global_mpi_data->buffer_size, MPI_DOUBLE, global_mpi_data->prev_rank, 0,
-            global_mpi_data->comm, MPI_STATUS_IGNORE
-        );
-        MPI_Sendrecv(
-            bot, global_mpi_data->buffer_size, MPI_DOUBLE, global_mpi_data->prev_rank, 0,
-            global_mpi_data->top, global_mpi_data->buffer_size, MPI_DOUBLE, global_mpi_data->next_rank, 0,
-            global_mpi_data->comm, MPI_STATUS_IGNORE
-        );
 
-        *bot_recv = global_mpi_data->bot;
-        *top_recv = global_mpi_data->top;
+    int n_loc = global_mpi_data->n_loc;
+    long int n2 = n * n;
+
+    double *bot = grid;
+    double *top = grid + (n_loc - 1) * n2;
+    double *bot_recv = grid - n2;
+    double *top_recv = grid + n_loc * n2;
+
+    if (global_mpi_data->size == 1) {
+        memcpy(top_recv, bot, n2 * sizeof(double));
+        memcpy(bot_recv, top, n2 * sizeof(double));
+    } else {
+        double *bot_recv = bot - n2;
+        double *top_recv = top + n2;
+        MPI_Sendrecv(
+            top, n2, MPI_DOUBLE, global_mpi_data->next_rank, 0,
+            bot_recv, n2, MPI_DOUBLE, global_mpi_data->prev_rank, 0,
+            global_mpi_data->comm, MPI_STATUS_IGNORE
+        );
+        MPI_Sendrecv(
+            bot, n2, MPI_DOUBLE, global_mpi_data->prev_rank, 0,
+            top_recv, n2, MPI_DOUBLE, global_mpi_data->next_rank, 0,
+            global_mpi_data->comm, MPI_STATUS_IGNORE
+        );
     }
 }
 
@@ -126,56 +146,20 @@ void collect_grid_buffer(double *data, double *recv, int n) {
     long int n2 = n * n;
     long int n3_loc = n_loc * n2;
 
-    if (rank == 0) {
-        memcpy(recv, data, n3_loc * sizeof(double));
-        for (int i=1; i<size; i++) {
-            n_loc = global_mpi_data->n_loc_list[i];
-            n_loc_start = global_mpi_data->n_start_list[i];
-            MPI_Recv(recv + n_loc_start * n2, n_loc * n2, MPI_DOUBLE, i, 0, global_mpi_data->comm, MPI_STATUS_IGNORE);
+    if (global_mpi_data->size > 1) {
+        if (data != recv) {
+            memcpy(recv, data, n * n * n * sizeof(double));
         }
     } else {
-        MPI_Send(data, n3_loc, MPI_DOUBLE, 0, 0, global_mpi_data->comm);
+        if (rank == 0) {
+            memcpy(recv, data, n3_loc * sizeof(double));
+            for (int i=1; i<size; i++) {
+                n_loc = global_mpi_data->n_loc_list[i];
+                n_loc_start = global_mpi_data->n_start_list[i];
+                MPI_Recv(recv + n_loc_start * n2, n_loc * n2, MPI_DOUBLE, i, 0, global_mpi_data->comm, MPI_STATUS_IGNORE);
+            }
+        } else {
+            MPI_Send(data, n3_loc, MPI_DOUBLE, 0, 0, global_mpi_data->comm);
+        }
     }
 }
-
-
-#else
-
-int init_mpi() {
-    if (global_mpi_data == NULL) {
-        global_mpi_data = (mpi_data *)malloc(sizeof(mpi_data));
-    }
-    global_mpi_data->rank = 0;
-    global_mpi_data->size = 1;
-
-    return 0;
-}
-
-void cleanup_mpi() {
-    if (global_mpi_data != NULL) {
-        free(global_mpi_data);
-        global_mpi_data = NULL;
-    }
-}
-
-void exchange_bot_top(double *bot, double *top, double **bot_recv, double **top_recv) {
-    *bot_recv = top;
-    *top_recv = bot;
-}
-
-void bcast_double(double *buffer, long int size, int root) {
-    // Do nothing
-}
-
-void allreduce_sum(double *buffer, long int size) {
-    // Do nothing
-}
-
-void collect_grid_buffer(double *data, double *recv, int n) {
-    if (data != recv) {
-        memcpy(recv, data, n * n * n * sizeof(double));
-    }
-}
-
-#endif
-
