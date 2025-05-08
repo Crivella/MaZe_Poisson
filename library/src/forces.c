@@ -4,7 +4,6 @@
 
 #include "mpi_base.h"
 
-#ifdef __MPI
 // /*
 // Compute the forces on each particle by computing the field from the potential using finite differences.
 // New version computes the field only where the particles are located.
@@ -36,28 +35,19 @@ double compute_force_fd(
     long int j0, j1, j2;
     long int k0, k1, k2;
     double E, qc;
-    double *ptr1, *ptr2;
 
     int n_loc = get_n_loc();
     int n_start = get_n_start();
 
     double const h2 = 2.0 * h;
     double const L = n * h;
-    int n_loc1 = n_loc - 1;
     double px, py, pz, chg;
-    double *ptr_p1 = phi + n2;  // Pointer to the first slice + 1 
-    double *ptr_m1 = phi + (n_loc - 2) * n2; // Pointer to the last slice -1
-
-    double *bot, *top;
-    exchange_bot_top(phi, phi + n_loc1 * n2, &bot, &top);
-
-    if (n_loc == 1) {
-        ptr_p1 = top;
-        ptr_m1 = bot;
-    }
+    
+    // Exchange the top and bottom slices
+    grid_exchange_bot_top(phi, n);
 
     double sum_q = 0.0;
-    #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, E, qc, px, py, pz, chg, ptr1, ptr2) reduction(+:sum_q)
+    #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, E, qc, px, py, pz, chg) reduction(+:sum_q)
     for (int ip = 0; ip < n_p; ip++) {
         i0 = ip * nn3;
         j0 = ip*3;
@@ -84,29 +74,19 @@ double compute_force_fd(
             qc = chg * g(px - (i+n_start)*h, L, h) * g(py - j*h, L, h) * g(pz - k*h, L, h);
             sum_q += qc;
             // X
-            if (i == 0) {
-                ptr1 = ptr_p1;
-                ptr2 = bot;
-            } else if (i == n_loc1) {
-                ptr1 = top;
-                ptr2 = ptr_m1;
-            } else {
-                ptr1 = phi + in2 + n2;
-                ptr2 = phi + in2 - n2;
-            }
-            E = (ptr2[jn + k] - ptr1[jn + k]) / h2;
+            i1 = (i+1) * n2;
+            i2 = (i-1) * n2;
+            E = (phi[i2 + jn + k] - phi[i1 + jn + k]) / h2;
             forces[j0] += qc * E;
             // Y
-            i1 = in2;
             j1 = ((j+1) % n) * n;
             j2 = ((j-1 + n) % n) * n;
-            E = (phi[i1 + j2 + k] - phi[i1 + j1 + k]) / h2;
+            E = (phi[in2 + j2 + k] - phi[in2 + j1 + k]) / h2;
             forces[j0 + 1] += qc * E;
             // Z
-            j1 = i1 + jn;
             k1 = ((k+1) % n);
             k2 = ((k-1 + n) % n);
-            E = (phi[j1 + k2] - phi[j1 + k1]) / h2;
+            E = (phi[in2 + jn + k2] - phi[in2 + jn + k1]) / h2;
             forces[j0 + 2] += qc * E;
         }
     }
@@ -116,94 +96,6 @@ double compute_force_fd(
 
     return sum_q;
 }
-
-#else
-// /*
-// Compute the forces on each particle by computing the field from the potential using finite differences.
-// New version computes the field only where the particles are located.
-
-// @param n_grid: the number of grid points in each dimension
-// @param n_p: the number of particles
-// @param h: the grid spacing
-// @param num_neigh: the number of neighbors per particle
-// @param phi: the potential field of size n_grid * n_grid * n_grid
-// @param neighbors: Array (x,y,z) of neighbors indexes for each particle (n_p x 8 x 3)
-// @param charges: the charges on each particle of size n_p
-// @param pos: the positions of the particles of size n_p * 3
-// @param forces: the output forces on each particle of size n_p * 3
-// @param g: the function to compute the charge assignment
-
-// @return the sum of the charges on the neighbors
-// */
-double compute_force_fd(
-    int n_grid, int n_p, double h, int num_neigh,
-    double *phi, long int *neighbors, long int *charges, double *pos, double *forces,
-    double (*g)(double, double, double)
-) {
-    int nn3 = num_neigh * 3;
-    long int n = n_grid;
-    long int n2 = n * n;
-
-    long int i, j, k;
-    long int jn, in2;
-    long int i0, i1, i2;
-    long int j0, j1, j2;
-    long int k0, k1, k2;
-
-    double const h2 = 2.0 * h;
-    double const L = n * h;
-    double E, qc;
-    double px, py, pz, chg;
-
-    double sum_q = 0.0;
-    #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, px, py, pz, chg, E, qc) reduction(+:sum_q)
-    for (int ip = 0; ip < n_p; ip++) {
-        i0 = ip * nn3;
-        j0 = ip*3;
-        forces[j0] = 0.0;
-        forces[j0+1] = 0.0;
-        forces[j0+2] = 0.0;
-        px = pos[j0];
-        py = pos[j0 + 1];
-        pz = pos[j0 + 2];
-        chg = charges[ip];
-        for (int in = 0; in < num_neigh; in++) {
-            i1 = i0 + in*3;
-            i = neighbors[i1];
-            j = neighbors[i1 + 1];
-            k = neighbors[i1 + 2];
-
-            in2 = i * n2;
-            jn = j * n;
-
-            // qc = q[in2 + jn + k];
-            qc = chg * g(px - i*h, L, h) * g(py - j*h, L, h) * g(pz - k*h, L, h);
-            sum_q += qc;
-            // X
-            i1 = ((i+1) % n) * n2;
-            i2 = ((i-1 + n) % n) * n2;
-            E = (phi[i2 + jn + k] - phi[i1 + jn + k]) / h2;
-            forces[j0] += qc * E;
-            // Y
-            i1 = in2;
-            j1 = ((j+1) % n) * n;
-            j2 = ((j-1 + n) % n) * n;
-            E = (phi[i1 + j2 + k] - phi[i1 + j1 + k]) / h2;
-            forces[j0 + 1] += qc * E;
-            // Z
-            j1 = i1 + jn;
-            k1 = ((k+1) % n);
-            k2 = ((k-1 + n) % n);
-            E = (phi[j1 + k2] - phi[j1 + k1]) / h2;
-            forces[j0 + 2] += qc * E;
-        }
-    }
-
-    return sum_q;
-}
-
-#endif
-
 
 /*
 Compute the particle-particle forces using the tabulated Tosi-Fumi potential

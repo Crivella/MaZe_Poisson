@@ -20,10 +20,6 @@ typedef struct mpi_data {
 
     int next_rank;
     int prev_rank;
-
-    long int buffer_size;
-    double *bot;
-    double *top;
 } mpi_data;
 
 int init_mpi();
@@ -34,7 +30,7 @@ int get_size();
 int get_rank();
 int get_n_loc();
 int get_n_start();
-void exchange_bot_top(double *bot, double *top, double **bot_recv, double **top_recv);
+void grid_exchange_bot_top(double *grid, int n);
 
 void bcast_double(double *buffer, long int size, int root);
 void allreduce_sum(double *buffer, long int size);
