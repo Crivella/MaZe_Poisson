@@ -31,6 +31,11 @@ void laplace_filter(double *u, double *u_new, int size1, int size2) {
     long int j0, j1, j2;
     long int n2 = size2 * size2;
 
+    if (u == u_new) {
+        fprintf(stderr, "laplace_filter: u and u_new are the same array (in-place operation not supported)\n");
+        exit(1);
+    }
+
     // Exchange the top and bottom slices
     mpi_grid_exchange_bot_top(u, size1, size2);
 
@@ -60,6 +65,9 @@ void laplace_filter(double *u, double *u_new, int size1, int size2) {
 
 /*
 Solve the system of linear equations Ax = b using the conjugate gradient method where A is the Laplace filter
+Allows in-place computation by having either:
+- x == b
+- x == x0
 @param b: the right-hand side of the system of equations
 @param x0: the initial guess for the solution
 @param x: the solution to the system of equations
@@ -135,11 +143,15 @@ int conj_grad(double *b, double *x0, double *x, double tol, int size1, int size2
 
 /*
 Solve the system of linear equations Ax = b using the conjugate gradient method where A is the Laplace filter
+Allows in-place computation by having either:
+- x == b
+- x == x0
 @param b: the right-hand side of the system of equations
 @param x0: the initial guess for the solution
 @param x: the solution to the system of equations
 @param tol: the tolerance for the solution
 @param n: the size of the arrays (n_tot = n * n * n)
+@param prc: the preconditioner to use
 */
 int conj_grad_precond(
     double *b, double *x0, double *x, double tol, int size1, int size2,
@@ -172,16 +184,15 @@ int conj_grad_precond(
     }
 
     prc->apply(prc, r, v);  // v = P^-1 . r
-    
     #pragma omp parallel for
     for (i = 0; i < n3; i++) {
         p[i] = -v[i];
     }
+    r_dot_v = ddot(r, v, n3);  // <r, v>
 
     while(iter < limit) {
         laplace_filter(p, Ap, size1, size2);
 
-        r_dot_v = ddot(r, v, n3);  // <r, v>
         alpha = r_dot_v / ddot(p, Ap, n3);  // alpha = <r, v> / <p | A | p>
         daxpy(p, x, alpha, n3);  // x_new = x + alpha * p
         daxpy(Ap, r, alpha, n3);  // r_new = r + alpha * Ap
@@ -250,7 +261,7 @@ EXTERN_C int verlet_poisson(
 
     // Compute the constraint with the provisional value of the field phi
     laplace_filter(phi, tmp, size1, size2);
-    daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A^phi + 4 * pi * rho
+    daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho
 
     // Apply LCG
     iter_conv = conj_grad(tmp, y, y, tol, size1, size2);  // Inplace y <- y0

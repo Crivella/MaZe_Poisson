@@ -108,7 +108,6 @@ struct precond {
 
     // Multigrid parameters
     double tol; // Tolerance for the smoothing
-    
     int n1;
     int n_loc1;  // Number of grid points per dimension (MPI aware)
     int n_start1; // Start index of the grid in the global array (MPI aware)
