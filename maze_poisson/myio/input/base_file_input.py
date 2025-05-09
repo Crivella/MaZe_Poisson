@@ -76,7 +76,7 @@ class GridSetting(BaseSettings):
         self.h = None
         self.charge_assignment = 'CIC'
 
-        self.precond = 'MG'
+        self.precond = 'NONE'
         self.smoother = 'LCG'
         
     @property

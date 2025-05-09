@@ -3,7 +3,7 @@
 
 #include "mp_structs.h"
 
-char precond_type_str[2][16] = {"JACOBI", "MG"};
+char precond_type_str[PRECOND_TYPE_NUM][16] = {"NONE", "JACOBI", "MG"};
 
 int get_precond_type_num() {
     return PRECOND_TYPE_NUM;
@@ -13,8 +13,8 @@ char *get_precond_type_str(int n) {
     return precond_type_str[n];
 }
 
-void precond_jacobi_init(precond *p) {
-    // Initialize Jacobi preconditioner
+void precond_none_init(precond *p) {
+    // Do nothing
 }
 
 precond * precond_init(int n, double L, double h, int type) {
@@ -27,6 +27,7 @@ precond * precond_init(int n, double L, double h, int type) {
             init_func = precond_mg_init;
             break;
         default:
+            init_func = precond_none_init;
             break;
     }
     precond *new = (precond *)malloc(sizeof(precond));
@@ -38,10 +39,7 @@ precond * precond_init(int n, double L, double h, int type) {
     new->grid2 = NULL;
     new->grid3 = NULL;
 
-    new->apply = precond_apply;
-    new->prolong = precond_prolong;
-    new->restriction = precond_restriction;
-    new->smooth = precond_smooth;
+    new->apply = NULL;
 
     init_func(new);
 
@@ -53,7 +51,7 @@ precond * precond_init(int n, double L, double h, int type) {
 void precond_cleanup(precond *p) {
     switch (p->type) {
         case PRECOND_TYPE_JACOBI:
-            // precond_jacobi_cleanup(p);
+            precond_jacobi_cleanup(p);
             break;
         case PRECOND_TYPE_MG:
             precond_mg_cleanup(p);
@@ -62,20 +60,4 @@ void precond_cleanup(precond *p) {
             break;
     }
     free(p);
-}
-
-void precond_apply(precond *p, double *in, double *out) {
-    // Do nothing
-}
-
-void precond_prolong(double *in, double *out, int s1, int s2, int ts1, int ts2) {
-    // Do nothing
-}
-
-void precond_restriction(double *in, double *out, int s1, int s2) {
-    // Do nothing
-}
-
-void precond_smooth(double *in, double *out, int s1, int s2, double tol) {
-    // Do nothing
 }

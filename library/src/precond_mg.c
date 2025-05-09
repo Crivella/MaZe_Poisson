@@ -9,6 +9,10 @@
 #include "mp_structs.h"
 #include "mpi_base.h"
 
+void prolong(double *in, double *out, int s1, int s2, int ts1, int ts2);
+void restriction(double *in, double *out, int s1, int s2, int n_start);
+void smooth(double *in, double *out, int s1, int s2, double tol);
+
 void precond_mg_init(precond *p) {
     // p->tol = 1E-9;
     p->tol = 5;
@@ -39,9 +43,6 @@ void precond_mg_init(precond *p) {
     p->grid3 = mpi_grid_allocate(p->n_loc3, p->n3);
 
     p->apply = precond_mg_apply;
-    p->prolong = precond_mg_prolong;
-    p->restriction = precond_mg_restriction; 
-    p->smooth = precond_mg_smooth;
 }
 
 void precond_mg_cleanup(precond *p) {
@@ -74,44 +75,39 @@ void precond_mg_apply(precond *p, double *in, double *out) {
         tmp1[i] = 0;  // tmp1 = in
         // p->grid1[i] = 0;  // grid1 = 0
     }
-
-    p->smooth(in, tmp1, p->n_loc1, p->n1, 5);  // out = smooth(in, out)  ~solve(A . out = in)
+    smooth(in, tmp1, p->n_loc1, p->n1, p->tol);  // out = smooth(in, out)  ~solve(A . out = in)
     laplace_filter(tmp1, p->grid1, p->n_loc1, p->n1);
     #pragma omp parallel for
     for (int i = 0; i < size1; i++) {
         p->grid1[i] = in[i] - p->grid1[i];  // r1 = in - A . out
     }
-    p->restriction(p->grid1, tmp2_1, p->n_loc1, p->n1);  // r2 = restriction(r1)
+    restriction(p->grid1, tmp2_1, p->n_loc1, p->n1, p->n_start1);  // r2 = restriction(r1)
 
     #pragma omp parallel for
     for (int i = 0; i < size2; i++) {
         p->grid2[i] = 0;  // tmp2 = r2
     }
-    p->smooth(tmp2_1, p->grid2, p->n_loc2, p->n2, 5);  // e2 = smooth(r2)  ~solve(A . e2 = r2)
-
+    smooth(tmp2_1, p->grid2, p->n_loc2, p->n2, p->tol);  // e2 = smooth(r2)  ~solve(A . e2 = r2)
     laplace_filter(p->grid2, tmp2_2, p->n_loc2, p->n2);
     #pragma omp parallel for
     for (int i = 0; i < size2; i++) {
         tmp2_2[i] = tmp2_1[i] - tmp2_1[i];  // tmp2 = r2 - A . e2
     }
-    p->restriction(tmp2_2, tmp3, p->n_loc2, p->n2);  // r3 = restriction(r2 - A . e2)
+    restriction(tmp2_2, tmp3, p->n_loc2, p->n2, p->n_start2);  // r3 = restriction(r2 - A . e2)
 
     #pragma omp parallel for
     for (int i = 0; i < size3; i++) {
         p->grid3[i] = 0;
     }
-    p->smooth(tmp3, p->grid3, p->n_loc3, p->n3, 20);  // e3 = smooth(r3)  ~solve(A . e3 = r3)
+    smooth(tmp3, p->grid3, p->n_loc3, p->n3, p->tol);  // e3 = smooth(r3)  ~solve(A . e3 = r3)
 
-    p->prolong(p->grid3, tmp2_1, p->n_loc3, p->n3, p->n_loc2, p->n2);
+    prolong(p->grid3, tmp2_1, p->n_loc3, p->n3, p->n_loc2, p->n2);
     daxpy(tmp2_1, p->grid2, 1.0, size2);  // e2 = e2 + prolong(r3)
-    p->prolong(p->grid2, p->grid1, p->n_loc2, p->n2, p->n_loc1, p->n1);
+    prolong(p->grid2, p->grid1, p->n_loc2, p->n2, p->n_loc1, p->n1);
     daxpy(p->grid1, tmp1, 1.0, size1);  // out = out + prolong(e2)
-    p->smooth(in, tmp1, p->n_loc1, p->n1, 5);  // out = smooth(in, out)  ~solve(A . out = in)
+    smooth(in, tmp1, p->n_loc1, p->n1, p->tol);  // out = smooth(in, out)  ~solve(A . out = in)
 
-    #pragma omp parallel for
-    for (int i = 0; i < size1; i++) {
-        out[i] = tmp1[i];
-    }
+    memcpy(out, tmp1, size1 * sizeof(double));  // out = out + smooth(in, out)
 
     mpi_grid_free(tmp1, p->n1);
     mpi_grid_free(tmp2_1, p->n2);
@@ -122,7 +118,7 @@ void precond_mg_apply(precond *p, double *in, double *out) {
 // TODO !!!!!!!!!!!!!!!!!!!
 // Account for restriction and prolong MPI aware when number of procs is odd
 
-void precond_mg_prolong(double *in, double *out, int s1, int s2, int ts1, int target_s2) {
+void prolong(double *in, double *out, int s1, int s2, int ts1, int target_s2) {
     int a, b;
     long int i, j, k;
     long int i0, j0, k0;
@@ -145,7 +141,7 @@ void precond_mg_prolong(double *in, double *out, int s1, int s2, int ts1, int ta
             for (k = 0; k < s2; k++) {
                 k0 = k * 2;
                 k1 = k0 + 1;
-                app = in[a + b + k] * 0.125;  // 1/8
+                app = in[a + b + k] * 0.125;
                 out[i0 + j0 + k0] = app;
                 out[i0 + j0 + k1] = app;
                 out[i0 + j1 + k0] = app;
@@ -159,8 +155,7 @@ void precond_mg_prolong(double *in, double *out, int s1, int s2, int ts1, int ta
     }
 }
 
-void precond_mg_restriction(double *in, double *out, int s1, int s2) {
-    // fprintf(stderr, "precond_mg_restriction %d  %d\n", s1, s2);
+void restriction(double *in, double *out, int s1, int s2, int n_start) {
     int a, b;
     long int i, j, k;
     long int i0, j0;
@@ -175,8 +170,6 @@ void precond_mg_restriction(double *in, double *out, int s1, int s2) {
     // if (s1 % 2 == 1) {
     mpi_grid_exchange_bot_top(in, s1, s2);
     // }
-
-    // fprintf(stderr, "___grid_exchange_bot_top done\n");
 
     #pragma omp parallel for private(i, j, k, i0, i1, j0, j1, k1, a, b)
     for (i = 0; i < s1; i+=2) {
@@ -198,15 +191,13 @@ void precond_mg_restriction(double *in, double *out, int s1, int s2) {
                     in[i1 + j0 + k1] +
                     in[i1 + j1 + k] +
                     in[i1 + j1 + k1]
-                ) * 0.125;  // 1/8
+                ) * 0.125;
             }
         }
     }
-    // fprintf(stderr, "___restriction done\n");
 }
 
-void precond_mg_smooth_jacobi(double *in, double *out, int s1, int s2, double tol) {
-    // fprintf(stderr, "Running Jacobi smoother %d %d\n", s1, s2);
+void smooth_jacobi(double *in, double *out, int s1, int s2, double tol) {
     long int n3 = s1 * s2 * s2;
 
     double omega = 0.66 / -6.0;
@@ -214,7 +205,6 @@ void precond_mg_smooth_jacobi(double *in, double *out, int s1, int s2, double to
     double *tmp = (double *)malloc(n3 * sizeof(double));
 
     for (int iter=0; iter < tol; iter++) { 
-        // fprintf(stderr, "___Jacobi smoother iter %d\n", iter);
         laplace_filter(out, tmp, s1, s2);  // res += A . out
 
         #pragma omp parallel for
@@ -224,23 +214,22 @@ void precond_mg_smooth_jacobi(double *in, double *out, int s1, int s2, double to
     }
 
     free(tmp);
-    // fprintf(stderr, "___DONE\n");
 }
 
-void precond_mg_smooth_lcg(double *in, double *out, int s1, int s2, double tol) {
+void smooth_lcg(double *in, double *out, int s1, int s2, double tol) {
     conj_grad(in, out, out, 1E-9, s1, s2);  // out = ~solve(A . out = in)
 }
 
-void precond_mg_smooth_diag(double *in, double *out, int s1, int s2, double tol) {
+void smooth_diag(double *in, double *out, int s1, int s2, double tol) {
     long int n3 = s1 * s2 * s2;
     for (int i = 0; i < n3; i++) {
         out[i] = in[i] / -6.0;
     }
 }
 
-void precond_mg_smooth(double *in, double *out, int s1, int s2, double tol) {
-    // precond_mg_smooth_lcg(in, out, s1, s2, tol);
-    precond_mg_smooth_jacobi(in, out, s1, s2, tol);
-    // precond_mg_smooth_diag(in, out, s1, s2, tol);
+void smooth(double *in, double *out, int s1, int s2, double tol) {
+    // smooth_lcg(in, out, s1, s2, tol);
+    smooth_jacobi(in, out, s1, s2, tol);
+    // smooth_diag(in, out, s1, s2, tol);
 }
 

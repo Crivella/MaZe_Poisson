@@ -21,9 +21,10 @@
 #define INTEGRATOR_ENABLED 1
 #define INTEGRATOR_DISABLED 0
 
-#define PRECOND_TYPE_NUM 2
-#define PRECOND_TYPE_JACOBI 0
-#define PRECOND_TYPE_MG 1
+#define PRECOND_TYPE_NUM 3
+#define PRECOND_TYPE_NONE 0
+#define PRECOND_TYPE_JACOBI 1
+#define PRECOND_TYPE_MG 2
 
 // Struct typedefs
 typedef struct grid grid;
@@ -81,13 +82,14 @@ void verlet_integrator_stop_thermostat(integrator *integrator);
 
 // Preconditioner function definitions
 void precond_cleanup(precond *p);
-void precond_apply(precond *p, double *in, double *out);
-void precond_prolong(double *in, double *out, int s1, int s2, int ts1, int ts2);
-void precond_restriction(double *in, double *out, int s1, int s2);
-void precond_smooth(double *in, double *out, int s1, int s2, double tol);
+// void precond_apply(precond *p, double *in, double *out);
+// void precond_prolong(double *in, double *out, int s1, int s2, int ts1, int ts2);
+// void precond_restriction(double *in, double *out, int s1, int s2, int n_start);
+// void precond_smooth(double *in, double *out, int s1, int s2, double tol);
 
-// void precond_jacobi_init(precond *p);
-// void precond_jacobi_cleanup(precond *p);
+void precond_jacobi_init(precond *p);
+void precond_jacobi_cleanup(precond *p);
+void precond_jacobi_apply(precond *p, double *in, double *out);
 // void precond_jacobi_prolong(precond *p, double *in, double *out);
 // void precond_jacobi_restriction(precond *p, double *in, double *out);
 // void precond_jacobi_smooth(precond *p, double *in, double *out);
@@ -95,9 +97,9 @@ void precond_smooth(double *in, double *out, int s1, int s2, double tol);
 void precond_mg_init(precond *p);
 void precond_mg_cleanup(precond *p);
 void precond_mg_apply(precond *p, double *in, double *out);
-void precond_mg_prolong(double *in, double *out, int s1, int s2, int ts1, int ts2);
-void precond_mg_restriction(double *in, double *out, int s1, int s2);
-void precond_mg_smooth(double *in, double *out, int s1, int s2, double tol);
+// void precond_mg_prolong(double *in, double *out, int s1, int s2, int ts1, int ts2);
+// void precond_mg_restriction(double *in, double *out, int s1, int s2, int n_start);
+// void precond_mg_smooth(double *in, double *out, int s1, int s2, double tol);
 
 // Struct definitions
 struct precond {
@@ -108,6 +110,7 @@ struct precond {
 
     // Multigrid parameters
     double tol; // Tolerance for the smoothing
+
     int n1;
     int n_loc1;  // Number of grid points per dimension (MPI aware)
     int n_start1; // Start index of the grid in the global array (MPI aware)
@@ -124,9 +127,9 @@ struct precond {
     double *grid3;  // Intermediate grid for the preconditioner
 
     void (*apply)( precond *, double *, double *); // Apply function
-    void (*prolong)( double *, double *, int, int, int, int); // Prolongation function
-    void (*restriction)( double *, double *, int, int); // Restriction function
-    void (*smooth)( double *, double *, int, int, double); // Smoothing function
+    // void (*prolong)( double *, double *, int, int, int, int); // Prolongation function
+    // void (*restriction)( double *, double *, int, int, int); // Restriction function
+    // void (*smooth)( double *, double *, int, int, double); // Smoothing function
 
 
     void (*free)( precond *);

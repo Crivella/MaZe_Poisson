@@ -107,20 +107,21 @@ void lcg_grid_init_field(grid *grid) {
 int lcg_grid_update_field(grid *grid) {
     int res;
     switch (grid->precond_type) {
-        case PRECOND_TYPE_JACOBI:
+        case PRECOND_TYPE_NONE:
             res = verlet_poisson(
                 grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
                 grid->n_local, grid->n
             );
             break;
-        case PRECOND_TYPE_MG:
+        // case PRECOND_TYPE_JACOBI:
+        // case PRECOND_TYPE_MG:
+        //     break;
+        default:
             res = verlet_poisson_precond(
                 grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
                 grid->n_local, grid->n,
                 grid->precond
             );
-            break;
-        default:
             break;
     }
     return res;

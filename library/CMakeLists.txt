@@ -64,6 +64,7 @@ add_library(maze_poisson MODULE
     src/integrator_verlet.c
 
     src/precond_general.c
+    src/precond_jacobi.c
     src/precond_mg.c
 
     src/solver_md.c
