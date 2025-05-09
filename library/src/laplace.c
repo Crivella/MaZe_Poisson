@@ -151,11 +151,11 @@ Allows in-place computation by having either:
 @param x: the solution to the system of equations
 @param tol: the tolerance for the solution
 @param n: the size of the arrays (n_tot = n * n * n)
-@param prc: the preconditioner to use
+@param apply: apply the preconditioner
 */
 int conj_grad_precond(
     double *b, double *x0, double *x, double tol, int size1, int size2,
-    precond *prc
+    void (*apply)(double *, double *, int, int, int)
 ) {
     long int i;
     long int n2 = size2 * size2;
@@ -183,7 +183,7 @@ int conj_grad_precond(
         }
     }
 
-    prc->apply(prc, r, v);  // v = P^-1 . r
+    apply(r, v, size1, size2, get_n_start());  // v = P^-1 . r
     #pragma omp parallel for
     for (i = 0; i < n3; i++) {
         p[i] = -v[i];
@@ -203,7 +203,7 @@ int conj_grad_precond(
             break;
         }
 
-        prc->apply(prc, r, v);  // v = P^-1 . r
+        apply(r, v, size1, size2, get_n_start());  // v = P^-1 . r
         rn_dot_vn = ddot(r, v, n3);  // <r_new, v_new>
         beta = rn_dot_vn / r_dot_v;  // beta = <r_new, v_new> / <r, v>
         r_dot_v = rn_dot_vn;  // <r, v> = <r_new, v_new>
@@ -295,7 +295,7 @@ The previous and current fields and the y array are updated in place.
 EXTERN_C int verlet_poisson_precond(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y,
     int size1, int size2,
-    precond *prc
+    void (*apply)(double *, double *, int, int, int)
 ) {
     int iter_conv;
 
@@ -319,7 +319,7 @@ EXTERN_C int verlet_poisson_precond(
     daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A^phi + 4 * pi * rho
 
     // Apply LCG
-    iter_conv = conj_grad_precond(tmp, y, y, tol, size1, size2, prc);  // Inplace y <- y0
+    iter_conv = conj_grad_precond(tmp, y, y, tol, size1, size2, apply);  // Inplace y <- y0
 
     // Scale the field with the constrained 'force' term
     #pragma omp parallel for

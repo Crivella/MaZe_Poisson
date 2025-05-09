@@ -4,13 +4,19 @@
 #include "mp_structs.h"
 
 char grid_type_str[2][16] = {"LCG", "FFT"};
-
 int get_grid_type_num() {
     return GRID_TYPE_NUM;
 }
-
 char *get_grid_type_str(int n) {
     return grid_type_str[n];
+}
+
+char precond_type_str[PRECOND_TYPE_NUM][16] = {"NONE", "JACOBI", "MG"};
+int get_precond_type_num() {
+    return PRECOND_TYPE_NUM;
+}
+char *get_precond_type_str(int n) {
+    return precond_type_str[n];
 }
 
 

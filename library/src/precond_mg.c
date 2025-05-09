@@ -12,24 +12,20 @@ void prolong(double *in, double *out, int s1, int s2, int ts1, int ts2, int tns)
 void restriction(double *in, double *out, int s1, int s2, int n_start);
 void smooth(double *in, double *out, int s1, int s2, double tol);
 
-void precond_mg_init(precond *p) {
-    // p->tol = 1E-9;
-    p->tol = 3;
+void precond_mg_apply(double *in, double *out, int s1, int s2, int n_start1) {
+    int n1 = s2;
+    int n2 = n1 / 2;
+    int n3 = n2 / 2;
 
-    p->n1 = p->n;
-    p->n2 = p->n / 2;
-    p->n3 = p->n2 / 2;
+    int n_loc1 = s1;
 
-    p->n_loc1 = get_n_loc();
-    p->n_start1 = get_n_start();
+    int n_loc2 = (n_loc1 + 1 - (n_start1 % 2)) / 2;
+    int n_start2 = (n_start1 + 1) / 2;
 
-    p->n_loc2 = (p->n_loc1 + 1 - (p->n_start1 % 2)) / 2;
-    p->n_start2 = (p->n_start1 + 1) / 2;
+    int n_loc3 = (n_loc2 + 1 - (n_start2 % 2)) / 2;
+    int n_start3 = (n_start2 + 1) / 2;
 
-    p->n_loc3 = (p->n_loc2 + 1 - (p->n_start2 % 2)) / 2;
-    p->n_start3 = (p->n_start2 + 1) / 2;
-
-    if (p->n_loc3 == 0) {
+    if (n_loc3 == 0) {
         fprintf(stderr, "------------------------------------------------------------------------------------\n");
         fprintf(stderr, "Warning: after restriction some processors have no local grid points!\n");
         fprintf(stderr, "This case is not yet implemented, please use MG preconditioner with atleast 4 slices\n");
@@ -38,77 +34,61 @@ void precond_mg_init(precond *p) {
         exit(1);
     }
 
-    // int coars_size1 = n;
-    p->grid1 = mpi_grid_allocate(p->n_loc1, p->n1);
-    p->grid2 = mpi_grid_allocate(p->n_loc2, p->n2);
-    p->grid3 = mpi_grid_allocate(p->n_loc3, p->n3);
+    long int size1 = n_loc1 * n1 * n1;
+    long int size2 = n_loc2 * n2 * n2;
+    long int size3 = n_loc3 * n3 * n3;
 
-    p->apply = precond_mg_apply;
-}
+    double *r1 = mpi_grid_allocate(n_loc1, n1);
+    double *r2 = mpi_grid_allocate(n_loc2, n2);
+    double *r3 = mpi_grid_allocate(n_loc3, n3);
 
-void precond_mg_cleanup(precond *p) {
-    if ( p->grid1 != NULL) {
-        mpi_grid_free(p->grid1, p->n1);
-        p->grid1 = NULL;
-    }
-    if (p->grid2 != NULL) {
-        mpi_grid_free(p->grid2, p->n2);
-        p->grid2 = NULL;
-    }
-    if (p->grid3 != NULL) {
-        mpi_grid_free(p->grid3, p->n3);
-        p->grid3 = NULL;
-    }
-}
+    double *e2 = mpi_grid_allocate(n_loc2, n2);
+    double *e3 = mpi_grid_allocate(n_loc3, n3);
 
-void precond_mg_apply(precond *p, double *in, double *out) {
-    long int size1 = p->n_loc1 * p->n1 * p->n1;
-    long int size2 = p->n_loc2 * p->n2 * p->n2;
-    long int size3 = p->n_loc3 * p->n3 * p->n3;
-
-    double *tmp2_1 = mpi_grid_allocate(p->n_loc2, p->n2);
-    double *tmp2_2 = mpi_grid_allocate(p->n_loc2, p->n2);
-    double *tmp3 = mpi_grid_allocate(p->n_loc3, p->n3);
+    double *tmp2 = mpi_grid_allocate(n_loc2, n2);
 
     #pragma omp parallel for
     for (int i = 0; i < size1; i++) {
         out[i] = 0;  // tmp1 = in
     }
-    smooth(in, out, p->n_loc1, p->n1, 5);  // out = smooth(in, out)  ~solve(A . out = in)
-    laplace_filter(out, p->grid1, p->n_loc1, p->n1);
+    smooth(in, out, n_loc1, n1, 5);  // out = smooth(in, out)  ~solve(A . out = in)
+    laplace_filter(out, r1, n_loc1, n1);
     #pragma omp parallel for
     for (int i = 0; i < size1; i++) {
-        p->grid1[i] = in[i] - p->grid1[i];  // r1 = in - A . out
+        r1[i] = in[i] - r1[i];  // r1 = in - A . out
     }
-    restriction(p->grid1, tmp2_1, p->n_loc1, p->n1, p->n_start1);  // r2 = restriction(r1)
+    restriction(r1, r2, n_loc1, n1, n_start1);  // r2 = restriction(r1)
 
     #pragma omp parallel for
     for (int i = 0; i < size2; i++) {
-        p->grid2[i] = 0;  // tmp2 = r2
+        e2[i] = 0;  // tmp2 = r2
     }
-    smooth(tmp2_1, p->grid2, p->n_loc2, p->n2, 5);  // e2 = smooth(r2)  ~solve(A . e2 = r2)
-    laplace_filter(p->grid2, tmp2_2, p->n_loc2, p->n2);
+    smooth(r2, e2, n_loc2, n2, 5);  // e2 = smooth(r2)  ~solve(A . e2 = r2)
+    laplace_filter(e2, tmp2, n_loc2, n2);
     #pragma omp parallel for
     for (int i = 0; i < size2; i++) {
-        tmp2_2[i] = tmp2_1[i] - tmp2_1[i];  // tmp2 = r2 - A . e2
+        tmp2[i] = r2[i] - tmp2[i];  // tmp2 = r2 - A . e2
     }
-    restriction(tmp2_2, tmp3, p->n_loc2, p->n2, p->n_start2);  // r3 = restriction(r2 - A . e2)
+    restriction(tmp2, r3, n_loc2, n2, n_start2);  // r3 = restriction(r2 - A . e2)
 
     #pragma omp parallel for
     for (int i = 0; i < size3; i++) {
-        p->grid3[i] = 0;
+        e3[i] = 0;
     }
-    smooth(tmp3, p->grid3, p->n_loc3, p->n3, 15);  // e3 = smooth(r3)  ~solve(A . e3 = r3)
+    smooth(r3, e3, n_loc3, n3, 15);  // e3 = smooth(r3)  ~solve(A . e3 = r3)
 
-    prolong(p->grid3, tmp2_1, p->n_loc3, p->n3, p->n_loc2, p->n2, p->n_start2);
-    daxpy(tmp2_1, p->grid2, 1.0, size2);  // e2 = e2 + prolong(r3)
-    prolong(p->grid2, p->grid1, p->n_loc2, p->n2, p->n_loc1, p->n1, p->n_start1);
-    daxpy(p->grid1, out, 1.0, size1);  // out = out + prolong(e2)
-    smooth(in, out, p->n_loc1, p->n1, 5);  // out = smooth(in, out)  ~solve(A . out = in)
+    prolong(e3, r2, n_loc3, n3, n_loc2, n2, n_start2);
+    daxpy(r2, e2, 1.0, size2);  // e2 = e2 + prolong(r3)
+    prolong(e2, r1, n_loc2, n2, n_loc1, n1, n_start1);
+    daxpy(r1, out, 1.0, size1);  // out = out + prolong(e2)
+    smooth(in, out, n_loc1, n1, 5);  // out = smooth(in, out)  ~solve(A . out = in)
 
-    mpi_grid_free(tmp2_1, p->n2);
-    mpi_grid_free(tmp2_2, p->n2);
-    mpi_grid_free(tmp3, p->n3);
+    mpi_grid_free(r1, n1);
+    mpi_grid_free(r2, n2);
+    mpi_grid_free(r3, n3);
+    mpi_grid_free(e2, n2);
+    mpi_grid_free(e3, n3);
+    mpi_grid_free(tmp2, n2);
 }
 
 void prolong(double *in, double *out, int s1, int s2, int target_s1, int target_s2, int target_n_start) {

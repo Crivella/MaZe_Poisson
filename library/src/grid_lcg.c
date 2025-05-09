@@ -69,8 +69,6 @@ void lcg_grid_init(grid * grid) {
     grid->phi_p = mpi_grid_allocate(n_loc, n);
     grid->phi_n = mpi_grid_allocate(n_loc, n);
 
-    grid->precond = precond_init(n, grid->L, grid->h, grid->precond_type);
-
     grid->init_field = lcg_grid_init_field;
     grid->update_field = lcg_grid_update_field;
     grid->update_charges = lcg_grid_update_charges;
@@ -82,11 +80,6 @@ void lcg_grid_cleanup(grid * grid) {
     mpi_grid_free(grid->y, grid->n);
     mpi_grid_free(grid->phi_p, grid->n);
     mpi_grid_free(grid->phi_n, grid->n);
-
-    if (grid->precond != NULL) {
-        grid->precond->free(grid->precond);
-        grid->precond = NULL;
-    }
 }
 
 void lcg_grid_init_field(grid *grid) {
@@ -113,15 +106,21 @@ int lcg_grid_update_field(grid *grid) {
                 grid->n_local, grid->n
             );
             break;
-        // case PRECOND_TYPE_JACOBI:
-        // case PRECOND_TYPE_MG:
-        //     break;
-        default:
+        case PRECOND_TYPE_JACOBI:
             res = verlet_poisson_precond(
                 grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
                 grid->n_local, grid->n,
-                grid->precond
+                precond_jacobi_apply
             );
+            break;
+        case PRECOND_TYPE_MG:
+            res = verlet_poisson_precond(
+                grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
+                grid->n_local, grid->n,
+                precond_mg_apply
+            );
+            break;
+        default:
             break;
     }
     return res;
