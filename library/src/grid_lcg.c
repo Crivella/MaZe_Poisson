@@ -8,6 +8,10 @@
 #include "mp_structs.h"
 #include "mpi_base.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #ifdef __MPI
 void lcg_grid_init_mpi(grid *grid) {
     mpi_data *mpid = get_mpi_data();
@@ -50,20 +54,22 @@ void lcg_grid_init_mpi(grid *grid) {
 #endif  // __MPI
 
 void lcg_grid_init(grid * grid) {
+    int n_loc = grid->n_local;
     int n = grid->n;
 
     long int n2 = n * n;
 
     lcg_grid_init_mpi(grid);
 
-    long int size1 = grid->n_local * n2;
-    long int size2 = (grid->n_local + 2) * n2;
-    grid->size = size1;
+    long int size = grid->n_local * n2;
+    grid->size = size;
 
-    grid->q = (double *)malloc(size1 * sizeof(double));
-    grid->y = (double *)malloc(size2 * sizeof(double)) + n2;
-    grid->phi_p = (double *)malloc(size2 * sizeof(double)) + n2;
-    grid->phi_n = (double *)malloc(size2 * sizeof(double)) + n2;
+    grid->q = (double *)malloc(size * sizeof(double));
+    grid->y = mpi_grid_allocate(n_loc, n);
+    grid->phi_p = mpi_grid_allocate(n_loc, n);
+    grid->phi_n = mpi_grid_allocate(n_loc, n);
+
+    grid->precond = precond_init(n, grid->L, grid->h, grid->precond_type);
 
     grid->init_field = lcg_grid_init_field;
     grid->update_field = lcg_grid_update_field;
@@ -71,13 +77,16 @@ void lcg_grid_init(grid * grid) {
 }
 
 void lcg_grid_cleanup(grid * grid) {
-    int n = grid->n;
-    long int n2 = n * n;
-
     free(grid->q);
-    free(grid->y - n2);
-    free(grid->phi_p - n2);
-    free(grid->phi_n - n2);
+
+    mpi_grid_free(grid->y, grid->n);
+    mpi_grid_free(grid->phi_p, grid->n);
+    mpi_grid_free(grid->phi_n, grid->n);
+
+    if (grid->precond != NULL) {
+        grid->precond->free(grid->precond);
+        grid->precond = NULL;
+    }
 }
 
 void lcg_grid_init_field(grid *grid) {
@@ -92,11 +101,29 @@ void lcg_grid_init_field(grid *grid) {
         grid->y[i] = 0.0;
         grid->phi_n[i] = constant * grid->q[i];
     }
-    conj_grad(grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n);
+    conj_grad(grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n);
 }
 
 int lcg_grid_update_field(grid *grid) {
-    return verlet_poisson(grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y, grid->n);
+    int res;
+    switch (grid->precond_type) {
+        case PRECOND_TYPE_JACOBI:
+            res = verlet_poisson(
+                grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
+                grid->n_local, grid->n
+            );
+            break;
+        case PRECOND_TYPE_MG:
+            res = verlet_poisson_precond(
+                grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
+                grid->n_local, grid->n,
+                grid->precond
+            );
+            break;
+        default:
+            break;
+    }
+    return res;
 }   
 
 double lcg_grid_update_charges(grid *grid, particles *p) {

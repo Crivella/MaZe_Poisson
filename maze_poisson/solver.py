@@ -38,6 +38,11 @@ ca_scheme_map: Dict[str, int] = {
     # 'SPL_CUBIC': 2,
 }
 
+precond_map: Dict[str, int] = {
+    # 'JACOBI': 0,
+    # 'MG': 1,
+}
+
 class SolverMD(Logger):
     """Base class for all solver classes."""
 
@@ -110,15 +115,24 @@ class SolverMD(Logger):
             ptr = capi.get_integrator_type_str(i)
             integrator_map[ptr.decode('utf-8').upper()] = i
 
+        n = capi.get_precond_type_num()
+        for i in range(n):
+            ptr = capi.get_precond_type_str(i)
+            precond_map[ptr.decode('utf-8').upper()] = i
+
     def initialize_grid(self):
         """Initialize the grid."""
         self.logger.info(f"Initializing grid with method: {self.mdv.method}")
         method = self.mdv.method.upper()
         if not method in method_grid_map:
             raise ValueError(f"Method {method} not recognized.")
+        precond = self.gset.precond.upper()
+        if not precond in precond_map:
+            raise ValueError(f"Preconditioner {precond} not recognized.")
 
         grid_id = method_grid_map[method]
-        capi.solver_initialize_grid(self.N, self.L, self.h, self.mdv.tol, grid_id)
+        precond_id = precond_map[precond]
+        capi.solver_initialize_grid(self.N, self.L, self.h, self.mdv.tol, grid_id, precond_id)
 
     def initialize_particles(self):
         """Initialize the particles."""
@@ -190,9 +204,9 @@ class SolverMD(Logger):
             # STEP 0 Verlet
             self.logger.debug("---- Udpating charges")
             self.update_charges()
-            if self.mdv.preconditioning:
-                self.logger.debug("---- Initializing field")
-                self.initialize_field()
+            # if self.mdv.preconditioning:
+            self.logger.debug("---- Initializing field")
+            self.initialize_field()
             self.logger.debug("---- Computing forces")
             self.compute_forces()
 
@@ -201,9 +215,9 @@ class SolverMD(Logger):
             self.integrator_part1()
             self.logger.debug("---- Updating charges")
             self.update_charges()
-            if self.mdv.preconditioning:
-                self.logger.debug("---- Initializing field")
-                self.initialize_field()
+            # if self.mdv.preconditioning:
+            self.logger.debug("---- Initializing field")
+            self.initialize_field()
             self.logger.debug("---- Computing forces")
             self.compute_forces()
             self.logger.debug("---- Integrator part 2")
@@ -325,10 +339,11 @@ class SolverMD(Logger):
         self.logger.info(f'Running a MD simulation with:')
         self.logger.info(f'  N_p = {self.N_p}, N_steps = {self.mdv.N_steps}, tol = {self.mdv.tol}')
         self.logger.info(f'  N = {self.N}, L [a.u.] = {self.L}, h [a.u.] = {self.h}')
-        self.logger.info(f'  Charge assignment scheme: {self.gset.charge_assignment}')
         self.logger.info(f'  density = {density} g/cm^3')
-        self.logger.info(f'  Preconditioning: {self.mdv.preconditioning}')
-        self.logger.info(f'  Integrator: {self.mdv.integrator},  Method: {self.mdv.method},  dt = {self.mdv.dt}')
+        self.logger.info(f'  Solver: {self.mdv.method},  Preconditioner: {self.gset.precond}')
+        self.logger.info(f'  Charge assignment scheme: {self.gset.charge_assignment}')
+        # self.logger.info(f'  Preconditioning: {self.mdv.preconditioning}')
+        self.logger.info(f'  Integrator: {self.mdv.integrator}, dt = {self.mdv.dt}')
         self.logger.info(f'  Potential: {self.mdv.potential}')
         self.logger.info(f'  Elec: {self.mdv.elec}    NotElec: {self.mdv.not_elec}')
         self.logger.info(f'  Temperature: {self.mdv.T} K,  Thermostat: {self.mdv.thermostat},  Gamma: {self.mdv.gamma}')

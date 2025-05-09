@@ -34,7 +34,9 @@ int get_n_start();
 void bcast_double(double *buffer, long int size, int root);
 void allreduce_sum(double *buffer, long int size);
 
-void grid_exchange_bot_top(double *grid, int n);
-void grid_collect_buffer(double *data, double *recv, int n);
+double * mpi_grid_allocate(int size1, int size2);
+void mpi_grid_free(double *data, int n);
+void mpi_grid_exchange_bot_top(double *grid, int size1, int size2);
+void mpi_grid_collect_buffer(double *data, double *recv, int n);
 
 #endif

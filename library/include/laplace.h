@@ -1,9 +1,21 @@
 #ifndef __LAPLACE_H
 #define __LAPLACE_H
 
+#include "mp_structs.h"
 
-void laplace_filter(double *u, double *u_new, int n);
-int conj_grad(double *b, double *x0, double *x, double tol, int n);
-int verlet_poisson(double tol, double h, double* phi, double* phi_prev, double* q, double* y, int n_grid);
+
+void laplace_filter(double *u, double *u_new, int size1, int size2);
+int conj_grad(double *b, double *x0, double *x, double tol, int size1, int size2);
+int conj_grad_precond(
+    double *b, double *x0, double *x, double tol, int size1, int size2,
+    precond *prc
+);
+int verlet_poisson(
+    double tol, double h, double* phi, double* phi_prev, double* q, double* y, int size1, int size2
+);
+int verlet_poisson_precond(
+    double tol, double h, double* phi, double* phi_prev, double* q, double* y, int size1, int size2,
+    precond *prc
+);
 
 #endif

@@ -71,19 +71,17 @@ void cleanup_mpi() {
     }
 }
 
-void grid_exchange_bot_top(double *grid, int n) {
+void mpi_grid_exchange_bot_top(double *grid, int size1, int size2) {
     // Skip loop communication if the processor is holding no data
-    if (global_mpi_data->n_loc == 0) {
+    if (size1 == 0) {
         return;
     }
-
-    int n_loc = global_mpi_data->n_loc;
-    long int n2 = n * n;
+    long int n2 = size2 * size2;
 
     double *bot = grid;
-    double *top = grid + (n_loc - 1) * n2;
-    double *bot_recv = grid - n2;
-    double *top_recv = grid + n_loc * n2;
+    double *top = grid + (size1 - 1) * n2;
+    double *bot_recv = bot - n2;
+    double *top_recv = top + n2;
 
     if (global_mpi_data->size == 1) {
         memcpy(top_recv, bot, n2 * sizeof(double));
@@ -114,7 +112,7 @@ void bcast_double(double *buffer, long int size, int root) {
     }
 }
 
-void grid_collect_buffer(double *data, double *recv, int n) {
+void mpi_grid_collect_buffer(double *data, double *recv, int n) {
     int n_loc = global_mpi_data->n_loc;
     int n_loc_start;
     int size = global_mpi_data->size;
@@ -154,14 +152,13 @@ void cleanup_mpi() {
     }
 }
 
-void grid_exchange_bot_top(double *grid, int n) {
-    int n_loc = global_mpi_data->n_loc;
-    long int n2 = n * n;
+void mpi_grid_exchange_bot_top(double *grid, int size1, int size2) {
+    long int n2 = size2 * size2;
 
     double *bot = grid;
-    double *top = grid + (n_loc - 1) * n2;
-    double *bot_recv = grid - n2;
-    double *top_recv = grid + n_loc * n2;
+    double *top = grid + (size1 - 1) * n2;
+    double *bot_recv = bot - n2;
+    double *top_recv = top + n2;
 
     memcpy(top_recv, bot, n2 * sizeof(double));
     memcpy(bot_recv, top, n2 * sizeof(double));
@@ -176,10 +173,27 @@ void allreduce_sum(double *buffer, long int size) {
     // Do nothing
 }
 
-void collect_grid_buffer(double *data, double *recv, int n) {
+void mpi_grid_collect_buffer(double *data, double *recv, int n) {
     if (data != recv) {
         memcpy(recv, data, n * n * n * sizeof(double));
     }
 }
 
 #endif
+
+double * mpi_grid_allocate(int size1, int size2) {
+    long int n2 = size2 * size2;
+
+    double *data = (double *)malloc((size1 + 2) * n2 * sizeof(double));
+    if (data == NULL) {
+        fprintf(stderr, "Error: Unable to allocate memory for grid data\n");
+        exit(EXIT_FAILURE);
+    }
+
+    return data + n2;
+}
+
+void mpi_grid_free(double *data, int n) {
+    long int n2 = n * n;
+    free(data - n2);
+}

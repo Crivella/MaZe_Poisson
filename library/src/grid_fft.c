@@ -7,6 +7,10 @@
 #include "mp_structs.h"
 #include "fftw_wrap.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #ifdef __MPI
 void fft_grid_init_mpi(grid *grid) {
     mpi_data *mpid = get_mpi_data();
@@ -81,8 +85,8 @@ void fft_grid_init(grid * grid) {
     grid->size = size1;
 
     grid->q = (double *)malloc(size1 * sizeof(double));
-    grid->phi_n = (double *)malloc(size2 * sizeof(double)) + n2;
     grid->ig2 = (double *)malloc(n_loc * n * nh * sizeof(double));
+    grid->phi_n = mpi_grid_allocate(n_loc, n);
     
     double const pi2 = 2 * M_PI;
     double app;
@@ -123,14 +127,11 @@ void fft_grid_init(grid * grid) {
 }
 
 void fft_grid_cleanup(grid * grid) {
-    int n = grid->n;
-    long int n2 = n * n;
-
     cleanup_fftw();
 
     free(grid->q);
     free(grid->ig2);
-    free(grid->phi_n - n2);
+    mpi_grid_free(grid->phi_n, grid->n);
 }   
 
 void fft_grid_init_field(grid *grid) {

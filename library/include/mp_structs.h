@@ -21,15 +21,21 @@
 #define INTEGRATOR_ENABLED 1
 #define INTEGRATOR_DISABLED 0
 
+#define PRECOND_TYPE_NUM 2
+#define PRECOND_TYPE_JACOBI 0
+#define PRECOND_TYPE_MG 1
+
 // Struct typedefs
 typedef struct grid grid;
 typedef struct particles particles;
 typedef struct integrator integrator;
+typedef struct precond precond;
 
 // Struct function definitions
-grid * grid_init(int n, double L, double h, double tol, int type);
+grid * grid_init(int n, double L, double h, double tol, int type, int precond_type);
 particles * particles_init(int n, int n_p, double L, double h, int cas_type);
 integrator * integrator_init(int n_p, double dt, int type);
+precond * precond_init(int n, double L, double h, int type);
 
 void grid_free(grid *grid);
 void particles_free(particles *p);
@@ -73,7 +79,60 @@ void verlet_integrator_part2(integrator *integrator, particles *p);
 void verlet_integrator_init_thermostat(integrator *integrator, double *params);
 void verlet_integrator_stop_thermostat(integrator *integrator);
 
+// Preconditioner function definitions
+void precond_cleanup(precond *p);
+void precond_apply(precond *p, double *in, double *out);
+void precond_prolong(double *in, double *out, int s1, int s2, int ts1, int ts2);
+void precond_restriction(double *in, double *out, int s1, int s2);
+void precond_smooth(double *in, double *out, int s1, int s2, double tol);
+
+// void precond_jacobi_init(precond *p);
+// void precond_jacobi_cleanup(precond *p);
+// void precond_jacobi_prolong(precond *p, double *in, double *out);
+// void precond_jacobi_restriction(precond *p, double *in, double *out);
+// void precond_jacobi_smooth(precond *p, double *in, double *out);
+
+void precond_mg_init(precond *p);
+void precond_mg_cleanup(precond *p);
+void precond_mg_apply(precond *p, double *in, double *out);
+void precond_mg_prolong(double *in, double *out, int s1, int s2, int ts1, int ts2);
+void precond_mg_restriction(double *in, double *out, int s1, int s2);
+void precond_mg_smooth(double *in, double *out, int s1, int s2, double tol);
+
 // Struct definitions
+struct precond {
+    int type;  // Type of the preconditioner
+    int n;  // Number of grid points per dimension
+    double L;  // Length of the grid
+    double h;  // Grid spacing
+
+    // Multigrid parameters
+    double tol; // Tolerance for the smoothing
+    
+    int n1;
+    int n_loc1;  // Number of grid points per dimension (MPI aware)
+    int n_start1; // Start index of the grid in the global array (MPI aware)
+    double *grid1;  // Intermediate grid for the preconditioner
+
+    int n2;
+    int n_loc2;  // Number of grid points per dimension (MPI aware)
+    int n_start2; // Start index of the grid in the global array (MPI aware)
+    double *grid2;  // Intermediate grid for the preconditioner
+
+    int n3;
+    int n_loc3;  // Number of grid points per dimension (MPI aware)
+    int n_start3; // Start index of the grid in the global array (MPI aware)
+    double *grid3;  // Intermediate grid for the preconditioner
+
+    void (*apply)( precond *, double *, double *); // Apply function
+    void (*prolong)( double *, double *, int, int, int, int); // Prolongation function
+    void (*restriction)( double *, double *, int, int); // Restriction function
+    void (*smooth)( double *, double *, int, int, double); // Smoothing function
+
+
+    void (*free)( precond *);
+};
+
 struct grid {
     int type;  // Type of the grid
     int n;  // Number of grid points per dimension
@@ -89,6 +148,9 @@ struct grid {
     double *phi_p;  // Previous potential (could be NULL if not needed by the method)
     double *phi_n;  // Last potential
     double *ig2;  // Inverse of the laplacian
+
+    int precond_type;  // Type of the preconditioner
+    precond *precond;  // Preconditioner
 
     double tol;  // Tolerance for the LCG
     long int n_iters;  // Number of iterations for convergence of the LCG

@@ -44,7 +44,7 @@ double compute_force_fd(
     double px, py, pz, chg;
     
     // Exchange the top and bottom slices
-    grid_exchange_bot_top(phi, n);
+    mpi_grid_exchange_bot_top(phi, n_loc, n);
 
     double sum_q = 0.0;
     #pragma omp parallel for private(i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, E, qc, px, py, pz, chg) reduction(+:sum_q)

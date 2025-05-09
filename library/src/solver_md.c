@@ -39,8 +39,8 @@ void solver_initialize() {
     }
 }
 
-void solver_initialize_grid(int n_grid, double L, double h, double tol, int grid_type) {
-    g_grid = grid_init(n_grid, L, h, tol, grid_type);
+void solver_initialize_grid(int n_grid, double L, double h, double tol, int grid_type, int precond_type) {
+    g_grid = grid_init(n_grid, L, h, tol, grid_type, precond_type);
 }
 
 void solver_initialize_particles(
@@ -252,16 +252,16 @@ void get_masses(double *recv) {
 }
 
 void get_field(double *recv) {
-    grid_collect_buffer(g_grid->phi_n, recv, g_grid->n);
+    mpi_grid_collect_buffer(g_grid->phi_n, recv, g_grid->n);
 }
 
 void get_field_prev(double *recv) {
     double *ptr = g_grid->phi_p !=  NULL ? g_grid->phi_p : g_grid->phi_n;
-    grid_collect_buffer(ptr, recv, g_grid->n);
+    mpi_grid_collect_buffer(ptr, recv, g_grid->n);
 }
 
 void get_q(double *recv) {
-    grid_collect_buffer(g_grid->q, recv, g_grid->n);
+    mpi_grid_collect_buffer(g_grid->q, recv, g_grid->n);
 }
 
 double get_kinetic_energy() {

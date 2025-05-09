@@ -75,6 +75,9 @@ class GridSetting(BaseSettings):
         self._L_ang = None
         self.h = None
         self.charge_assignment = 'CIC'
+
+        self.precond = 'MG'
+        self.smoother = 'LCG'
         
     @property
     def N(self):
@@ -131,7 +134,7 @@ class MDVariables(BaseSettings):
 
         self.init_steps = 0
         self.thermostat = False
-        self.preconditioning = True
+        # self.preconditioning = True
         self.rescale = False
         self.elec = True
         self.not_elec = True

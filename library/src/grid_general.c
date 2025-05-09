@@ -14,9 +14,9 @@ char *get_grid_type_str(int n) {
 }
 
 
-grid * grid_init(int n, double L, double h, double tol, int type) {
+grid * grid_init(int n, double L, double h, double tol, int grid_type, int precond_type) {
     void   (*init_func)(grid *);
-    switch (type) {
+    switch (grid_type) {
         case GRID_TYPE_LCG:
             init_func = lcg_grid_init;
             break;
@@ -28,7 +28,8 @@ grid * grid_init(int n, double L, double h, double tol, int type) {
     }
 
     grid *new = (grid *)malloc(sizeof(grid));
-    new->type = type;
+    new->type = grid_type;
+    new->precond_type = precond_type;
     new->n = n;
     new->L = L;
     new->h = h;
@@ -41,6 +42,7 @@ grid * grid_init(int n, double L, double h, double tol, int type) {
     new->phi_p = NULL;
     new->phi_n = NULL;
     new->ig2 = NULL;
+
 
     init_func(new);
 
