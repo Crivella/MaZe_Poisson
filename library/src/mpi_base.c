@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 #include "mpi_base.h"
 
@@ -24,6 +25,15 @@ int get_n_loc() {
 
 int get_n_start() {
     return global_mpi_data->n_start;
+}
+
+void mpi_printf(const char *format, ...) {
+    if (global_mpi_data->rank == 0) {
+        va_list args;
+        va_start(args, format);
+        vprintf(format, args);
+        va_end(args);
+    }
 }
 
 #ifdef __MPI
