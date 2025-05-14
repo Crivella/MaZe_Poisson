@@ -39,8 +39,10 @@ ca_scheme_map: Dict[str, int] = {
 }
 
 precond_map: Dict[str, int] = {
-    # 'JACOBI': 0,
-    # 'MG': 1,
+    # 'NONE': 0,  # Jacobi implicit
+    # 'JACOBI': 1,  # Jacobi explicit
+    # 'MG': 2,  # Multigrid
+    # 'SSOR': 3,  # Symmetric Successive Over-Relaxation
 }
 
 class SolverMD(Logger):
