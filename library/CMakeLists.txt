@@ -65,6 +65,7 @@ add_library(maze_poisson MODULE
 
     src/precond_jacobi.c
     src/precond_mg.c
+    src/precond_ssor.c
 
     src/solver_md.c
 )
