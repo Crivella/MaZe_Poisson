@@ -98,32 +98,29 @@ void lcg_grid_init_field(grid *grid) {
 }
 
 int lcg_grid_update_field(grid *grid) {
-    int res;
+    void (*precond)(double *, double *, int, int, int);
+
     switch (grid->precond_type) {
         case PRECOND_TYPE_NONE:
-            res = verlet_poisson(
-                grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
-                grid->n_local, grid->n
-            );
+            precond = NULL;
             break;
         case PRECOND_TYPE_JACOBI:
-            res = verlet_poisson_precond(
-                grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
-                grid->n_local, grid->n,
-                precond_jacobi_apply
-            );
+            precond = precond_jacobi_apply;
             break;
         case PRECOND_TYPE_MG:
-            res = verlet_poisson_precond(
-                grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
-                grid->n_local, grid->n,
-                precond_mg_apply
-            );
+            precond = precond_mg_apply;
+            break;
+        case PRECOND_TYPE_SSOR:
+            precond = precond_ssor_apply;
             break;
         default:
             break;
     }
-    return res;
+    return verlet_poisson(
+        grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
+        grid->n_local, grid->n,
+        precond
+    );
 }   
 
 double lcg_grid_update_charges(grid *grid, particles *p) {

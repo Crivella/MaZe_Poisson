@@ -242,7 +242,11 @@ class SolverMD(Logger):
     @Clock('field')
     def update_field(self):
         """Update the field."""
-        return capi.solver_update_field()
+        res = capi.solver_update_field()
+        if res == -1:
+            self.logger.warning("Warning: CG did not converge.")
+            # raise ValueError("Error CG did not converge.")
+        return res
 
     @Clock('forces')
     def compute_forces(self):

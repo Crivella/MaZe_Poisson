@@ -27,7 +27,19 @@ EXTERN_C double norm(double *u, long int n) {
     return cblas_dnrm2(n, u, 1);
 }
 
+EXTERN_C void dscal(double *x, double alpha, long int n) {
+    cblas_dscal(n, alpha, x, 1);
+}
+
 #else // __LAPACK ///////////////////////////////////////////////////////////////////////////
+
+EXTERN_C void dscal(double *x, double alpha, long int n) {
+    long int i;
+    #pragma omp parallel for
+    for (i = 0; i < n; i++) {
+        x[i] *= alpha;
+    }
+}
 
 /*
 Compute the dot product of two vectors
@@ -46,8 +58,6 @@ EXTERN_C double ddot(double *u, double *v, long int n) {
     allreduce_sum(&result, 1);
     return result;
 }
-
-
 
 /*
 Compute the sum of two vectors scaled by a constant (u += alpha * v)

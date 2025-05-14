@@ -11,11 +11,8 @@ int conj_grad_precond(
     void (*apply)(double *, double *, int, int, int)
 );
 int verlet_poisson(
-    double tol, double h, double* phi, double* phi_prev, double* q, double* y, int size1, int size2
-);
-int verlet_poisson_precond(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y, int size1, int size2,
-    void (*apply)(double *, double *, int, int, int)
+    void (*precond)(double *, double *, int, int, int)
 );
 
 #endif

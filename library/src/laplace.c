@@ -235,12 +235,14 @@ The previous and current fields and the y array are updated in place.
 @param q: the charge on a grid of size n_grid * n_grid * n_grid\
 @param y: copy of the 'q' given as input to the function
 @param n_grid: the number of grid points in each dimension
+@param precond: the preconditioner function
 
 @return the number of iterations for convergence of the LCG
 */
 EXTERN_C int verlet_poisson(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y,
-    int size1, int size2
+    int size1, int size2,
+    void (*precond)(double *, double *, int, int, int)
 ) {
     int iter_conv;
 
@@ -264,62 +266,11 @@ EXTERN_C int verlet_poisson(
     daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho
 
     // Apply LCG
-    iter_conv = conj_grad(tmp, y, y, tol, size1, size2);  // Inplace y <- y0
-
-    // Scale the field with the constrained 'force' term
-    #pragma omp parallel for
-    for (i = 0; i < n3; i++) {
-        phi[i] -= y[i];
+    if (precond == NULL) {
+        iter_conv = conj_grad(tmp, y, y, tol, size1, size2);  // Inplace y <- y0
+    } else {
+        iter_conv = conj_grad_precond(tmp, y, y, tol, size1, size2, precond);  // Inplace y <- y0
     }
-
-    // Free temporary arrays
-    free(tmp);
-
-    return iter_conv;
-}
-
-
-/*
-Apply Verlet algorithm to compute the updated value of the field phi, with LCG + SHAKE.
-The previous and current fields and the y array are updated in place.
-@param tol: tolerance
-@param h: the grid spacing
-@param phi: the potential field of size n_grid * n_grid * n_grid
-@param phi_prev: electrostatic field for step t - 1 Verlet
-@param q: the charge on a grid of size n_grid * n_grid * n_grid\
-@param y: copy of the 'q' given as input to the function
-@param n_grid: the number of grid points in each dimension
-
-@return the number of iterations for convergence of the LCG
-*/
-EXTERN_C int verlet_poisson_precond(
-    double tol, double h, double* phi, double* phi_prev, double* q, double* y,
-    int size1, int size2,
-    void (*apply)(double *, double *, int, int, int)
-) {
-    int iter_conv;
-
-    long int i;
-    long int n2 = size2 * size2;
-    long int n3 = size1 * n2;
-
-    double app;
-    double *tmp = (double*)malloc(n3 * sizeof(double));
-    
-    // Compute provisional update for the field phi
-    #pragma omp parallel for private(app)
-    for (i = 0; i < n3; i++) {
-        app = phi[i];
-        phi[i] = 2 * app - phi_prev[i];
-        phi_prev[i] = app;
-    }
-
-    // Compute the constraint with the provisional value of the field phi
-    laplace_filter(phi, tmp, size1, size2);
-    daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A^phi + 4 * pi * rho
-
-    // Apply LCG
-    iter_conv = conj_grad_precond(tmp, y, y, tol, size1, size2, apply);  // Inplace y <- y0
 
     // Scale the field with the constrained 'force' term
     #pragma omp parallel for
