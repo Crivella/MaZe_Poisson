@@ -11,10 +11,6 @@
 
 void solve_diag(double *b, int n_loc, int n, int n_start) {
     dscal(b, -6.0, n_loc * n * n);
-    if (b[0] != b[0]) {
-        fprintf(stderr, "SSOR: NaN detected after solve_diag\n");
-        exit(1);
-    }
 }
 
 void solve_uppder_branched(double *b, int n_loc, int n, int n_start) {
@@ -535,11 +531,6 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////
-
-    if (b[0] != b[0]) {
-        fprintf(stderr, "SSOR: NaN detected after solve_lower\n");
-        exit(1);
-    }
 }
 
 void solve_lower(double *b, int n_loc, int n, int n_start) {
@@ -568,7 +559,6 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             b[i0 + j0 + k] = (
                 b[i0 + j0 + k]
             ) / -6.0;
-            // mpi_printf("%ld ", i0 + j0 + k);
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
@@ -577,8 +567,6 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                     b[i0 + j0 + k] -
                     b[i0 + j0 + k2]
                 ) / -6.0;
-
-                // mpi_printf("%ld ", i0 + j0 + k);
             }
 
             /////////////////////////////////////////////
@@ -591,7 +579,6 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j0 + k1] -
                 b[i0 + j0 + k2]
             ) / -6.0;
-            // mpi_printf("%ld ", i0 + j0 + k);
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -903,7 +890,6 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j1 + k] -
                 b[i0 + j2 + k]
             ) / -6.0;
-            // mpi_printf("%ld ", i0 + j0 + k);
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
@@ -916,7 +902,6 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                     b[i0 + j2 + k] -
                     b[i0 + j0 + k2]
                 ) / -6.0;
-                // mpi_printf("%ld ", i0 + j0 + k);
             }
 
             /////////////////////////////////////////////
@@ -933,16 +918,9 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j0 + k1] -
                 b[i0 + j0 + k2]
             ) / -6.0;
-            // mpi_printf("%ld ", i0 + j0 + k);
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////
-
-    // mpi_printf("\n");
-    if (b[0] != b[0]) {
-        fprintf(stderr, "SSOR: NaN detected after solve_upper\n");
-        exit(1);
-    }
 }
 
 /*
