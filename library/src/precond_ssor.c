@@ -38,7 +38,6 @@ double SSOR_OMEGA = 1.75;
 double DIAG_CONST;
 
 
-
 void solve_diag(double *b, int n_loc, int n, int n_start) {
     dscal(b, -6.0, n_loc * n * n);
 }
@@ -953,6 +952,10 @@ void solve_lower_edge(double *b, int n_loc, int n, int n_start) {
     //////////////////////////////////////////////////////////////////////////////////////////
 }
 
+/*
+- Cuts iteration from ~120 to ~25
+- 2x slower
+*/
 void precond_ssor_apply_edge(double *in, double *out, int s1, int s2, int n_start) {
     solve_lower_edge(out, s1, s2, n_start);  // z = M1^-1 . b
     solve_diag(out, s1, s2, n_start);  // y = M2^-1 . z
@@ -960,9 +963,9 @@ void precond_ssor_apply_edge(double *in, double *out, int s1, int s2, int n_star
 }
 
 /*
-PROPAG_ITER_CUTOFF = 5 works but make it extremely slower (44s/it vs 0.5s/it)
-PROPAG_ITER_CUTOFF = 3 works but make it extremely slower (6s/it vs 0.5s/it)
-PROPAG_ITER_CUTOFF = 2 PROPAG_VALUE_CUTOFF = 1.0e-6 is ~4x slower than the original
+PROPAG_ITER_CUTOFF = 6 PROPAG_VALUE_CUTOFF = 1.0e-12
+- cuts iteration from ~120 to ~60
+- 40x slower
 */
 int PROPAG_ITER_CUTOFF = 6;
 double PROPAG_VALUE_CUTOFF = 1.0e-12;
