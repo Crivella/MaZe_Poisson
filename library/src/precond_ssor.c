@@ -176,16 +176,16 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             k = nm1;
             b[i0 + j0 + k] = (
                 b[i0 + j0 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             // #pragma omp parallel for private(k, k1)
             for (k = nm2; k > 0; k--) {
                 k1 = k + 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
+                    b[i0 + j0 + k] +
                     b[i0 + j0 + k1]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -194,10 +194,10 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             k1 = 1;
             k2 = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -210,18 +210,18 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = n - 1
             k = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
+                b[i0 + j0 + k] +
                 b[i0 + j1 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = nm2; k > 0; k--) {
                 k1 = k + 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i0 + j1 + k] -
+                    b[i0 + j0 + k] +
+                    b[i0 + j1 + k] +
                     b[i0 + j0 + k1]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -230,11 +230,11 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             k1 = 1;
             k2 = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i0 + j1 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i0 + j1 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         }
 
@@ -248,21 +248,21 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = n - 1
             k = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i0 + j1 + k] -
+                b[i0 + j0 + k] +
+                b[i0 + j1 + k] +
                 b[i0 + j2 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             // #pragma omp parallel for private(k, k1)
             for (k = nm2; k > 0; k--) {
                 k1 = k + 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i0 + j1 + k] -
-                    b[i0 + j2 + k] -
+                    b[i0 + j0 + k] +
+                    b[i0 + j1 + k] +
+                    b[i0 + j2 + k] +
                     b[i0 + j0 + k1]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -271,12 +271,12 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             k1 = 1;
             k2 = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i0 + j1 + k] -
-                b[i0 + j2 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i0 + j1 + k] +
+                b[i0 + j2 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -293,18 +293,18 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = n - 1
             k = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
+                b[i0 + j0 + k] +
                 b[i1 + j0 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = nm2; k > 0; k--) {
                 k1 = k + 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i1 + j0 + k] -
+                    b[i0 + j0 + k] +
+                    b[i1 + j0 + k] +
                     b[i0 + j0 + k1]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -313,11 +313,11 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             k1 = 1;
             k2 = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -329,20 +329,20 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = n - 1
             k = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
                 b[i0 + j1 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = nm2; k > 0; k--) {
                 k1 = k + 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i1 + j0 + k] -
-                    b[i0 + j1 + k] -
+                    b[i0 + j0 + k] +
+                    b[i1 + j0 + k] +
+                    b[i0 + j1 + k] +
                     b[i0 + j0 + k1]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -351,12 +351,12 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             k1 = 1;
             k2 = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i0 + j1 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i0 + j1 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         }
 
@@ -370,22 +370,22 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = n - 1
             k = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i0 + j1 + k] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i0 + j1 + k] +
                 b[i0 + j2 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = nm2; k > 0; k--) {
                 k1 = k + 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i1 + j0 + k] -
-                    b[i0 + j1 + k] -
-                    b[i0 + j2 + k] -
+                    b[i0 + j0 + k] +
+                    b[i1 + j0 + k] +
+                    b[i0 + j1 + k] +
+                    b[i0 + j2 + k] +
                     b[i0 + j0 + k1]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -394,13 +394,13 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             k1 = 1;
             k2 = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i0 + j1 + k] -
-                b[i0 + j2 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i0 + j1 + k] +
+                b[i0 + j2 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     }
@@ -418,21 +418,21 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = n - 1
             k = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
                 b[i2 + j0 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             // #pragma omp parallel for private(k, k1)
             for (k = nm2; k > 0; k--) {
                 k1 = k + 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i1 + j0 + k] -
-                    b[i2 + j0 + k] -
+                    b[i0 + j0 + k] +
+                    b[i1 + j0 + k] +
+                    b[i2 + j0 + k] +
                     b[i0 + j0 + k1]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -441,12 +441,12 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             k1 = 1;
             k2 = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i2 + j0 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i2 + j0 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -459,22 +459,22 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = n - 1
             k = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i2 + j0 + k] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i2 + j0 + k] +
                 b[i0 + j1 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = nm2; k > 0; k--) {
                 k1 = k + 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i1 + j0 + k] -
-                    b[i2 + j0 + k] -
-                    b[i0 + j1 + k] -
+                    b[i0 + j0 + k] +
+                    b[i1 + j0 + k] +
+                    b[i2 + j0 + k] +
+                    b[i0 + j1 + k] +
                     b[i0 + j0 + k1]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -483,13 +483,13 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             k1 = 1;
             k2 = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i2 + j0 + k] -
-                b[i0 + j1 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i2 + j0 + k] +
+                b[i0 + j1 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         }
 
@@ -503,25 +503,25 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = n - 1
             k = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i2 + j0 + k] -
-                b[i0 + j1 + k] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i2 + j0 + k] +
+                b[i0 + j1 + k] +
                 b[i0 + j2 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             // #pragma omp parallel for private(k, k1)
             for (k = nm2; k > 0; k--) {
                 k1 = k + 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i1 + j0 + k] -
-                    b[i2 + j0 + k] -
-                    b[i0 + j1 + k] -
-                    b[i0 + j2 + k] -
+                    b[i0 + j0 + k] +
+                    b[i1 + j0 + k] +
+                    b[i2 + j0 + k] +
+                    b[i0 + j1 + k] +
+                    b[i0 + j2 + k] +
                     b[i0 + j0 + k1]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -530,14 +530,14 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             k1 = 1;
             k2 = nm1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i2 + j0 + k] -
-                b[i0 + j1 + k] -
-                b[i0 + j2 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i2 + j0 + k] +
+                b[i0 + j1 + k] +
+                b[i0 + j2 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -568,15 +568,15 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             k = 0;
             b[i0 + j0 + k] = (
                 b[i0 + j0 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
                 k2 = k - 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
+                    b[i0 + j0 + k] +
                     b[i0 + j0 + k2]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -585,10 +585,10 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             k1 = 0;
             k2 = k - 1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -601,19 +601,19 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = 0
             k = 0;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
+                b[i0 + j0 + k] +
                 b[i0 + j2 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
                 // k1 = k + 1;
                 k2 = k - 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i0 + j2 + k] -
+                    b[i0 + j0 + k] +
+                    b[i0 + j2 + k] +
                     b[i0 + j0 + k2]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -622,11 +622,11 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             k1 = 0;
             k2 = k - 1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i0 + j2 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i0 + j2 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         }
 
@@ -640,20 +640,20 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = 0
             k = 0;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i0 + j1 + k] -
+                b[i0 + j0 + k] +
+                b[i0 + j1 + k] +
                 b[i0 + j2 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
                 k2 = k - 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i0 + j1 + k] -
-                    b[i0 + j2 + k] -
+                    b[i0 + j0 + k] +
+                    b[i0 + j1 + k] +
+                    b[i0 + j2 + k] +
                     b[i0 + j0 + k2]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -662,12 +662,12 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             k1 = 0;
             k2 = k - 1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i0 + j1 + k] -
-                b[i0 + j2 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i0 + j1 + k] +
+                b[i0 + j2 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -684,18 +684,18 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = 0
             k = 0;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
+                b[i0 + j0 + k] +
                 b[i2 + j0 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
                 k2 = k - 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i2 + j0 + k] -
+                    b[i0 + j0 + k] +
+                    b[i2 + j0 + k] +
                     b[i0 + j0 + k2]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -704,11 +704,11 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             k1 = 0;
             k2 = k - 1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i2 + j0 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i2 + j0 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -720,20 +720,20 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = 0
             k = 0;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i2 + j0 + k] -
+                b[i0 + j0 + k] +
+                b[i2 + j0 + k] +
                 b[i0 + j2 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
                 k2 = k - 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i2 + j0 + k] -
-                    b[i0 + j2 + k] -
+                    b[i0 + j0 + k] +
+                    b[i2 + j0 + k] +
+                    b[i0 + j2 + k] +
                     b[i0 + j0 + k2]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -742,12 +742,12 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             k1 = 0;
             k2 = k - 1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i2 + j0 + k] -
-                b[i0 + j2 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i2 + j0 + k] +
+                b[i0 + j2 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         }
 
@@ -761,22 +761,22 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = 0
             k = 0;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i2 + j0 + k] -
-                b[i0 + j1 + k] -
+                b[i0 + j0 + k] +
+                b[i2 + j0 + k] +
+                b[i0 + j1 + k] +
                 b[i0 + j2 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
                 k2 = k - 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i2 + j0 + k] -
-                    b[i0 + j1 + k] -
-                    b[i0 + j2 + k] -
+                    b[i0 + j0 + k] +
+                    b[i2 + j0 + k] +
+                    b[i0 + j1 + k] +
+                    b[i0 + j2 + k] +
                     b[i0 + j0 + k2]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -785,13 +785,13 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             k1 = 0;
             k2 = k - 1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i2 + j0 + k] -
-                b[i0 + j1 + k] -
-                b[i0 + j2 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i2 + j0 + k] +
+                b[i0 + j1 + k] +
+                b[i0 + j2 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     }
@@ -809,20 +809,20 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = 0
             k = 0;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
                 b[i2 + j0 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
                 k2 = k - 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i1 + j0 + k] -
-                    b[i2 + j0 + k] -
+                    b[i0 + j0 + k] +
+                    b[i1 + j0 + k] +
+                    b[i2 + j0 + k] +
                     b[i0 + j0 + k2]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -831,12 +831,12 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             k1 = 0;
             k2 = k - 1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i2 + j0 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i2 + j0 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -849,23 +849,23 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = 0
             k = 0;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i2 + j0 + k] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i2 + j0 + k] +
                 b[i0 + j2 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
                 // k1 = k + 1;
                 k2 = k - 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i1 + j0 + k] -
-                    b[i2 + j0 + k] -
-                    b[i0 + j2 + k] -
+                    b[i0 + j0 + k] +
+                    b[i1 + j0 + k] +
+                    b[i2 + j0 + k] +
+                    b[i0 + j2 + k] +
                     b[i0 + j0 + k2]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -874,13 +874,13 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             k1 = 0;
             k2 = k - 1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i2 + j0 + k] -
-                b[i0 + j2 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i2 + j0 + k] +
+                b[i0 + j2 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         }
 
@@ -894,24 +894,24 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             // Edge case for k = 0
             k = 0;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i2 + j0 + k] -
-                b[i0 + j1 + k] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i2 + j0 + k] +
+                b[i0 + j1 + k] +
                 b[i0 + j2 + k]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
                 k2 = k - 1;
                 b[i0 + j0 + k] = (
-                    b[i0 + j0 + k] -
-                    b[i1 + j0 + k] -
-                    b[i2 + j0 + k] -
-                    b[i0 + j1 + k] -
-                    b[i0 + j2 + k] -
+                    b[i0 + j0 + k] +
+                    b[i1 + j0 + k] +
+                    b[i2 + j0 + k] +
+                    b[i0 + j1 + k] +
+                    b[i0 + j2 + k] +
                     b[i0 + j0 + k2]
-                ) / -6.0;
+                ) / 6.0;
             }
 
             /////////////////////////////////////////////
@@ -920,14 +920,14 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             k1 = 0;
             k2 = k - 1;
             b[i0 + j0 + k] = (
-                b[i0 + j0 + k] -
-                b[i1 + j0 + k] -
-                b[i2 + j0 + k] -
-                b[i0 + j1 + k] -
-                b[i0 + j2 + k] -
-                b[i0 + j0 + k1] -
+                b[i0 + j0 + k] +
+                b[i1 + j0 + k] +
+                b[i2 + j0 + k] +
+                b[i0 + j1 + k] +
+                b[i0 + j2 + k] +
+                b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / -6.0;
+            ) / 6.0;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -1207,7 +1207,7 @@ The function is built to work both with separate input/output arrays or in-place
 @param s2: the size of the second/third dimension
 @param n_start1: the starting index of the first dimension (used for MPI)
 */
-void precond_ssor_apply2(double *in, double *out, int s1, int s2, int n_start) {
+void precond_ssor_apply(double *in, double *out, int s1, int s2, int n_start) {
     if ( in != out ) {
         memcpy(out, in, s1 * s2 * s2 * sizeof(double));  // Copy the input to output
     }
@@ -1217,7 +1217,7 @@ void precond_ssor_apply2(double *in, double *out, int s1, int s2, int n_start) {
 }
 
 
-void precond_ssor_apply(double *in, double *out, int s1, int s2, int n_start) {
+void precond_ssor_apply2(double *in, double *out, int s1, int s2, int n_start) {
     if ( index_map_lower == NULL) {
         init_index_map_lower_2(s1, s2);
         init_index_map_upper_2(s1, s2);
