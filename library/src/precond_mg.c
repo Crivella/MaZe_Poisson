@@ -26,11 +26,11 @@ void precond_mg_apply(double *in, double *out, int s1, int s2, int n_start1) {
     int n_start3 = (n_start2 + 1) / 2;
 
     if (n_loc3 == 0) {
-        fprintf(stderr, "------------------------------------------------------------------------------------\n");
-        fprintf(stderr, "Warning: after restriction some processors have no local grid points!\n");
-        fprintf(stderr, "This case is not yet implemented, please use MG preconditioner with atleast 4 slices\n");
-        fprintf(stderr, "per processor (N_grid / num_mpi_procs >= 4) \n");
-        fprintf(stderr, "------------------------------------------------------------------------------------\n");
+        mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
+        mpi_fprintf(stderr, "Warning: after restriction some processors have no local grid points!\n");
+        mpi_fprintf(stderr, "This case is not yet implemented, please use MG preconditioner with atleast 4 slices\n");
+        mpi_fprintf(stderr, "per processor (N_grid / num_mpi_procs >= 4) \n");
+        mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
         exit(1);
     }
 

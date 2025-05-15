@@ -36,6 +36,15 @@ void mpi_printf(const char *format, ...) {
     }
 }
 
+void mpi_fprintf(FILE *fp, const char *format, ...) {
+    if (global_mpi_data->rank == 0) {
+        va_list args;
+        va_start(args, format);
+        vfprintf(fp, format, args);
+        va_end(args);
+    }
+}
+
 #ifdef __MPI
 
 int init_mpi() {

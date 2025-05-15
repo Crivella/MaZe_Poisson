@@ -32,7 +32,7 @@ void laplace_filter(double *u, double *u_new, int size1, int size2) {
     long int n2 = size2 * size2;
 
     if (u == u_new) {
-        fprintf(stderr, "laplace_filter: u and u_new are the same array (in-place operation not supported)\n");
+        mpi_fprintf(stderr, "laplace_filter: u and u_new are the same array (in-place operation not supported)\n");
         exit(1);
     }
 

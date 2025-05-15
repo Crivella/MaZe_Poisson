@@ -1,6 +1,8 @@
 #ifndef __MYMPI_H
 #define __MYMPI_H
 
+#include <stdio.h>
+
 #ifdef __MPI
 #include <mpi.h>
 #else
@@ -32,6 +34,7 @@ int get_n_loc();
 int get_n_start();
 
 void mpi_printf(const char *format, ...);
+void mpi_fprintf(FILE *fp, const char *format, ...);
 
 void bcast_double(double *buffer, long int size, int root);
 void allreduce_sum(double *buffer, long int size);

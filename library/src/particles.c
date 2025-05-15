@@ -7,6 +7,7 @@
 #include "constants.h"
 #include "forces.h"
 #include "mp_structs.h"
+#include "mpi_base.h"
 
 #define NUM_NEIGH_CIC 8
 #define NUM_NEIGH_SPLINE 64
@@ -57,7 +58,7 @@ void particle_charges_init(particles *p, int cas_type) {
             p->charges_spread_func = spread_spline_cubic;
             break;
         default:
-            fprintf(stderr, "Invalid charge assignment scheme type %d\n", cas_type);
+            mpi_fprintf(stderr, "Invalid charge assignment scheme type %d\n", cas_type);
             exit(1);
             break;
     }   
@@ -125,7 +126,7 @@ void particles_init_potential(particles *p, int pot_type) {
         p->init_potential_ld(p);
         break;
     default:
-        fprintf(stderr, "Invalid potential type %d\n", pot_type);
+        mpi_fprintf(stderr, "Invalid potential type %d\n", pot_type);
         exit(1);
         break;
     }

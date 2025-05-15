@@ -22,21 +22,19 @@ void solver_initialize() {
 
     int n_threads = get_omp_max_threads();
 
-    if (rank == 0) {
-        printf("******************************************************\n");
-        printf("* MAZE_POISSON\n");
-        if (size > 0) {
-            printf("*   MPI     enabled  running on %d processes\n", size);
-        } else {
-            printf("*   MPI     not available\n");
-        }
-        if (n_threads > 0) {
-            printf("*   OpenMP  enabled  running on %d threads\n", n_threads);
-        } else {
-            printf("*   OpenMP  not available\n");
-        }
-        printf("******************************************************\n");
+    mpi_printf("******************************************************\n");
+    mpi_printf("* MAZE_POISSON\n");
+    if (size > 0) {
+        mpi_printf("*   MPI     enabled  running on %d processes\n", size);
+    } else {
+        mpi_printf("*   MPI     not available\n");
     }
+    if (n_threads > 0) {
+        mpi_printf("*   OpenMP  enabled  running on %d threads\n", n_threads);
+    } else {
+        mpi_printf("*   OpenMP  not available\n");
+    }
+    mpi_printf("******************************************************\n");
 }
 
 void solver_initialize_grid(int n_grid, double L, double h, double tol, int grid_type, int precond_type) {

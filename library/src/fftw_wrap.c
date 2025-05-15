@@ -84,11 +84,11 @@ void init_rfft(int n, int *n_loc, int *n_start) {
     r_real = fftw_alloc_real(2*loc_size);
     r_cmpx = fftw_alloc_complex(loc_size);
 
-    if (mpid->rank == 0) printf("FFTW: Initializing R-C-R plans with MPI\n");
+    mpi_printf("FFTW: Initializing R-C-R plans with MPI\n");
     r_fwd_plan = fftw_mpi_plan_dft_r2c_3d(n, n, n, r_real, r_cmpx, mpid->comm, FLAG | FFTW_DESTROY_INPUT);
     r_bwd_plan = fftw_mpi_plan_dft_c2r_3d(n, n, n, r_cmpx, r_real, mpid->comm, FLAG | FFTW_DESTROY_INPUT);
 
-    if (mpid->rank == 0) printf("FFTW: ...DONE\n");
+    mpi_printf("FFTW: ...DONE\n");
 }
 
 void rfft_solve(int n, double *b, double *ig2, double *x) {
@@ -141,7 +141,7 @@ void rfft_solve(int n, double *b, double *ig2, double *x) {
 
 void init_rfft(int n, int *n_loc, int *n_start) {
     if (get_size() > 1) {
-        if (get_rank() == 0) fprintf(stderr, "TERMINATING: Linked FFTW compiled without MPI support\n");
+        mpi_fprintf(stderr, "TERMINATING: Linked FFTW compiled without MPI support\n");
         exit(1);
     }
     if (initialized_r != FFTW_BLANK) {
@@ -156,10 +156,10 @@ void init_rfft(int n, int *n_loc, int *n_start) {
     r_real = fftw_alloc_real(n * n * n);
     r_cmpx = fftw_alloc_complex(n * n * nh);
 
-    printf("FFTW: Initializing R-C-R plans SERIAL\n");
+    mpi_printf("FFTW: Initializing R-C-R plans SERIAL\n");
     r_fwd_plan = fftw_plan_dft_r2c_3d(n, n, n, r_real, r_cmpx, FLAG | FFTW_DESTROY_INPUT);
     r_bwd_plan = fftw_plan_dft_c2r_3d(n, n, n, r_cmpx, r_real, FLAG | FFTW_DESTROY_INPUT);
-    printf("FFTW: ...DONE\n");
+    mpi_printf("FFTW: ...DONE\n");
 }
 
 /*Solve Ax=b where A is the laplacian using real grid FFTS*/
@@ -293,17 +293,17 @@ void cleanup_fftw() {
 #else // __FFTW
 
 void init_rfft(int n, int *n_loc, int *n_start) {
-    fprintf(stderr, "TERMINATING: Library compiled without FFTW support\n");
+    mpi_fprintf(stderr, "TERMINATING: Library compiled without FFTW support\n");
     exit(1);
 }
 
 void cleanup_fftw() {
-    fprintf(stderr, "TERMINATING: Library compiled without FFTW support\n");
+    mpi_fprintf(stderr, "TERMINATING: Library compiled without FFTW support\n");
     exit(1);
 }
 
 void rfft_solve(int n, double *b, double *ig2, double *x) {
-    fprintf(stderr, "TERMINATING: Library compiled without FFTW support\n");
+    mpi_fprintf(stderr, "TERMINATING: Library compiled without FFTW support\n");
     exit(1);
 }
 
