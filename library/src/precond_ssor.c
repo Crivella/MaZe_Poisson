@@ -1,4 +1,29 @@
-// Implementation of the SSOR (Symmetric Successive Over Relaxation) preconditioner
+/*
+Implementation of the SSOR (Symmetric Successive Over Relaxation) preconditioner
+Decompose the matrix of the problem A.x = b into
+A = D + L + L^T  where D is the diagonal, L is the lower triangular part and L^T is the upper triangular part
+The preconditioner in this case is:
+
+P = (OMEMGA / (2 - OMEGA)) * (D / OMEGA + L) . D^-1 . (D / OMEGA + L)^T
+P . v = r
+v = P^-1 . r
+
+M1 = (D + L)     LOWER
+M2 = D^-1        DIAG
+M3 = (D + L)^T   UPPER
+
+M1 . M2 . M3 . v = r
+
+M3 . v = y
+M2 . y = z
+
+z = solve_M1 (b) = TRIANG_SOLVE_M1 (b)
+y = solve_M2 (z) = D . Z
+v = solve_M3 (y) = TRIANG_SOLVE_M3 (y)
+
+We can also mmultiple (D + L) and (D + L)^T by -1 to get the same final result while having all
+/ 6.0 and + in the propagation instead of alternating - and +
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,15 +34,10 @@
 #include "mp_structs.h"
 #include "mpi_base.h"
 
-/*
-CUTOFF = 5 works but make it extremely slower (44s/it vs 0.5s/it)
-CUTOFF = 3 works but make it extremely slower (6s/it vs 0.5s/it)
-CUTOFF = 1 
-*/
-int CUTOFF = 3;
-double ELEM_CUTOFF = 1.0e-10;
-long int *index_map_lower = NULL;
-long int *index_map_upper = NULL;
+double SSOR_OMEGA = 1.75;
+double DIAG_CONST;
+
+
 
 void solve_diag(double *b, int n_loc, int n, int n_start) {
     dscal(b, -6.0, n_loc * n * n);
@@ -150,7 +170,7 @@ void solve_lower_branched(double *b, int n_loc, int n, int n_start) {
     }
 }
 
-void solve_upper(double *b, int n_loc, int n, int n_start) {
+void solve_upper_edge(double *b, int n_loc, int n, int n_start) {
     int nm1 = n - 1;
     int nm2 = n - 2;
     int i, j, k, k1, k2;
@@ -176,7 +196,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             k = nm1;
             b[i0 + j0 + k] = (
                 b[i0 + j0 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             // #pragma omp parallel for private(k, k1)
@@ -185,7 +205,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j0 + k] = (
                     b[i0 + j0 + k] +
                     b[i0 + j0 + k1]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -197,7 +217,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j0 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -212,7 +232,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             b[i0 + j0 + k] = (
                 b[i0 + j0 + k] +
                 b[i0 + j1 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = nm2; k > 0; k--) {
@@ -221,7 +241,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                     b[i0 + j0 + k] +
                     b[i0 + j1 + k] +
                     b[i0 + j0 + k1]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -234,7 +254,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j1 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         }
 
@@ -251,7 +271,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j0 + k] +
                 b[i0 + j1 + k] +
                 b[i0 + j2 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             // #pragma omp parallel for private(k, k1)
@@ -262,7 +282,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                     b[i0 + j1 + k] +
                     b[i0 + j2 + k] +
                     b[i0 + j0 + k1]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -276,7 +296,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j2 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -295,7 +315,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
             b[i0 + j0 + k] = (
                 b[i0 + j0 + k] +
                 b[i1 + j0 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = nm2; k > 0; k--) {
@@ -304,7 +324,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                     b[i0 + j0 + k] +
                     b[i1 + j0 + k] +
                     b[i0 + j0 + k1]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -317,7 +337,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i1 + j0 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -332,7 +352,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j0 + k] +
                 b[i1 + j0 + k] +
                 b[i0 + j1 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = nm2; k > 0; k--) {
@@ -342,7 +362,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                     b[i1 + j0 + k] +
                     b[i0 + j1 + k] +
                     b[i0 + j0 + k1]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -356,7 +376,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j1 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         }
 
@@ -374,7 +394,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i1 + j0 + k] +
                 b[i0 + j1 + k] +
                 b[i0 + j2 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = nm2; k > 0; k--) {
@@ -385,7 +405,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                     b[i0 + j1 + k] +
                     b[i0 + j2 + k] +
                     b[i0 + j0 + k1]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -400,7 +420,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j2 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     }
@@ -421,7 +441,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j0 + k] +
                 b[i1 + j0 + k] +
                 b[i2 + j0 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             // #pragma omp parallel for private(k, k1)
@@ -432,7 +452,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                     b[i1 + j0 + k] +
                     b[i2 + j0 + k] +
                     b[i0 + j0 + k1]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -446,7 +466,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i2 + j0 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -463,7 +483,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i1 + j0 + k] +
                 b[i2 + j0 + k] +
                 b[i0 + j1 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = nm2; k > 0; k--) {
@@ -474,7 +494,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                     b[i2 + j0 + k] +
                     b[i0 + j1 + k] +
                     b[i0 + j0 + k1]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -489,7 +509,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j1 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         }
 
@@ -508,7 +528,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i2 + j0 + k] +
                 b[i0 + j1 + k] +
                 b[i0 + j2 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             // #pragma omp parallel for private(k, k1)
@@ -521,7 +541,7 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                     b[i0 + j1 + k] +
                     b[i0 + j2 + k] +
                     b[i0 + j0 + k1]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -537,13 +557,13 @@ void solve_upper(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j2 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////
 }
 
-void solve_lower(double *b, int n_loc, int n, int n_start) {
+void solve_lower_edge(double *b, int n_loc, int n, int n_start) {
     int nm1 = n - 1;
     long int i, j, k, k1, k2;
 
@@ -568,7 +588,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             k = 0;
             b[i0 + j0 + k] = (
                 b[i0 + j0 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
@@ -576,7 +596,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j0 + k] = (
                     b[i0 + j0 + k] +
                     b[i0 + j0 + k2]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -588,7 +608,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j0 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -603,7 +623,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             b[i0 + j0 + k] = (
                 b[i0 + j0 + k] +
                 b[i0 + j2 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
@@ -613,7 +633,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                     b[i0 + j0 + k] +
                     b[i0 + j2 + k] +
                     b[i0 + j0 + k2]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -626,7 +646,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j2 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         }
 
@@ -643,7 +663,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j0 + k] +
                 b[i0 + j1 + k] +
                 b[i0 + j2 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
@@ -653,7 +673,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                     b[i0 + j1 + k] +
                     b[i0 + j2 + k] +
                     b[i0 + j0 + k2]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -667,7 +687,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j2 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -686,7 +706,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
             b[i0 + j0 + k] = (
                 b[i0 + j0 + k] +
                 b[i2 + j0 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
@@ -695,7 +715,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                     b[i0 + j0 + k] +
                     b[i2 + j0 + k] +
                     b[i0 + j0 + k2]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -708,7 +728,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i2 + j0 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -723,7 +743,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j0 + k] +
                 b[i2 + j0 + k] +
                 b[i0 + j2 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
@@ -733,7 +753,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                     b[i2 + j0 + k] +
                     b[i0 + j2 + k] +
                     b[i0 + j0 + k2]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -747,7 +767,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j2 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         }
 
@@ -765,7 +785,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i2 + j0 + k] +
                 b[i0 + j1 + k] +
                 b[i0 + j2 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
@@ -776,7 +796,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                     b[i0 + j1 + k] +
                     b[i0 + j2 + k] +
                     b[i0 + j0 + k2]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -791,7 +811,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j2 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     }
@@ -812,7 +832,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j0 + k] +
                 b[i1 + j0 + k] +
                 b[i2 + j0 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
@@ -822,7 +842,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                     b[i1 + j0 + k] +
                     b[i2 + j0 + k] +
                     b[i0 + j0 + k2]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -836,7 +856,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i2 + j0 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
 
@@ -853,7 +873,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i1 + j0 + k] +
                 b[i2 + j0 + k] +
                 b[i0 + j2 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
@@ -865,7 +885,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                     b[i2 + j0 + k] +
                     b[i0 + j2 + k] +
                     b[i0 + j0 + k2]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -880,7 +900,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j2 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         }
 
@@ -899,7 +919,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i2 + j0 + k] +
                 b[i0 + j1 + k] +
                 b[i0 + j2 + k]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
 
             for (k = 1; k < nm1; k++) {
@@ -911,7 +931,7 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                     b[i0 + j1 + k] +
                     b[i0 + j2 + k] +
                     b[i0 + j0 + k2]
-                ) / 6.0;
+                ) / DIAG_CONST;
             }
 
             /////////////////////////////////////////////
@@ -927,13 +947,29 @@ void solve_lower(double *b, int n_loc, int n, int n_start) {
                 b[i0 + j2 + k] +
                 b[i0 + j0 + k1] +
                 b[i0 + j0 + k2]
-            ) / 6.0;
+            ) / DIAG_CONST;
             /////////////////////////////////////////////
         /////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////
 }
 
-void solve_upper_branched_2(double *b, int n_loc, int n, int n_start) {
+void precond_ssor_apply_edge(double *in, double *out, int s1, int s2, int n_start) {
+    solve_lower_edge(out, s1, s2, n_start);  // z = M1^-1 . b
+    solve_diag(out, s1, s2, n_start);  // y = M2^-1 . z
+    solve_upper_edge(out, s1, s2, n_start);  // v = M3^-1 . y
+}
+
+/*
+PROPAG_ITER_CUTOFF = 5 works but make it extremely slower (44s/it vs 0.5s/it)
+PROPAG_ITER_CUTOFF = 3 works but make it extremely slower (6s/it vs 0.5s/it)
+PROPAG_ITER_CUTOFF = 2 PROPAG_VALUE_CUTOFF = 1.0e-6 is ~4x slower than the original
+*/
+int PROPAG_ITER_CUTOFF = 6;
+double PROPAG_VALUE_CUTOFF = 1.0e-12;
+long int *index_map_lower = NULL;
+long int *index_map_upper = NULL;
+
+void solve_upper_mapped(double *b, int n_loc, int n, int n_start) {
     int nm1 = n - 1;
 
     long int n2 = n * n;
@@ -949,7 +985,7 @@ void solve_upper_branched_2(double *b, int n_loc, int n, int n_start) {
     double *out = (double *)calloc(n3, sizeof(double));
 
     long int idx;
-    long int ts = (long int)(pow(6, CUTOFF) + 1.5);
+    long int ts = (long int)(pow(6, PROPAG_ITER_CUTOFF) + 1.5);
     // mpi_printf("SSOR: ts = %ld\n", ts);
     long int *todo1 = (long int *)malloc(ts * sizeof(long int));
     long int *todo2 = (long int *)malloc(ts * sizeof(long int));
@@ -962,9 +998,9 @@ void solve_upper_branched_2(double *b, int n_loc, int n, int n_start) {
             todo1[a] = index_map_upper[7*i + a];
         }
 
-        for (int a=0; a < CUTOFF; a++) {
+        for (int a=0; a < PROPAG_ITER_CUTOFF; a++) {
             app /= 6.0;
-            if (fabs(app) < ELEM_CUTOFF) {
+            if (fabs(app) < PROPAG_VALUE_CUTOFF) {
                 break;
             }
             int b = 0, c = 0, d = 0;
@@ -985,14 +1021,14 @@ void solve_upper_branched_2(double *b, int n_loc, int n, int n_start) {
         }
     }
 
-    memcpy(b, out, n3 * sizeof(double));
+    copy(out, b, n3);
 
     free(out);
     free(todo1);
     free(todo2);
 }
 
-void solve_lower_branched_2(double *b, int n_loc, int n, int n_start) {
+void solve_lower_mapped(double *b, int n_loc, int n, int n_start) {
     int nm1 = n - 1;
 
     long int n2 = n * n;
@@ -1008,7 +1044,7 @@ void solve_lower_branched_2(double *b, int n_loc, int n, int n_start) {
     double *out = (double *)calloc(n3, sizeof(double));
 
     long int idx;
-    long int ts = (long int)(pow(6, CUTOFF) + 1.5);
+    long int ts = (long int)(pow(6, PROPAG_ITER_CUTOFF) + 1.5);
     long int *todo1 = (long int *)malloc(ts * sizeof(long int));
     long int *todo2 = (long int *)malloc(ts * sizeof(long int));
     long int *ptr;
@@ -1020,9 +1056,9 @@ void solve_lower_branched_2(double *b, int n_loc, int n, int n_start) {
             todo1[a] = index_map_lower[7*i + a];
         }
 
-        for (int a=0; a < CUTOFF; a++) {
+        for (int a=0; a < PROPAG_ITER_CUTOFF; a++) {
             app /= 6.0;
-            if (fabs(app) < ELEM_CUTOFF) {
+            if (fabs(app) < PROPAG_VALUE_CUTOFF) {
                 break;
             }
             int b = 0, c = 0, d = 0;
@@ -1043,14 +1079,14 @@ void solve_lower_branched_2(double *b, int n_loc, int n, int n_start) {
         }
     }
 
-    memcpy(b, out, n3 * sizeof(double));
+    copy(out, b, n3);
 
     free(out);
     free(todo1);
     free(todo2);
 }
 
-void init_index_map_upper_2(int size1, int size2) {
+void init_index_map_upper(int size1, int size2) {
     int n = size2;
     long int n2 = n * n;
 
@@ -1114,7 +1150,7 @@ void init_index_map_upper_2(int size1, int size2) {
     }
 }
 
-void init_index_map_lower_2(int size1, int size2) {
+void init_index_map_lower(int size1, int size2) {
     int n = size2;
     long int n2 = n * n;
 
@@ -1178,29 +1214,20 @@ void init_index_map_lower_2(int size1, int size2) {
     }
 }
 
+void precond_ssor_apply_mapped(double *in, double *out, int s1, int s2, int n_start) {
+    if ( index_map_lower == NULL) {
+        init_index_map_lower(s1, s2);
+        init_index_map_upper(s1, s2);
+    }
+    solve_lower_mapped(out, s1, s2, n_start);  // z = M1^-1 . b
+    solve_diag(out, s1, s2, n_start);  // y = M2^-1 . z
+    solve_upper_mapped(out, s1, s2, n_start);  // v = M3^-1 . y
+}
+
 /*
-Apply the SSOR preconditioner by decomposing the matrix of the problem A.x = b into
-A = D + L + L^T  where D is the diagonal, L is the lower triangular part and L^T is the upper triangular part
-The preconditioner in this case is:
+Apply the SSOR preconditioner.
+The function is built to work both with separate input/output arrays or in-place.
 
-P = (D + L) . D^-1 . (D + L)^T
-P . v = r
-v = P^-1 . r
-
-M1 = (D + L)     LOWER
-M2 = D^-1        DIAG
-M3 = (D + L)^T   UPPER
-
-M1 . M2 . M3 . v = r
-
-M3 . v = y
-M2 . y = z
-
-z = solve_M1 (b) = TRIANG_SOLVE_M1 (b)
-y = solve_M2 (z) = D . Z
-v = solve_M3 (y) = TRIANG_SOLVE_M3 (y)
-
-The function is built to work both with separate input/output arrays or in-place
 @param in: the input array
 @param out: the output array (can be the same as in)
 @param s1: the size of the first dimension
@@ -1208,24 +1235,15 @@ The function is built to work both with separate input/output arrays or in-place
 @param n_start1: the starting index of the first dimension (used for MPI)
 */
 void precond_ssor_apply(double *in, double *out, int s1, int s2, int n_start) {
+    long int size = s1 * s2 * s2;
+    DIAG_CONST = 6.0 / SSOR_OMEGA;
     if ( in != out ) {
-        memcpy(out, in, s1 * s2 * s2 * sizeof(double));  // Copy the input to output
+        copy(in, out, size);
     }
-    solve_lower(out, s1, s2, n_start);  // z = M1^-1 . b
-    solve_diag(out, s1, s2, n_start);  // y = M2^-1 . z
-    solve_upper(out, s1, s2, n_start);  // v = M3^-1 . y
+
+    precond_ssor_apply_edge(out, out, s1, s2, n_start);  // z = M1^-1 . b
+    // precond_ssor_apply_mapped(out, out, s1, s2, n_start);  // y = M2^-1 . z
+
+    dscal(out, (2 - SSOR_OMEGA) / SSOR_OMEGA, size);
 }
 
-
-void precond_ssor_apply2(double *in, double *out, int s1, int s2, int n_start) {
-    if ( index_map_lower == NULL) {
-        init_index_map_lower_2(s1, s2);
-        init_index_map_upper_2(s1, s2);
-    }
-    if ( in != out ) {
-        memcpy(out, in, s1 * s2 * s2 * sizeof(double));  // Copy the input to output
-    }
-    solve_lower_branched_2(out, s1, s2, n_start);  // z = M1^-1 . b
-    solve_diag(out, s1, s2, n_start);  // y = M2^-1 . z
-    solve_upper_branched_2(out, s1, s2, n_start);  // v = M3^-1 . y
-}

@@ -31,7 +31,19 @@ EXTERN_C void dscal(double *x, double alpha, long int n) {
     cblas_dscal(n, alpha, x, 1);
 }
 
+EXTERN_C void copy(double *x, double *y, long int n) {
+    cblas_dcopy(n, x, 1, y, 1);
+}
+
 #else // __LAPACK ///////////////////////////////////////////////////////////////////////////
+
+EXTERN_C void copy(double *x, double *y, long int n) {
+    long int i;
+    #pragma omp parallel for
+    for (i = 0; i < n; i++) {
+        y[i] = x[i];
+    }
+}
 
 EXTERN_C void dscal(double *x, double alpha, long int n) {
     long int i;
