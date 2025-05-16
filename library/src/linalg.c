@@ -27,24 +27,48 @@ EXTERN_C double norm(double *u, long int n) {
     return cblas_dnrm2(n, u, 1);
 }
 
+/*
+Scale a vector by a constant x = alpha * x
+@param x: the vector to be scaled
+@param alpha: the scaling constant
+@param n: the size of the vector
+*/
 EXTERN_C void dscal(double *x, double alpha, long int n) {
     cblas_dscal(n, alpha, x, 1);
 }
 
-EXTERN_C void copy(double *x, double *y, long int n) {
-    cblas_dcopy(n, x, 1, y, 1);
+/*
+Copy a vector from in to out
+@param in: the input vector
+@param out: the output vector
+*/
+EXTERN_C void vec_copy(double *in, double *out, long int n) {
+    cblas_dcopy(n, in, 1, out, 1);
 }
 
 #else // __LAPACK ///////////////////////////////////////////////////////////////////////////
 
-EXTERN_C void copy(double *x, double *y, long int n) {
+
+
+/*
+Copy a vector from in to out
+@param in: the input vector
+@param out: the output vector
+*/
+EXTERN_C void vec_copy(double *in, double *out, long int n) {
     long int i;
     #pragma omp parallel for
     for (i = 0; i < n; i++) {
-        y[i] = x[i];
+        out[i] = in[i];
     }
 }
 
+/*
+Scale a vector by a constant x = alpha * x
+@param x: the vector to be scaled
+@param alpha: the scaling constant
+@param n: the size of the vector
+*/
 EXTERN_C void dscal(double *x, double alpha, long int n) {
     long int i;
     #pragma omp parallel for

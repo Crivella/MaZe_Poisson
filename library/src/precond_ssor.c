@@ -1024,7 +1024,7 @@ void solve_upper_mapped(double *b, int n_loc, int n, int n_start) {
         }
     }
 
-    copy(out, b, n3);
+    vec_copy(out, b, n3);
 
     free(out);
     free(todo1);
@@ -1082,7 +1082,7 @@ void solve_lower_mapped(double *b, int n_loc, int n, int n_start) {
         }
     }
 
-    copy(out, b, n3);
+    vec_copy(out, b, n3);
 
     free(out);
     free(todo1);
@@ -1241,7 +1241,7 @@ void precond_ssor_apply(double *in, double *out, int s1, int s2, int n_start) {
     long int size = s1 * s2 * s2;
     DIAG_CONST = 6.0 / SSOR_OMEGA;
     if ( in != out ) {
-        copy(in, out, size);
+        vec_copy(in, out, size);
     }
 
     precond_ssor_apply_edge(out, out, s1, s2, n_start);  // z = M1^-1 . b
