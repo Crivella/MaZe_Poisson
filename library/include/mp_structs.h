@@ -21,11 +21,12 @@
 #define INTEGRATOR_ENABLED 1
 #define INTEGRATOR_DISABLED 0
 
-#define PRECOND_TYPE_NUM 4
+#define PRECOND_TYPE_NUM 5
 #define PRECOND_TYPE_NONE 0
 #define PRECOND_TYPE_JACOBI 1
 #define PRECOND_TYPE_MG 2
 #define PRECOND_TYPE_SSOR 3
+#define PRECOND_TYPE_BLOCKJACOBI 4
 
 // Struct typedefs
 typedef struct grid grid;
@@ -83,6 +84,10 @@ void verlet_integrator_stop_thermostat(integrator *integrator);
 void precond_jacobi_apply(double *in, double *out, int s1, int s2, int n_start);
 void precond_mg_apply(double *in, double *out, int s1, int s2, int n_start);
 void precond_ssor_apply(double *in, double *out, int s1, int s2, int n_start);
+void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_start);
+
+void precond_blockjacobi_init(int n);
+void precond_blockjacobi_cleanup();
 
 // Struct definitions
 struct grid {

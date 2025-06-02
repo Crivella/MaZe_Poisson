@@ -72,10 +72,26 @@ void lcg_grid_init(grid * grid) {
     grid->init_field = lcg_grid_init_field;
     grid->update_field = lcg_grid_update_field;
     grid->update_charges = lcg_grid_update_charges;
+
+    switch (grid->precond_type) {
+        case PRECOND_TYPE_BLOCKJACOBI:
+            precond_blockjacobi_init(n);
+            break;
+        default:
+            break;
+    }
 }
 
 void lcg_grid_cleanup(grid * grid) {
     free(grid->q);
+
+    switch (grid->precond_type) {
+        case PRECOND_TYPE_BLOCKJACOBI:
+            precond_blockjacobi_cleanup();
+            break;
+        default:
+            break;
+    }
 
     mpi_grid_free(grid->y, grid->n);
     mpi_grid_free(grid->phi_p, grid->n);
@@ -112,6 +128,9 @@ int lcg_grid_update_field(grid *grid) {
             break;
         case PRECOND_TYPE_SSOR:
             precond = precond_ssor_apply;
+            break;
+        case PRECOND_TYPE_BLOCKJACOBI:
+            precond = precond_blockjacobi_apply;
             break;
         default:
             break;

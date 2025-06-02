@@ -43,6 +43,7 @@ precond_map: Dict[str, int] = {
     # 'JACOBI': 1,  # Jacobi explicit
     # 'MG': 2,  # Multigrid
     # 'SSOR': 3,  # Symmetric Successive Over-Relaxation
+    # 'BLOCKJACOBI': 4,  # Symmetric Successive Over-Relaxation
 }
 
 class SolverMD(Logger):
@@ -201,6 +202,7 @@ class SolverMD(Logger):
         # if capi.solver_initialize_md(self.mdv.preconditioning, self.mdv.rescale) != 0:
         #     self.logger.error("Error initializing MD.")
         #     exit()
+        self.logger.info("Initializing MD (first 2 steps)...")
         ffile = self.gset.restart_field_file
         if ffile is None or self.mdv.invert_time:
             # STEP 0 Verlet

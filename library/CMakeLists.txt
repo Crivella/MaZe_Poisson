@@ -66,6 +66,7 @@ add_library(maze_poisson MODULE
     src/precond_jacobi.c
     src/precond_mg.c
     src/precond_ssor.c
+    src/precond_blockjacobi.c
 
     src/solver_md.c
 )
@@ -126,6 +127,17 @@ if (LAPACK_FOUND)
         list(REMOVE_DUPLICATES _lapack_libs)
         target_link_libraries(maze_poisson PRIVATE ${_lapack_libs})
         target_include_directories(maze_poisson PRIVATE ${LAPACK_INCLUDE_DIRS})
+
+        find_library(
+            LAPACKE_LIBRARY
+            NAMES lapacke
+        )
+        if (LAPACKE_LIBRARY)
+            message(STATUS "LAPACKE library found: ${LAPACKE_LIBRARY}")
+            target_link_libraries(maze_poisson PRIVATE ${LAPACKE_LIBRARY})
+        else()
+            message(WARNING "LAPACKE library not found")
+        endif()
     endif()
 endif()
 
