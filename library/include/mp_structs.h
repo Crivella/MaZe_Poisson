@@ -86,7 +86,7 @@ void precond_mg_apply(double *in, double *out, int s1, int s2, int n_start);
 void precond_ssor_apply(double *in, double *out, int s1, int s2, int n_start);
 void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_start);
 
-void precond_blockjacobi_init(int n);
+void precond_blockjacobi_init();
 void precond_blockjacobi_cleanup();
 
 // Struct definitions

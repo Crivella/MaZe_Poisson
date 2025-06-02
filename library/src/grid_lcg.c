@@ -75,7 +75,7 @@ void lcg_grid_init(grid * grid) {
 
     switch (grid->precond_type) {
         case PRECOND_TYPE_BLOCKJACOBI:
-            precond_blockjacobi_init(n);
+            precond_blockjacobi_init();
             break;
         default:
             break;
