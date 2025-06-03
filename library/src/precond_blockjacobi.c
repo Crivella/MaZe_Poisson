@@ -7,7 +7,7 @@
 #include "mpi_base.h"
 #include "mp_structs.h"
 
-#define BLOCK_SIZE 3
+#define BLOCK_SIZE 10
 
 double *A = NULL;
 
@@ -174,6 +174,13 @@ void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_st
     long int n3 = s1 * s2 * s2;
 
     long int b3 = BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE;
+
+    int mpi_size = get_size();
+
+    if (mpi_size > 1) {
+        mpi_fprintf(stderr, "Error: Block Jacobi preconditioner is not implemented for MPI yet\n");
+        exit(1);
+    }
 
     if (n3 % b3 != 0) {
         mpi_fprintf(stderr, "Error: The size of the input vector is not a multiple of the block size (%ld)\n", b3);
