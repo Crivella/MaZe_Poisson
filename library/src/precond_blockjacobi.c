@@ -87,16 +87,15 @@ void precond_blockjacobi_init() {
             }
         }
     }
-    // vec_copy(A, tmp, (2 * B3) * (2 * B3));
 
     dgetri(A, B3);
 
     double *C = (double *)malloc((reps * B3) * (B3) * sizeof(double));
 
-    // // Compute the product of A and its inverse to verify correctness   
+    // Compute the product of A and its inverse to verify correctness   
     dgemm(tmp, A, C, reps*B3, B3, B3);
 
-    // // Check if the product is close to the identity matrix
+    // Check if the product is close to the identity matrix
     for (long int i = 0; i < reps*B3; i++) {
         for (long int j = 0; j < B3; j++) {
             double v = C[B3 * i + j];
@@ -125,6 +124,131 @@ void precond_blockjacobi_cleanup() {
     }
 }
 
+// Reorder the grid input vector to match the block structure
+void reorder_in(double *in, double *out, int s1, int n) {
+    long int n3 = s1 * n * n;
+    int b = BLOCK_SIZE;
+    long int b2 = BLOCK_SIZE * BLOCK_SIZE;
+    long int b3 = BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE;
+
+    long int n2 = n * n;
+
+    long int x,y,z;
+    long int idx_in, idx_out;
+    long int i1, j1, k1;
+
+    if (s1 % BLOCK_SIZE != 0) {
+        mpi_fprintf(stderr, "Error: The size of the input vector is not a multiple of the block size (%d)\n", BLOCK_SIZE);
+        mpi_fprintf(stderr, "Padding is not implemented yet\n");
+        exit(1);
+    }
+
+    int block_1d = s1 / BLOCK_SIZE;
+    long int b1d_2 = block_1d * block_1d;
+    long int block_num;
+
+    // int *tmp1 = (int *)calloc(n3, sizeof(int));
+    // int *tmp2 = (int *)calloc(n3, sizeof(int));
+    #pragma omp parallel for private(x, y, z, idx_in, idx_out, i1, j1, k1, block_num)
+    // Loop over the blocks in the 3D grid
+    for (int i = 0; i <  block_1d; i++) {
+        i1 = i * BLOCK_SIZE;
+        for (int j = 0; j < block_1d; j++) {
+            j1 = j * BLOCK_SIZE;
+            // printf("i = %d, j = %d\n", i, j);
+            for (int k = 0; k < block_1d; k++) {
+                k1 = k * BLOCK_SIZE;
+                block_num = i * b1d_2 + j * block_1d + k;
+                // Loop over the elements in the block
+                for (int ii = 0; ii < BLOCK_SIZE; ii++) {
+                    x = i1 + ii;
+                    for (int jj = 0; jj < BLOCK_SIZE; jj++) {
+                        y = j1 + jj;
+                        for (int kk = 0; kk < BLOCK_SIZE; kk++) {
+                            z = k1 + kk;
+                            idx_in = x * n2 + y * n + z;
+                            idx_out = block_num * b3 + ii * b2 + jj * b + kk;
+                            out[idx_out] = in[idx_in];
+                            // if (tmp2[idx_in] == 1) {
+                            //     mpi_printf("Error: reading twice from index %ld in input vector\n", idx_in);
+                            //     mpi_printf("block_1d = %d, BLOCK_SIZE = %d, s1 = %d, n = %d\n", block_1d, BLOCK_SIZE, s1, n);
+                            //     mpi_printf("i = %d, j = %d, k = %d, ii = %d, jj = %d, kk = %d\n", i, j, k, ii, jj, kk);
+                            //     mpi_printf("x = %ld, y = %ld, z = %ld\n", x, y, z);
+                            //     exit(1);
+                            // }
+                            // tmp1[idx_out] = 1;
+                            // tmp2[idx_in] = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // int cnt = 0;
+    // for (long int i = 0; i < n3; i++) {
+    //     if (tmp1[i] != 1) {
+    //         mpi_printf("Error: index %ld on idx_out was not mapped correctly\n", i);
+    //         cnt += 1;
+    //     }
+    //     if (tmp2[i] != 1) {
+    //         mpi_printf("Error: index %ld on idx_in was not mapped correctly\n", i);
+    //         cnt += 1;
+    //     }
+    //     if (cnt > 300) {
+    //         mpi_printf("Too many errors, exiting...\n");
+    //         mpi_printf("block_1d = %d, BLOCK_SIZE = %d, s1 = %d, n = %d\n", block_1d, BLOCK_SIZE, s1, n);
+    //         exit(1);
+    //     }
+    // }
+    // free(tmp1);
+    // free(tmp2);
+}
+
+// Reorder the output vector to match the original grid structure
+void reorder_out(double *in, double *out, int s1, int n) {
+    long int n3 = s1 * n * n;
+    int b = BLOCK_SIZE;
+    long int b2 = BLOCK_SIZE * BLOCK_SIZE;
+    long int b3 = BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE;
+
+    long int n2 = n * n;
+
+    long int x,y,z;
+    long int idx_in, idx_out;
+    long int i1, j1, k1;
+
+    int block_1d = s1 / BLOCK_SIZE;
+    long int b1d_2 = block_1d * block_1d;
+    long int block_num;
+
+    #pragma omp parallel for private(x, y, z, idx_in, idx_out, i1, j1, k1, block_num)
+    // Loop over the blocks in the 3D grid
+    for (int i = 0; i <  block_1d; i++) {
+        i1 = i * BLOCK_SIZE;
+        for (int j = 0; j < block_1d; j++) {
+            j1 = j * BLOCK_SIZE;
+            for (int k = 0; k < block_1d; k++) {
+                k1 = k * BLOCK_SIZE;
+                block_num = i * b1d_2 + j * block_1d + k;
+                // Loop over the elements in the block
+                for (int ii = 0; ii < BLOCK_SIZE; ii++) {
+                    x = i1 + ii;
+                    for (int jj = 0; jj < BLOCK_SIZE; jj++) {
+                        y = j1 + jj;
+                        for (int kk = 0; kk < BLOCK_SIZE; kk++) {
+                            z = k1 + kk;
+                            idx_in = x * n2 + y * n + z;
+                            idx_out = block_num * b3 + ii * b2 + jj * b + kk;
+                            out[idx_in] = in[idx_out];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_start) {
     long int n3 = s1 * s2 * s2;
 
@@ -136,6 +260,7 @@ void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_st
         exit(1);
     }
 
+
     // mpi_printf("Applying block Jacobi preconditioner with block size %d\n", BLOCK_SIZE);
     // mpi_printf("To grid vector of size %d * %d * %d = %ld\n", s1, s2, s2, n3);
     
@@ -146,13 +271,34 @@ void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_st
     // double *in_tmp = (double *)malloc(n3 * sizeof(double));
     // vec_copy(in, in_tmp, n3);
 
-    // double *tmp = (double *)malloc(n3 * sizeof(double));
+    double *tmp1 = (double *)malloc(n3 * sizeof(double));
+    double *tmp2 = (double *)malloc(n3 * sizeof(double));
+
+    // for (long int i = 0; i < 5000; i++) {
+    //     if (fabs(in[i]) > 1e-6) {
+    //         printf("%d ", i);
+    //     } 
+    // }
+    // printf("\n");
+
+    reorder_in(in, tmp1, s1, s2);
 
     // Treat the in vector as a n_blocks x BLOCK_SIZE^3 matrix
     // mpi_printf("Computing the product of the input vector with the inverse block matrix A\n");
-    dgemm(in, A, out, n_blocks, b3, b3);
+    dgemm(tmp1, A, tmp2, n_blocks, b3, b3);
 
-    // vec_copy(tmp, out, n3);
+    reorder_out(tmp2, out, s1, s2);
 
-    // free(tmp);
+    // for (long int i = 0; i < 5000; i++) {
+    //     if (fabs(out[i]) > 1e-6) {
+    //         printf("%d ", i);
+    //     } 
+    // }
+    // printf("\n");
+    // exit(0);
+
+    // vec_copy(in, out, n3);
+
+    free(tmp1);
+    free(tmp2);
 }
