@@ -84,8 +84,11 @@ class Grid:
         if md_variables.method == 'PB MaZe':
             self.eps_s = grid_setting.eps_s     # relative permittivity of the solvent
             self.I = grid_setting.I             # ionic strength
-
           
+            # electrostatic potential in the solvent
+            self.phi_s = np.zeros(self.shape, dtype=float)          # updated with MaZe
+            self.phi_s_prev = np.zeros(self.shape, dtype=float)     # for step t - 1 Verlet
+            
             # dielectric field components
             self.eps_x = self.eps_s * np.ones(self.shape, dtype=float) 
             self.eps_y = self.eps_s * np.ones(self.shape, dtype=float)

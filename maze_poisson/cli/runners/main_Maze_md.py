@@ -11,7 +11,7 @@ from ...constants import a0, t_au, density
 from ...grid import *
 from ...loggers import logger
 from ...restart import generate_restart
-from ...verlet import (OVRVO_part1, OVRVO_part2, PrecondLinearConjGradPoisson,
+from ...verlet import (OVRVO_part1, OVRVO_part2, PrecondLinearConjGradPoisson, PrecondLinearConjGradPoisson_PB, VerletPB,
                        VerletPoisson, VerletSolutePart1, VerletSolutePart2)
 
 
@@ -77,12 +77,17 @@ def main(grid_setting, output_settings, md_variables):
 
     # set charges with the weight function
     grid.SetCharges()
-
+    
+    # update dielectric and screening vectors - CHECK? INITIALIZATION?
+    print('Updating eps and k?')
+    
     # initialize the electrostatic field with CG                  
     if preconditioning == "Yes":
         grid.phi_prev, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol)
         if method == 'PB MaZe':
-            print('phi_s not implemented yet')
+            print(np.shape(grid.q))
+            grid.phi_s_prev, _ = PrecondLinearConjGradPoisson_PB(- 4 * np.pi * grid.q / h, grid, tol=tol)
+
 
     if not_elec:
         grid.particles.ComputeForceNotElec()
@@ -114,11 +119,14 @@ def main(grid_setting, output_settings, md_variables):
     # set charges with the weight function
     grid.SetCharges()
     #logger.info("Charges set with weight function")
-        
+    
+    # update dielectric and screening vectors 
+    print('Updating eps and k')
+
     if preconditioning == "Yes":
         grid.phi, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol, x0=grid.phi_prev)
         if method == 'PB MaZe':
-            print('phi_s not implemented yet')
+            grid.phi_s, _ = PrecondLinearConjGradPoisson_PB(- 4 * np.pi * grid.q / h, grid, tol=tol, x0=grid.phi_s_prev)
 
     if md_variables.integrator == 'OVRVO':
         grid.particles = OVRVO_part2(grid, thermostat = thermostat)
@@ -179,14 +187,14 @@ def main(grid_setting, output_settings, md_variables):
                 start_update = time.time()
                 print('Here we should call the update function for eps and k')
                 end_update = time.time()
-                
+
             # apply Verlet algorithm
             start_Verlet = time.time()
             grid, y, iter_conv = VerletPoisson(grid, y=y)
             if method == 'PB MaZe':
                 # y_s is the solution of the Poisson-Boltzmann equation
-                # grid, y_s, iter_conv = VerletPB(grid, y_s=y_s, tol=tol)
-                print('Here we should call the VerletPB function')
+                grid, y_s, iter_conv = VerletPB(grid, y=y_s, tol=tol)
+
             end_Verlet = time.time()
 
         if md_variables.integrator == 'OVRVO':

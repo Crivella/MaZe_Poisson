@@ -165,21 +165,21 @@ def VerletPoisson(grid, y):
 
     # compute the constraint with the provisional value of the field phi
     matrixmult = MatrixVectorProduct(grid.phi)
-    sigma_p = grid.q / h + matrixmult / (4 * np.pi) # M @ grid.phi for row-by-column product
+    sigma_p = grid.q + h * matrixmult / (4 * np.pi)  # M @ grid.phi for row-by-column product
 
     # apply LCG
     # y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol) #riduce di 1/3 il numero di iterazioni necessarie a convergere
     y_new, iter_conv = PrecondLinearConjGradPoisson(sigma_p, x0=y, tol=tol, print_iters=grid.output_settings.print_iters, output_file=grid.output_files.file_output_iters) #riduce di 1/3 il numero di iterazioni necessarie a convergere
     
     # scale the field with the constrained 'force' term
-    grid.phi -= y_new * (4 * np.pi)
+    grid.phi -= y_new * (4 * np.pi) / h
 
     if grid.debug:
         matrixmult1 = MatrixVectorProduct(y_new)
         print('LCG precision     :',np.max(np.abs(matrixmult1 - sigma_p)))
         
         matrixmult2 = MatrixVectorProduct(grid.phi)
-        sigma_p1 = grid.q / h + matrixmult2 / (4 * np.pi) # M @ grid.phi for row-by-column product
+        sigma_p1 = grid.q + h * matrixmult2 / (4 * np.pi) # M @ grid.phi for row-by-column product
     
         print('max of constraint: ', np.max(np.abs(sigma_p1)),'\n')
     
@@ -321,3 +321,95 @@ def VerletPoissonBerendsen(grid,eta):
         print('max of constraint: ', np.max(np.abs(sigma_p1)))
         print('norm of constraint: ', np.linalg.norm(sigma_p),'\n')
     return grid, eta, iter
+
+
+
+
+###### PB MaZe #######
+
+def MatrixVectorProduct_PB(v, eps_x, eps_y, eps_z, k2):
+    # Assume v, eps_x, eps_y, eps_z, k2 all have shape (N, N, N)
+    res = np.zeros_like(v)
+
+    # x-direction
+    res += eps_x * np.roll(v, -1, axis=0)
+    res += np.roll(eps_x, 1, axis=0) * np.roll(v, 1, axis=0)
+
+    # y-direction
+    res += eps_y * np.roll(v, -1, axis=1)
+    res += np.roll(eps_y, 1, axis=1) * np.roll(v, 1, axis=1)
+
+    # z-direction
+    res += eps_z * np.roll(v, -1, axis=2)
+    res += np.roll(eps_z, 1, axis=2) * np.roll(v, 1, axis=2)
+
+    # diagonal term: f(n)
+    diag = (
+        eps_x + np.roll(eps_x, 1, axis=0) +
+        eps_y + np.roll(eps_y, 1, axis=1) +
+        eps_z + np.roll(eps_z, 1, axis=2) +
+        k2
+    )
+    res -= diag * v
+
+    return res
+
+
+def PrecondLinearConjGradPoisson_PB(b, grid, x0 = None, tol=1e-10, print_iters=False, output_file=None):
+    N_tot = b.size
+    if x0 is None:
+        x0 = np.zeros_like(b)
+    P_inv = - 1 / 6
+    x = np.copy(x0)
+    r = MatrixVectorProduct_PB(x, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2) - b
+    v = P_inv * r  
+    p = -v
+    
+    r_new = np.ones_like(r)
+    iter = 0
+
+    while np.linalg.norm(r_new) > tol:
+        iter = iter + 1
+        if iter > N_tot:
+            raise ValueError('Conjugate gradient did not converge')
+        
+        # if print_iters:
+        #     output_file.write(str(iter) + ',' + str(np.max(np.abs(r_new))) + ',' + str(np.linalg.norm(np.abs(r_new))) + "\n") #+ ',' + str(end_Matrix - start_Matrix) + "\n")
+        
+        Ap = MatrixVectorProduct_PB(p, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2) # A @ d for row-by-column product
+        r_dot_v = np.sum(r * v)
+        alpha = r_dot_v / np.sum(p * Ap)
+        x = alpha * p + x
+        r_new = alpha * Ap + r
+        v_new =  P_inv * r_new
+
+        beta = np.sum(r_new * v_new) / r_dot_v
+
+        p = beta * p - v_new
+        
+        r = r_new
+        v = v_new
+
+    return x, iter
+
+
+def VerletPB(grid, y, tol):
+    tol = grid.md_variables.tol
+    h = grid.h
+
+    # compute provisional update for the field phi
+    tmp = np.copy(grid.phi)
+    grid.phi = 2 * grid.phi - grid.phi_prev
+    grid.phi_prev = tmp
+
+    # compute the constraint with the provisional value of the field phi
+    matrixmult = MatrixVectorProduct_PB(grid.phi, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2)
+    sigma_p = grid.q + h / (4 * np.pi) * matrixmult  # M @ grid.phi for row-by-column product
+
+    # apply LCG
+    y_new, iter_conv = PrecondLinearConjGradPoisson_PB(sigma_p, grid, x0=y, tol=tol, print_iters=grid.output_settings.print_iters, output_file=grid.output_files.file_output_iters) #riduce di 1/3 il numero di iterazioni necessarie a convergere
+    
+    # scale the field with the constrained 'force' term
+    grid.phi -= y_new * (4 * np.pi) / h
+    
+    return grid, y_new, iter_conv
