@@ -1,0 +1,30 @@
+# input file to run simulation with 250 ions of molten Na-Cl at 1550 K using Poisson MaZe
+# density = 1.379 g/cm³
+grid_setting:
+  N: 120                        # number of grid points in each direction
+  N_p: 250                      # number of particles
+  L: 20.64                      # box length in Angstrom  
+  cas: 'CIC'                    # charge assignment scheme
+  rescale_force: false          # rescaling of the force to have tot force = 0
+
+md_variables:
+  method: "Poisson MaZe"        # "Poisson MaZe" or "PB MaZe"
+  N_steps: 200                  # number of steps
+  T: 1550                       # Kelvin - target temperature
+  dt_fs: 0.25                   # fs - time step
+  rescale: true                 # rescaling of the initial momenta to have tot momenta = 0, always true 
+  tol: 1.e-10                   # tol solver convergence
+  init_steps: 0                 # number of steps to initialize the system, 0 if you put restart = true
+  thermostat: false             # thermostat ON/OFF 
+  elec: TRUE                    # Poisson MaZe or PB MaZe ON/OFF 
+  not_elec: TRUE                # LJ or Tosi-Fumi ON/OFF 
+
+output_settings: 
+  restart: true                 # restart the simulation using the restart file 
+  print_tot_force: false        # print sum of total forces on the particles
+  print_field: false            # print the electrostatic potential along the x axis
+  print_performance: true       # print performance of the simulation
+  print_solute: false           # print positions, velocities and electrostatic forces on the particles
+  print_energy: false           # print kinetic and not electrostatic potential energy
+  print_temperature: false      # print temperature of the system
+  generate_restart_file: false  # generate restart file at the end of the simulation
