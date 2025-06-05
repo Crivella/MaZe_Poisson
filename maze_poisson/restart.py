@@ -18,7 +18,7 @@ def generate_restart(md_variables, grid_setting, output_settings, iter = None):
     df = pd.read_csv(filename)
     m_Na = 22.99
     m_Cl = 35.453
-    radius = np.ones(N_p)
+
 
     max = np.max(df['iter'])
     if iter == None:
@@ -28,10 +28,14 @@ def generate_restart(md_variables, grid_setting, output_settings, iter = None):
 
     col_mass_bool = new_df['charge'] == 1
     col_mass = [m_Na if bool == True else m_Cl for bool in col_mass_bool]
-
     new_df.insert(loc=1, column='mass',value=col_mass)
-    print(np.shape(new_df))
-    #new_df.insert(loc=2, column='radius',value=radius)
+
+    if md_variables.method == 'PB MaZe':
+        radius_Na = 0.95
+        radius_Cl = 1.81
+        col_radius = [radius_Na if bool == True else radius_Cl for bool in col_mass_bool]
+        new_df.insert(loc=1, column='radius',value=col_radius)
+        
     new_df['x'] = new_df['x'] * a0
     new_df['y'] = new_df['y'] * a0
     new_df['z'] = new_df['z'] * a0
