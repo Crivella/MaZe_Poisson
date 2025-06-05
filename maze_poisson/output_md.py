@@ -50,7 +50,10 @@ def generate_output_files(grid, md_variables):
         # output_performance = os.path.join(path, 'performance_N' + str(N) +'_'+str(N_p)+'.csv')
         output_performance = os.path.join(path, 'performance_N' + str(N) +'.csv')
         output_files.file_output_performance = generate_output_file(output_performance)
-        output_files.file_output_performance.write("iter,time,n_iters\n")
+        if md_variables.method == 'Poisson MaZe':
+            output_files.file_output_performance.write("iter,time,n_iters\n")
+        elif md_variables.method == 'PB MaZe':
+            output_files.file_output_performance.write("iter,time,n_iters,time_update\n")
 
     if output_settings.print_iters:
         os.makedirs(path, exist_ok=True)
