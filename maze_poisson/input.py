@@ -8,10 +8,6 @@ from .constants import a0, density, kB, m_Cl, m_Na, t_au, ref_L, ref_N
 from .loggers import logger
 import argparse
 
-#N_from_batch = int(os.environ.get("N", 1))
-#N_from_batch =30
-#Np_from_batch = int(os.environ.get("NP", 1))
-
 ###################################################################################
 
 ### Output settings ###
@@ -44,8 +40,8 @@ class GridSetting:
         self._restart_file = None
         self.cas = None # B-Spline or CIC
         self.rescale_force = None
-        
-    # uncomment this block if you want to change N on your own
+        self.eps_s = None
+        self.k_b = None
 
     @property
     def N(self):
@@ -69,16 +65,10 @@ class GridSetting:
             return  # avoid overwriting if L_ang already set
         if self._L is not None:
             self.L_ang = np.round(self._L * a0, 4)  # convert from a.u. to Å for logging
-            # Print or log L and L_ang for traceability
-            print(f"L = {self._L} a.u. (L_ang = {self.L_ang} Å)")
         else:
             self.L_ang = np.round((((self._N_p * (m_Cl + m_Na)) / (2 * density)) ** (1 / 3)) * 1.e9, 4)  # in Å
             self._L = self.L_ang / a0  # in a.u.
-            print(f"L = {self._L} a.u. (L_ang = {self.L_ang} Å)")
-        #self.N = int(round((self.L_ang / ref_L )* ref_N))  # comment this line
-        #self.N = N_from_batch
-        #self._N_tot = int(self.N ** 3)                     # and this line when u want to change N on your own
-    
+
     @property
     def N_tot(self):
         return self._N_tot
@@ -107,12 +97,8 @@ class GridSetting:
 
     @property
     def restart_file(self):
-        #if self.N!=100:
-           #raise NotImplementedError("Only restart file for N_100 is available")
         if self._restart_file is None:
             self._restart_file = 'restart_files/restart_N'+str(self.N)+'_step9999.csv'
-            #self._restart_file = 'restart_files/density_'+str(np.round(density, 3))+'/restart_N'+str(self.N)+'_N_p_'+str(self.N_p)+'_iter1.csv'
-            #self._restart_file = 'restart_files/density_'+str(np.round(density, 3))+'/restart_N'+str(self.N)+'_N_p_'+str(self.N_p)+'_iter1.csv'
         return self._restart_file
 
 ###################################################################################
@@ -136,7 +122,12 @@ class MDVariables:
         self.potential = 'TF' # Tosi Fumi (TF) or Leonard Jones (LJ)
         self.integrator = 'OVRVO'
         self.gamma = 1e-3 # OVRVO parameter
-    
+        self.method = None
+        self.non_polar = False
+        self.gamma_np = 0.0
+        self.beta_np = 0.0
+        self.probe_radius = 1.4
+
     @property
     def T(self):
         return self._T
@@ -187,6 +178,9 @@ def initialize_from_yaml(filename):
     with filename.open() as file:
         data = yaml.load(file, Loader=yaml.FullLoader)
 
+    method = data.get("md_variables", {}).get("method", "Poisson MaZe")
+    md_variables.method = method
+
     missing = []
     for key in ['output_settings', 'grid_setting', 'md_variables']:
         ptr = data.get(key, {})
@@ -194,10 +188,18 @@ def initialize_from_yaml(filename):
         missing += [f'{key}.{r}' for r in req if r not in ptr]
         items = list(data[key].items())
         if key == 'grid_setting':
-            # Ensure L is set before N_p
             items.sort(key=lambda item: 0 if item[0] == 'L' else 1)
         for k, v in items:
             setattr(eval(key), k, v)
+
+    if method == "PB MaZe":
+        grid_setting.eps_s = data["grid_setting"].get("eps_s", 80)
+        grid_setting.k_b = data["grid_setting"].get("k_b", None)
+
+        md_variables.non_polar = data["md_variables"].get("non_polar", False)
+        md_variables.gamma_np = data["md_variables"].get("gamma_np", 0.0)
+        md_variables.beta_np = data["md_variables"].get("beta_np", 0.0)
+        md_variables.probe_radius = data["md_variables"].get("probe_radius", 1.4)
 
     if missing:
         raise ValueError(f'Missing required inputs: {", ".join(missing)}')

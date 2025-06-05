@@ -29,6 +29,7 @@ def main(grid_setting, output_settings, md_variables):
     N_p = grid_setting.N_p
     h_ang = L_ang/N
 
+    method = md_variables.method
     T = md_variables.T
     not_elec = md_variables.not_elec
     N_steps = md_variables.N_steps
@@ -51,6 +52,7 @@ def main(grid_setting, output_settings, md_variables):
 
     # log all the relevant info 
     logger.info(f'Simulation with N_p = {N_p}, N = {N} with N_steps = {N_steps} and tol = {md_variables.tol}')
+    logger.info(f'Method: {method}')
     logger.info(f'Initialization is done with CG and preconditioning: {preconditioning}')
     logger.info(f'Parameters: h = {h_ang} A \ndt = {dt_fs} fs \nstride = {stride} \nL = {L_ang} A \ngamma = {md_variables.gamma}')
     logger.info(f'Charge assignment scheme: {grid_setting.cas}\n')
