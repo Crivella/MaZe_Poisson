@@ -10,7 +10,7 @@ from .profiling import profile
 
 
 class Particles:
-    def __init__(self, grid, md_variables, charges, masses, positions):
+    def __init__(self, grid, md_variables, charges, masses, positions, radii=None):
         self.grid = grid
         self.N_p = grid.N_p
         
@@ -22,7 +22,10 @@ class Particles:
         self.forces = np.zeros((self.N_p, 3), dtype=float) # Electrostatic forces
         self.forces_notelec = np.zeros((self.N_p, 3), dtype=float) # Non-electrostatic forces
         self.potential_info = md_variables.potential
-
+        if md_variables.method == 'PB MaZe':
+            self.radii = np.array(radii, dtype=float) 
+            
+            
         # Additional attributes based on grid potential
         L = grid.L
         if self.potential_info == 'TF':

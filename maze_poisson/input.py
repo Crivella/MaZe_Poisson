@@ -41,7 +41,7 @@ class GridSetting:
         self.cas = None # B-Spline or CIC
         self.rescale_force = None
         self.eps_s = None
-        self.k_b = None
+        self.I = None
 
     @property
     def N(self):
@@ -194,7 +194,7 @@ def initialize_from_yaml(filename):
 
     if method == "PB MaZe":
         grid_setting.eps_s = data["grid_setting"].get("eps_s", 80)
-        grid_setting.k_b = data["grid_setting"].get("k_b", None)
+        grid_setting.k_b = data["grid_setting"].get("I", None)
 
         md_variables.non_polar = data["md_variables"].get("non_polar", False)
         md_variables.gamma_np = data["md_variables"].get("gamma_np", 0.0)

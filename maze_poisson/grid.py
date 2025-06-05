@@ -5,6 +5,7 @@ from .constants import a0, conv_mass, kB
 from .loggers import logger
 from .output_md import generate_output_files
 from .particles import Particles, g, cubic_bspline, quadratic_bspline
+from scipy.constants import epsilon_0, k as k_B, N_A, elementary_charge as e, physical_constants
 
 
 ### grid class to represent the grid and the fields operating on it ###
@@ -43,37 +44,58 @@ class Grid:
         if output_settings.restart == False: # if False then it starts from a good initial config (BCC lattice) - i.e from an input file.
             df = pd.read_csv(grid_setting.input_file) # from file
             print('START new simulation from file:' + grid_setting.input_file)
+        else:
+            df = pd.read_csv(grid_setting.restart_file)
+            print('RESTART from file:' + grid_setting.restart_file)
 
+        if md_variables.method == 'Poisson MaZe':
             self.particles = Particles(
                     self,
                     md_variables,
                     df['charge'],
                     df['mass'] * conv_mass, # mass given in amu and converted in au
-                    np.array([df['x'], df['y'], df['z']]).T / a0
+                    np.array([df['x'], df['y'], df['z']]).T / a0 # positions given in Angstrom and converted in au
                     )
-            self.particles.vel = np.random.normal(loc = 0.0, scale =  np.sqrt(self.kBT / self.particles.masses[:, np.newaxis]), size=(self.N_p, 3))
-            
-        else:
-            df = pd.read_csv(grid_setting.restart_file)
-            print('RESTART from file:' + grid_setting.restart_file)
-
+        elif md_variables.method == 'PB MaZe':
             self.particles = Particles(
-                self,
-                md_variables,
-                df['charge'],
-                df['mass'] * conv_mass, # mass given in amu and converted in au
-                np.array([df['x'], df['y'], df['z']]).T / a0
-                )
-            self.particles.vel = np.array([df['vx'], df['vy'], df['vz']]).T
+                    self,
+                    md_variables,
+                    df['charge'],
+                    df['mass'] * conv_mass,
+                    np.array([df['x'], df['y'], df['z']]).T / a0, # positions given in Angstrom and converted in au
+                    df['radius'] / a0 # radii given in Angstrom and converted in au
+                    )
+            
+            if output_settings.restart == False:
+                self.particles.vel = np.random.normal(loc = 0.0, scale =  np.sqrt(self.kBT / self.particles.masses[:, np.newaxis]), size=(self.N_p, 3))
+            else:
+                self.particles.vel = np.array([df['vx'], df['vy'], df['vz']]).T
+
+        self.linked_cell = None
+        self.energy = 0
+        self.temperature = md_variables.T
+        self.potential_notelec = 0
 
         self.shape = (self.N,)*3
         self.q = np.zeros(self.shape, dtype=float)          # charge vector - q for every grid point
         self.phi = np.zeros(self.shape, dtype=float)          # electrostatic field updated with MaZe
         self.phi_prev = np.zeros(self.shape, dtype=float)     # electrostatic field for step t - 1 Verlet
-        self.linked_cell = None
-        self.energy = 0
-        self.temperature = md_variables.T
-        self.potential_notelec = 0
+        
+        if md_variables.method == 'PB MaZe':
+            self.eps_s = grid_setting.eps_s     # relative permittivity of the solvent
+            self.I = grid_setting.I             # ionic strength
+
+          
+            # dielectric field components
+            self.eps_x = self.eps_s * np.ones(self.shape, dtype=float) 
+            self.eps_y = self.eps_s * np.ones(self.shape, dtype=float)
+            self.eps_z = self.eps_s * np.ones(self.shape, dtype=float)
+
+            # screening factor
+            meter_to_bohr = physical_constants["Bohr radius"][0]  # 1 bohr in meters
+            self.kbar2 = (8 * np.pi * N_A * e**2 * self.I * 1e3) / (self.eps_s * epsilon_0 * k_B * self.md_variables.T) * (meter_to_bohr**2)
+            self.k2 = self.kbar2 * np.ones(self.shape, dtype=float) 
+
         
     
     def RescaleVelocities(self):
@@ -252,3 +274,7 @@ class Grid:
         
         if print_temperature:
             self.output_files.file_output_temperature.write(str(iter) + ',' +  str(self.temperature) + '\n')
+
+    def SetDielectricAndScreening(self):
+        for n in range(self.N_tot):
+            return 1
