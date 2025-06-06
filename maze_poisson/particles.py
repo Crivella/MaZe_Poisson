@@ -24,6 +24,7 @@ class Particles:
         self.potential_info = md_variables.potential
         if md_variables.method == 'PB MaZe':
             self.radii = np.array(radii, dtype=float) 
+            # self.radii2 = self.radii ** 2  # Shape: (N_p,)
             
             
         # Additional attributes based on grid potential

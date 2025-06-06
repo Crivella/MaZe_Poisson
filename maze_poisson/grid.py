@@ -99,6 +99,10 @@ class Grid:
             self.kbar2 = (8 * np.pi * N_A * e**2 * self.I * 1e3) / (self.eps_s * epsilon_0 * k_B * self.md_variables.T) * (meter_to_bohr**2)
             self.k2 = self.kbar2 * np.ones(self.shape, dtype=float) 
 
+            # solvation radius
+            self.probe_radius = md_variables.probe_radius / a0  # convert from Angstrom to atomic units
+            self.solvation_radii2 = (self.particles.radii + self.probe_radius)**2  # squared radii for solvation
+
         
     
     def RescaleVelocities(self):
@@ -278,6 +282,45 @@ class Grid:
         if print_temperature:
             self.output_files.file_output_temperature.write(str(iter) + ',' +  str(self.temperature) + '\n')
 
-    def SetDielectricAndScreening(self):
-        for n in range(self.N_tot):
-            return 1
+    def ComputeMask(self, center_x, center_y, center_z):
+                X, Y, Z = np.meshgrid(center_x, center_y, center_z, indexing='ij')   # (N,N,N)
+                coords = np.stack([X, Y, Z], axis=0)[None]                            # shape (1, 3, N, N, N)
+                pos_exp = self.particles.pos[:, :, None, None, None]                                # shape (Np, 3, 1, 1, 1)
+
+                delta = coords - pos_exp                                             # shape (Np, 3, N, N, N)
+                delta -= self.L * np.round(delta / self.L)                                     # apply PBC
+                r2 = np.sum(delta**2, axis=1)                                        # (Np, N, N, N)
+                return np.any(r2 <= self.solvation_radii2[:, None, None, None], axis=0)            # (N, N, N)
+
+    def UpdateEpsAndK2(self):
+        N = self.N
+        h = self.h
+       
+        eps_s = self.eps_s
+        kbar2 = self.kbar2
+
+        # Coordinates of voxel centers
+        centers = (np.arange(N) + 0.5) * h
+
+        # k2 update
+        mask_k2 = self.ComputeMask(centers, centers, centers)
+        self.k2[...] = np.where(mask_k2, kbar2, 0.0)
+
+        # eps_x at x + h/2
+        x_face = np.arange(N) * h + h/2
+        mask_x = self.ComputeMask(x_face, centers, centers)
+        self.eps_x[...] = np.where(mask_x, 1.0, eps_s)
+
+        # eps_y at y + h/2
+        y_face = np.arange(N) * h + h/2
+        mask_y = self.ComputeMask(centers, y_face, centers)
+        self.eps_y[...] = np.where(mask_y, 1.0, eps_s)
+
+        # eps_z at z + h/2
+        z_face = np.arange(N) * h + h/2
+        mask_z = self.ComputeMask(centers, centers, z_face)
+        self.eps_z[...] = np.where(mask_z, 1.0, eps_s)
+        
+
+
+

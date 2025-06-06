@@ -79,7 +79,7 @@ def main(grid_setting, output_settings, md_variables):
     grid.SetCharges()
     
     # update dielectric and screening vectors - CHECK? INITIALIZATION?
-    print('Updating eps and k?')
+    grid.UpdateEpsAndK2()
     
     # initialize the electrostatic field with CG                  
     if preconditioning == "Yes":
@@ -121,7 +121,7 @@ def main(grid_setting, output_settings, md_variables):
     #logger.info("Charges set with weight function")
     
     # update dielectric and screening vectors 
-    print('Updating eps and k')
+    grid.UpdateEpsAndK2()
 
     if preconditioning == "Yes":
         grid.phi, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol, x0=grid.phi_prev)
@@ -185,7 +185,7 @@ def main(grid_setting, output_settings, md_variables):
             
             if method == 'PB MaZe':
                 start_update = time.time()
-                print('Here we should call the update function for eps and k')
+                grid.UpdateEpsAndK2()
                 end_update = time.time()
 
             # apply Verlet algorithm
