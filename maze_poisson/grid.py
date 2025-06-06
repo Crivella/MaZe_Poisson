@@ -24,6 +24,7 @@ class Grid:
         self.dt = md_variables.dt
         self.elec = md_variables.elec
         self.not_elec = md_variables.not_elec
+        self.method = md_variables.method
         #self.kB = kB
         self.kBT = md_variables.kBT
 
@@ -48,7 +49,7 @@ class Grid:
             df = pd.read_csv(grid_setting.restart_file)
             print('RESTART from file:' + grid_setting.restart_file)
 
-        if md_variables.method == 'Poisson MaZe':
+        if self.method == 'Poisson MaZe':
             self.particles = Particles(
                     self,
                     md_variables,
@@ -56,7 +57,7 @@ class Grid:
                     df['mass'] * conv_mass, # mass given in amu and converted in au
                     np.array([df['x'], df['y'], df['z']]).T / a0 # positions given in Angstrom and converted in au
                     )
-        elif md_variables.method == 'PB MaZe':
+        elif self.method == 'PB MaZe':
             self.particles = Particles(
                     self,
                     md_variables,
@@ -81,7 +82,7 @@ class Grid:
         self.phi = np.zeros(self.shape, dtype=float)          # electrostatic field updated with MaZe
         self.phi_prev = np.zeros(self.shape, dtype=float)     # electrostatic field for step t - 1 Verlet
         
-        if md_variables.method == 'PB MaZe':
+        if self.method == 'PB MaZe':
             self.eps_s = grid_setting.eps_s     # relative permittivity of the solvent
             self.I = grid_setting.I             # ionic strength
           

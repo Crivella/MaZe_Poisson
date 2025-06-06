@@ -85,7 +85,6 @@ def main(grid_setting, output_settings, md_variables):
     if preconditioning == "Yes":
         grid.phi_prev, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol)
         if method == 'PB MaZe':
-            print(np.shape(grid.q))
             grid.phi_s_prev, _ = PrecondLinearConjGradPoisson_PB(- 4 * np.pi * grid.q / h, grid, tol=tol)
 
 
@@ -93,7 +92,10 @@ def main(grid_setting, output_settings, md_variables):
         grid.particles.ComputeForceNotElec()
 
     if elec:
-        grid.particles.ComputeForce_FD(prev=True) 
+        if method == 'Poisson MaZe':
+            grid.particles.ComputeForce_FD(prev=True) 
+        elif method == 'PB MaZe':
+            grid.particles.ComputeForce_PB(prev=True)
     else:
         logger.error("There is an error here")
         raise ValueError("There is an error here")

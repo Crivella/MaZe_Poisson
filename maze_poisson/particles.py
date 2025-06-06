@@ -283,6 +283,48 @@ class Particles:
             np.sum(phi_values * g_x * g_y * g_prime_z)
         ])
 
+    def ComputeForce_PB(self, prev):
+        h = self.grid.h
+
+        # Choose the appropriate potential
+        phi_v = self.grid.phi_prev if prev else self.grid.phi
+        phi_s = self.grid.phi_s_prev if prev else self.grid.phi_s
+       
+        #### REACTION FIELD FORCE COMPUTATION ####
+
+        delta_phi = phi_s - phi_v  # Shape: (N, N, N)
+        
+        # Precompute electric field components (central difference approximation)
+        E_x = (np.roll(delta_phi, -1, axis=0) - np.roll(delta_phi, 1, axis=0)) / (2 * h)
+        E_y = (np.roll(delta_phi, -1, axis=1) - np.roll(delta_phi, 1, axis=1)) / (2 * h)
+        E_z = (np.roll(delta_phi, -1, axis=2) - np.roll(delta_phi, 1, axis=2)) / (2 * h)
+
+        # Electric field at neighbor points for all particles (Shape: (n_particles, 8, 3))
+        neighbors = self.neighbors  # Shape: (n_particles, 8, 3)
+        q_neighbors = self.grid.q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]  # Shape: (n_particles, 8)
+
+        E_neighbors = np.stack([
+            E_x[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
+            E_y[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
+            E_z[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
+        ], axis=-1)  # Shape: (n_particles, 8, 3)
+
+        # Compute the forces (sum contributions from 8 neighbors)
+        forces_RF = -np.sum(q_neighbors[:, :, np.newaxis] * E_neighbors, axis=1)  # Shape: (n_particles, 3)
+        
+        #### DIELECTRIC BOUNDARY FORCE COMPUTATION ####
+        forces_DB = 0
+
+        #### IONIC BOUNDARY FORCE COMPUTATION ####
+        forces_IB = 0
+        
+        self.forces = forces_RF + forces_DB + forces_IB
+
+        # Subtract mean force to remove net self-force
+        # if self.grid.grid_setting.rescale_force:
+        #     net_force = np.sum(self.forces, axis=0)
+        #     if np.any(net_force):
+        #         self.forces -= net_force / self.forces.shape[0]
 
   
 # distance with periodic boundary conditions

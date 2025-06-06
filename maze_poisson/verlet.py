@@ -41,7 +41,10 @@ def VerletSolutePart2(grid, prev=False):
         particles.ComputeForceNotElec()
 
     if elec:
-        particles.ComputeForce_FD(prev=prev)
+        if grid.method == 'Poisson MaZe':
+            particles.ComputeForce_FD(prev=prev) 
+        elif grid.method == 'PB MaZe':
+            particles.ComputeForce_PB(prev=prev)
 
     particles.vel = particles.vel + 0.5 * dt * (particles.forces + particles.forces_notelec) / particles.masses[:, np.newaxis]
     
