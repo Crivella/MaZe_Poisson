@@ -401,18 +401,18 @@ def VerletPB(grid, y, tol):
     h = grid.h
 
     # compute provisional update for the field phi
-    tmp = np.copy(grid.phi)
-    grid.phi = 2 * grid.phi - grid.phi_prev
-    grid.phi_prev = tmp
+    tmp = np.copy(grid.phi_s)
+    grid.phi_s = 2 * grid.phi_s - grid.phi_s_prev
+    grid.phi_s_prev = tmp
 
     # compute the constraint with the provisional value of the field phi
-    matrixmult = MatrixVectorProduct_PB(grid.phi, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2)
+    matrixmult = MatrixVectorProduct_PB(grid.phi_s, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2)
     sigma_p = grid.q + h / (4 * np.pi) * matrixmult  # M @ grid.phi for row-by-column product
 
     # apply LCG
     y_new, iter_conv = PrecondLinearConjGradPoisson_PB(sigma_p, grid, x0=y, tol=tol, print_iters=grid.output_settings.print_iters, output_file=grid.output_files.file_output_iters) #riduce di 1/3 il numero di iterazioni necessarie a convergere
     
     # scale the field with the constrained 'force' term
-    grid.phi -= y_new * (4 * np.pi) / h
+    grid.phi_s -= y_new * (4 * np.pi) / h
     
     return grid, y_new, iter_conv

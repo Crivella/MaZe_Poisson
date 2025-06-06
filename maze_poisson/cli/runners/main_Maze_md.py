@@ -87,7 +87,6 @@ def main(grid_setting, output_settings, md_variables):
         if method == 'PB MaZe':
             grid.phi_s_prev, _ = PrecondLinearConjGradPoisson_PB(- 4 * np.pi * grid.q / h, grid, tol=tol)
 
-
     if not_elec:
         grid.particles.ComputeForceNotElec()
 
@@ -185,19 +184,19 @@ def main(grid_setting, output_settings, md_variables):
             # set charges with the weight function
             grid.SetCharges()
             
+            # apply Verlet algorithm
+            start_Verlet = time.time()
+            grid, y, iter_conv = VerletPoisson(grid, y=y)
+            end_Verlet = time.time()
+
             if method == 'PB MaZe':
                 start_update = time.time()
                 grid.UpdateEpsAndK2()
                 end_update = time.time()
-
-            # apply Verlet algorithm
-            start_Verlet = time.time()
-            grid, y, iter_conv = VerletPoisson(grid, y=y)
-            if method == 'PB MaZe':
-                # y_s is the solution of the Poisson-Boltzmann equation
-                grid, y_s, iter_conv = VerletPB(grid, y=y_s, tol=tol)
-
-            end_Verlet = time.time()
+                
+                start_VerletPB = time.time()
+                grid, y_s, iter_conv_PB = VerletPB(grid, y=y_s, tol=tol)
+                end_VerletPB = time.time()
 
         if md_variables.integrator == 'OVRVO':
             grid.particles = OVRVO_part2(grid, thermostat = thermostat)
@@ -241,7 +240,7 @@ def main(grid_setting, output_settings, md_variables):
                 if method == 'Poisson MaZe':
                     ofiles.file_output_performance.write(str(i - init_steps) + ',' + str(end_Verlet - start_Verlet) + ',' + str(iter_conv) + "\n") #+ ',' + str(end_Matrix - start_Matrix) + "\n"
                 elif method == 'PB MaZe':
-                    ofiles.file_output_performance.write(str(i - init_steps) + ',' + str(end_Verlet - start_Verlet) + ',' + str(iter_conv) + ',' + str(end_update - start_update) + "\n")
+                    ofiles.file_output_performance.write(str(i - init_steps) + ',' + str(end_Verlet - start_Verlet) + ',' + str(iter_conv) + ',' + str(end_VerletPB - start_VerletPB) + ',' + str(iter_conv_PB) + ',' + str(end_update - start_update) + "\n")
             if output_settings.print_field and elec:
                 field_x_MaZe = np.array([grid.phi[l, j, k] for l in range(N)])
                 for n in range(N):

@@ -53,7 +53,7 @@ def generate_output_files(grid, md_variables):
         if md_variables.method == 'Poisson MaZe':
             output_files.file_output_performance.write("iter,time,n_iters\n")
         elif md_variables.method == 'PB MaZe':
-            output_files.file_output_performance.write("iter,time,n_iters,time_update\n")
+            output_files.file_output_performance.write("iter,time,n_iters,timePB,n_itersPB,time_updatePB\n")
 
     if output_settings.print_iters:
         os.makedirs(path, exist_ok=True)
