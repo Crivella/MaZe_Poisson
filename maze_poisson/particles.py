@@ -285,39 +285,63 @@ class Particles:
 
     def ComputeForce_PB(self, prev):
         h = self.grid.h
-
-        # Choose the appropriate potential
         phi_v = self.grid.phi_prev if prev else self.grid.phi
         phi_s = self.grid.phi_s_prev if prev else self.grid.phi_s
-       
-        #### REACTION FIELD FORCE COMPUTATION ####
 
-        delta_phi = phi_s - phi_v  # Shape: (N, N, N)
-        
-        # Precompute electric field components (central difference approximation)
+        #### REACTION FIELD FORCE ####
+        delta_phi = phi_s - phi_v
+
         E_x = (np.roll(delta_phi, -1, axis=0) - np.roll(delta_phi, 1, axis=0)) / (2 * h)
         E_y = (np.roll(delta_phi, -1, axis=1) - np.roll(delta_phi, 1, axis=1)) / (2 * h)
         E_z = (np.roll(delta_phi, -1, axis=2) - np.roll(delta_phi, 1, axis=2)) / (2 * h)
 
-        # Electric field at neighbor points for all particles (Shape: (n_particles, 8, 3))
-        neighbors = self.neighbors  # Shape: (n_particles, 8, 3)
-        q_neighbors = self.grid.q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]  # Shape: (n_particles, 8)
+        neighbors = self.neighbors  # shape: (n_particles, 8, 3)
+        q_neighbors = self.grid.q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]  # (n_particles, 8)
 
         E_neighbors = np.stack([
             E_x[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
             E_y[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
             E_z[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
-        ], axis=-1)  # Shape: (n_particles, 8, 3)
+        ], axis=-1)  # shape: (n_particles, 8, 3)
 
-        # Compute the forces (sum contributions from 8 neighbors)
-        forces_RF = -np.sum(q_neighbors[:, :, np.newaxis] * E_neighbors, axis=1)  # Shape: (n_particles, 3)
-        
-        #### DIELECTRIC BOUNDARY FORCE COMPUTATION ####
-        forces_DB = 0
+        forces_RF = -np.sum(q_neighbors[:, :, np.newaxis] * E_neighbors, axis=1)  # (n_particles, 3)
 
-        #### IONIC BOUNDARY FORCE COMPUTATION ####
-        forces_IB = 0
-        
+        #### DIELECTRIC BOUNDARY FORCE (DB) ####
+        forces_DB = np.zeros_like(forces_RF)
+
+        grad_phi = {
+            'x': np.roll(phi_s, -1, axis=0) - phi_s,
+            'y': np.roll(phi_s, -1, axis=1) - phi_s,
+            'z': np.roll(phi_s, -1, axis=2) - phi_s
+        }
+
+        for d in ['x', 'y', 'z']:
+            H     = self.grid.H[d]
+            Hp    = self.grid.H_prime[d]
+            mask  = self.grid.H_mask[d]
+            eps   = getattr(self.grid, f'eps_{d}')[mask]        # (M,)
+            dphi  = grad_phi[d][mask]                           # (M,)
+            Hval  = H[mask]
+            Hpval = Hp[mask]
+            coeff = (eps - 1.0) * Hpval / (Hval + 1e-12)         # (M,)
+            r_hat = self.grid.r_hat[d][:, :, mask]              # (Np, 3, M)
+
+            forces_DB += np.sum((coeff * dphi)[None, None, :] * r_hat, axis=2) * h / (8 * np.pi)
+
+        #### IONIC BOUNDARY FORCE (IB) ####
+        H     = self.grid.H['center']
+        Hp    = self.grid.H_prime['center']
+        mask  = self.grid.H_mask['center']
+        k2    = self.grid.k2[mask]             # (M,)
+        phi   = phi_s[mask]                    # (M,)
+        Hval  = H[mask]
+        Hpval = Hp[mask]
+        d_k2  = k2 * Hpval / (Hval + 1e-12)    # (M,)
+        r_hat = self.grid.r_hat['center'][:, :, mask]  # (Np, 3, M)
+
+        forces_IB = np.sum((2 * d_k2 * phi)[None, None, :] * r_hat, axis=2) * h**3 / (8 * np.pi)
+
+        #### TOTAL FORCE ####
         self.forces = forces_RF + forces_DB + forces_IB
 
         # Subtract mean force to remove net self-force

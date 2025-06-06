@@ -102,8 +102,15 @@ class Grid:
 
             # solvation radius
             self.probe_radius = md_variables.probe_radius / a0  # convert from Angstrom to atomic units
-            self.solvation_radii2 = (self.particles.radii + self.probe_radius)**2  # squared radii for solvation
+            self.solvation_radii = self.particles.radii + self.probe_radius # radii for solvation
+            self.solvation_radii2 = self.solvation_radii**2  # squared radii for solvation
 
+            # transition region
+            self.w = grid_setting.w  # smoothing width for the solvation radius
+            self.H = {}
+            self.H_prime = {}
+            self.H_mask = {}
+            self.r_hat = {}
         
     
     def RescaleVelocities(self):
@@ -275,7 +282,6 @@ class Grid:
         if print_energy:
             self.output_files.file_output_energy.write(str(iter) + ',' +  str(kinetic) + ',' + str(self.potential_notelec) + '\n')
 
-
     def Temperature(self, iter, print_temperature):
         mi_vi2 = self.particles.masses * np.sum(self.particles.vel**2, axis=1)
         self.temperature = np.sum(mi_vi2) / (3 * self.N_p * kB)
@@ -284,14 +290,14 @@ class Grid:
             self.output_files.file_output_temperature.write(str(iter) + ',' +  str(self.temperature) + '\n')
 
     def ComputeMask(self, center_x, center_y, center_z):
-                X, Y, Z = np.meshgrid(center_x, center_y, center_z, indexing='ij')   # (N,N,N)
-                coords = np.stack([X, Y, Z], axis=0)[None]                            # shape (1, 3, N, N, N)
-                pos_exp = self.particles.pos[:, :, None, None, None]                                # shape (Np, 3, 1, 1, 1)
+        X, Y, Z = np.meshgrid(center_x, center_y, center_z, indexing='ij')   # (N,N,N)
+        coords = np.stack([X, Y, Z], axis=0)[None]                            # shape (1, 3, N, N, N)
+        pos_exp = self.particles.pos[:, :, None, None, None]                                # shape (Np, 3, 1, 1, 1)
 
-                delta = coords - pos_exp                                             # shape (Np, 3, N, N, N)
-                delta -= self.L * np.round(delta / self.L)                                     # apply PBC
-                r2 = np.sum(delta**2, axis=1)                                        # (Np, N, N, N)
-                return np.any(r2 <= self.solvation_radii2[:, None, None, None], axis=0)            # (N, N, N)
+        delta = coords - pos_exp                                             # shape (Np, 3, N, N, N)
+        delta -= self.L * np.round(delta / self.L)                                     # apply PBC
+        r2 = np.sum(delta**2, axis=1)                                        # (Np, N, N, N)
+        return np.any(r2 <= self.solvation_radii2[:, None, None, None], axis=0)            # (N, N, N)
 
     def UpdateEpsAndK2(self):
         N = self.N
@@ -321,7 +327,137 @@ class Grid:
         z_face = np.arange(N) * h + h/2
         mask_z = self.ComputeMask(centers, centers, z_face)
         self.eps_z[...] = np.where(mask_z, 1.0, eps_s)
-        
+    
+    def ComputeH(self):
+        N, h = self.N, self.h
+        L = self.L
+        w = self.w
+
+        pos = self.particles.pos        # (Np, 3)
+        radius = self.solvation_radii  # (Np,)
+
+        def make_H_and_rhat(coord_x, coord_y, coord_z):
+            X, Y, Z = np.meshgrid(coord_x, coord_y, coord_z, indexing='ij')
+            coords = np.stack([X, Y, Z], axis=0)[None]                      # (1, 3, N, N, N)
+            rvec = coords - pos[:, :, None, None, None]                    # (Np, 3, N, N, N)
+            rvec -= L * np.round(rvec / L)                                 # Apply PBC
+            r = np.sqrt(np.sum(rvec**2, axis=1)) + 1e-12                   # (Np, N, N, N)
+            r_hat = -rvec / r[:, None, :, :, :]                            # (Np, 3, N, N, N)
+
+            x = r - radius[:, None, None, None] + w
+
+            H = np.zeros_like(r)
+            H_prime = np.zeros_like(r)
+
+            inside = (r > (radius - w)[:, None, None, None]) & (r < (radius + w)[:, None, None, None])
+            outside = r >= (radius + w)[:, None, None, None]
+
+            H[inside] = (1 / (4 * w**3)) * x[inside]**3 - (3 / (4 * w**2)) * x[inside]**2
+            H[outside] = 1.0
+
+            H_prime[inside] = (-3 / (4 * w**3)) * x[inside]**2 + (3 / (2 * w**2)) * x[inside]
+
+            H_total = np.clip(np.sum(H, axis=0), 0.0, 1.0)
+            Hp_total = np.sum(H_prime, axis=0)
+            r_hat_total = r_hat  # shape (Np, 3, N, N, N)
+
+            return H_total, Hp_total, r_hat_total
+
+        coords = (np.arange(N) + 0.5) * h
+        faces = np.arange(N) * h + h/2
+
+        self.H = {}
+        self.H_prime = {}
+        self.H_mask = {}
+        self.r_hat = {}
+
+        for axis, c in zip(['x', 'y', 'z'], [(faces, coords, coords), (coords, faces, coords), (coords, coords, faces)]):
+            H, Hp, r_hat = make_H_and_rhat(*c)
+            self.H[axis] = H
+            self.H_prime[axis] = Hp
+            self.H_mask[axis] = (H > 0) & (H < 1)
+            self.r_hat[axis] = r_hat
+
+        Hc, Hpc, r_hatc = make_H_and_rhat(coords, coords, coords)
+        self.H['center'] = Hc
+        self.H_prime['center'] = Hpc
+        self.H_mask['center'] = (Hc > 0) & (Hc < 1)
+        self.r_hat['center'] = r_hatc
+
+    def UpdateEpsAndK2_transition(self):
+        self.ComputeH()
+
+        eps_s = self.eps_s
+        kbar2 = self.kbar2
+
+        self.eps_x[...] = eps_s + (1.0 - eps_s) * self.H['x']
+        self.eps_y[...] = eps_s + (1.0 - eps_s) * self.H['y']
+        self.eps_z[...] = eps_s + (1.0 - eps_s) * self.H['z']
+        self.k2[...] = kbar2 * self.H['center']
+
+    # def ComputeH(self, center_coords):
+    #     pos = self.particles.pos
+    #     L = self.L
+    #     w = self.w
+    #     radii = self.solvation_radii
+
+    #     cx, cy, cz = center_coords
+    #     X, Y, Z = np.meshgrid(cx, cy, cz, indexing='ij')  # (N,N,N)
+    #     coords = np.stack([X, Y, Z], axis=0)[None]        # (1, 3, N, N, N)
+    #     pos_exp = pos[:, :, None, None, None]             # (Np, 3, 1, 1, 1)
+
+    #     delta = coords - pos_exp                          # (Np, 3, N, N, N)
+    #     delta -= L * np.round(delta / L)                  # Apply PBC
+    #     r2 = np.sum(delta**2, axis=1)                     # (Np, N, N, N)
+    #     H = H_smooth(r2, radii, w)                        # (Np, N, N, N)
+    #     return np.clip(np.sum(H, axis=0), 0.0, 1.0)       # sum over particles
+
+    # def UpdateEpsAndK2_transition(self):
+    #     N = self.N
+    #     h = self.h
+
+    #     eps_s = self.eps_s
+    #     kbar2 = self.kbar2
+
+    #     # Coordinate dei centri voxel
+    #     centers = (np.arange(N) + 0.5) * h
+    #     faces   = np.arange(N) * h + h/2
+
+    #     # k2: da 0 a kbar2
+    #     Hk = self.ComputeH((centers, centers, centers))  # (N,N,N)
+    #     self.k2[...] = Hk * kbar2
+
+    #     # eps_x: da eps_s a 1
+    #     Hx = self.ComputeH((faces, centers, centers))
+    #     self.eps_x[...] = eps_s + (1.0 - eps_s) * Hx
+
+    #     # eps_y
+    #     Hy = self.ComputeH((centers, faces, centers))
+    #     self.eps_y[...] = eps_s + (1.0 - eps_s) * Hy
+
+    #     # eps_z
+    #     Hz = self.ComputeH((centers, centers, faces))
+    #     self.eps_z[...] = eps_s + (1.0 - eps_s) * Hz
 
 
+# def H_smooth(r2, R, w):
+#     """
+#     Smoothed transition function H(r) as defined in Im et al.
+#     r2: squared distances array, shape (Np, N, N, N)
+#     R: array of solvation radii, shape (Np,)
+#     w: smoothing width (scalar)
+#     Returns: H, shape (Np, N, N, N)
+#     """
+#     r = np.sqrt(r2)
+#     x = r - R[:, None, None, None] + w
 
+#     H = np.zeros_like(r)
+#     mask_mid = (r > (R - w)[:, None, None, None]) & (r < (R + w)[:, None, None, None])
+#     mask_out = (r >= (R + w)[:, None, None, None])
+
+#     H[mask_mid] = (
+#         (1 / (4 * w**3)) * x[mask_mid]**3
+#         - (3 / (4 * w**2)) * x[mask_mid]**2
+#     )
+#     H[mask_out] = 1.0
+#     return H
