@@ -10,44 +10,68 @@ from .profiling import profile
 
 
 def VerletSolutePart1(grid, thermostat=False):
+    method = grid.method
     dt = grid.md_variables.dt
+    particles = grid.particles
     N_p = grid.N_p
     L = grid.L
 
-    if thermostat == True:
-        mi_vi2 = grid.particles.masses * np.sum(grid.particles.vel**2, axis=1)
+    # Apply velocity rescaling thermostat if requested
+    if thermostat:
+        mi_vi2 = particles.masses * np.sum(particles.vel**2, axis=1)
         T_exp = np.sum(mi_vi2) / (3 * N_p * kB)
         lambda_scaling = np.sqrt(grid.temperature / T_exp)
+        particles.vel *= lambda_scaling
 
-    particles = grid.particles
+    # Accumulate forces (same strategy as in Part2)
+    total_force = np.zeros_like(particles.vel)
 
-    if thermostat == True:
-        particles.vel = particles.vel * lambda_scaling
+    if grid.not_elec:
+        total_force += particles.forces_notelec
+    if grid.elec:
+        total_force += particles.forces
+    if grid.non_polar and method == 'PB MaZe':
+        total_force += particles.forces_np
 
-    particles.vel = particles.vel + 0.5 * dt * ((particles.forces + particles.forces_notelec) / particles.masses[:, np.newaxis])
-    particles.pos = particles.pos + particles.vel * dt 
-    particles.pos = particles.pos - L * np.floor(particles.pos / L)  
+    # First half-step velocity update
+    particles.vel += 0.5 * dt * total_force / particles.masses[:, np.newaxis]
+
+    # Position update (periodic boundary conditions applied)
+    particles.pos += particles.vel * dt
+    particles.pos -= L * np.floor(particles.pos / L)
 
     return particles
 
 
 def VerletSolutePart2(grid, prev=False):
-    not_elec = grid.not_elec
-    elec = grid.elec
     particles = grid.particles
     dt = grid.md_variables.dt
-    
-    if not_elec:
+    method = grid.method
+
+    # Initialize total force accumulator
+    total_force = np.zeros_like(particles.forces)
+
+    # Compute non-electrostatic forces (e.g., steric, bonded, etc.)
+    if grid.not_elec:
         particles.ComputeForceNotElec()
+        total_force += particles.forces_notelec
 
-    if elec:
-        if grid.method == 'Poisson MaZe':
-            particles.ComputeForce_FD(prev=prev) 
-        elif grid.method == 'PB MaZe':
+    # Compute electrostatic forces (FD or PB)
+    if grid.elec:
+        if method == 'Poisson MaZe':
+            particles.ComputeForce_FD(prev=prev)
+        elif method == 'PB MaZe':
             particles.ComputeForce_PB(prev=prev)
+        total_force += particles.forces
 
-    particles.vel = particles.vel + 0.5 * dt * (particles.forces + particles.forces_notelec) / particles.masses[:, np.newaxis]
-    
+    # Compute nonpolar (solvent-exposed surface) forces, only for PB MaZe
+    if grid.non_polar and method == 'PB MaZe':
+        particles.ComputeNonpolarEnergyAndForces()
+        total_force += particles.forces_np
+
+    # Final velocity update (second half of velocity Verlet)
+    particles.vel += 0.5 * dt * total_force / particles.masses[:, np.newaxis]
+
     return grid
 
 ### OVRVO ###
@@ -86,43 +110,65 @@ def R_block(x,v, gamma, dt, L):
 
 @profile
 def OVRVO_part1(grid, thermostat=False):
-    if thermostat:
-        gamma_sim = grid.md_variables.gamma
-    else:
-        gamma_sim = 0
-
+    gamma_sim = grid.md_variables.gamma if thermostat else 0
     dt = grid.md_variables.dt
     kBT = grid.md_variables.kBT
     L = grid.L
     N_p = grid.N_p
+    particles = grid.particles
 
-    grid.particles.vel = O_block(N_p, grid.particles.vel, grid.particles.masses, gamma_sim, dt, kBT)
-    grid.particles.vel = V_block(grid.particles.vel, grid.particles.forces + grid.particles.forces_notelec, grid.particles.masses, gamma_sim, dt)
-    grid.particles.pos = R_block(grid.particles.pos, grid.particles.vel, gamma_sim, dt, L)
-    
-    return grid.particles
+    # Stochastic O step
+    particles.vel = O_block(N_p, particles.vel, particles.masses, gamma_sim, dt, kBT)
 
+    # Deterministic V step using total force
+    total_force = np.zeros_like(particles.vel)
+    if grid.not_elec:
+        total_force += particles.forces_notelec
+    if grid.elec:
+        total_force += particles.forces
+    if grid.non_polar and grid.method == 'PB MaZe':
+        total_force += particles.forces_np
+
+    particles.vel = V_block(particles.vel, total_force, particles.masses, gamma_sim, dt)
+
+    # Position update (R step with PBC)
+    particles.pos = R_block(particles.pos, particles.vel, gamma_sim, dt, L)
+
+    return particles
 
 def OVRVO_part2(grid, prev=False, thermostat=False):
+    gamma_sim = grid.md_variables.gamma if thermostat else 0
     dt = grid.md_variables.dt
     kBT = grid.md_variables.kBT
     N_p = grid.N_p
+    particles = grid.particles
 
-    if thermostat:
-        gamma_sim = grid.md_variables.gamma
-    else:
-        gamma_sim = 0
-        
+    # Recompute forces
     if grid.not_elec:
-        grid.particles.ComputeForceNotElec()
-
+        particles.ComputeForceNotElec()
     if grid.elec:
-        grid.particles.ComputeForce_FD(prev=prev)
+        if grid.method == 'Poisson MaZe':
+            particles.ComputeForce_FD(prev=prev)
+        elif grid.method == 'PB MaZe':
+            particles.ComputeForce_PB(prev=prev)
+    if grid.non_polar and grid.method == 'PB MaZe':
+        particles.ComputeNonpolarEnergyAndForces()
 
-    grid.particles.vel = V_block(grid.particles.vel, grid.particles.forces + grid.particles.forces_notelec, grid.particles.masses, gamma_sim, dt)
-    grid.particles.vel = O_block(N_p, grid.particles.vel, grid.particles.masses, gamma_sim, dt, kBT)
-    
-    return grid.particles
+    # V step again with updated forces
+    total_force = np.zeros_like(particles.vel)
+    if grid.not_elec:
+        total_force += particles.forces_notelec
+    if grid.elec:
+        total_force += particles.forces
+    if grid.non_polar and grid.method == 'PB MaZe':
+        total_force += particles.forces_np
+
+    particles.vel = V_block(particles.vel, total_force, particles.masses, gamma_sim, dt)
+
+    # Final O step
+    particles.vel = O_block(N_p, particles.vel, particles.masses, gamma_sim, dt, kBT)
+
+    return particles
 
 
 @profile

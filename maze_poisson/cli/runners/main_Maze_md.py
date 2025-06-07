@@ -15,6 +15,50 @@ from ...verlet import (OVRVO_part1, OVRVO_part2, PrecondLinearConjGradPoisson, P
                        VerletPoisson, VerletSolutePart1, VerletSolutePart2)
 
 
+# import matplotlib.pyplot as plt
+
+# def plot_contour_2D(grid, field3D, plane='z', index=None, title='Field', cmap='viridis'):
+#     """
+#     Plot a 2D contour of a 3D field at a fixed plane.
+
+#     Parameters:
+#         grid     : object with attribute `h` (grid spacing)
+#         field3D  : 3D numpy array (N, N, N)
+#         plane    : one of 'x', 'y', 'z' to select slicing direction
+#         index    : index of slice (default: middle of the grid)
+#         title    : plot title
+#         cmap     : colormap for contour
+#     """
+#     N = field3D.shape[0]
+#     h = grid.h
+
+#     if index is None:
+#         index = N // 2
+
+#     extent = [0, N * h, 0, N * h]
+
+#     if plane == 'z':
+#         slice2D = field3D[:, :, index]
+#         xlabel, ylabel = 'x (Å)', 'y (Å)'
+#     elif plane == 'y':
+#         slice2D = field3D[:, index, :]
+#         xlabel, ylabel = 'x (Å)', 'z (Å)'
+#     elif plane == 'x':
+#         slice2D = field3D[index, :, :]
+#         xlabel, ylabel = 'y (Å)', 'z (Å)'
+#     else:
+#         raise ValueError("plane must be one of 'x', 'y', 'z'")
+
+#     plt.figure(figsize=(6, 5))
+#     plt.contourf(slice2D.T, levels=100, extent=extent, cmap=cmap)
+#     plt.colorbar(label=title)
+#     plt.xlabel(xlabel)
+#     plt.ylabel(ylabel)
+#     plt.title(f'{title} at {plane}={index}')
+#     plt.tight_layout()
+#     plt.show()
+
+
 def main(grid_setting, output_settings, md_variables):
     begin_time = time.time()
     start_initialization = time.time()
@@ -24,10 +68,10 @@ def main(grid_setting, output_settings, md_variables):
     h = grid_setting.h
     L = grid_setting.L
     L_ang = grid_setting.L_ang
-    print('L=',L)
     N = grid_setting.N
     N_p = grid_setting.N_p
     h_ang = L_ang/N
+
 
     method = md_variables.method
     T = md_variables.T
@@ -58,13 +102,17 @@ def main(grid_setting, output_settings, md_variables):
     logger.info(f'Parameters: h = {h_ang} A \ndt = {dt_fs} fs \nstride = {stride} \nL = {L_ang} A \ngamma = {md_variables.gamma}')
     logger.info(f'Charge assignment scheme: {grid_setting.cas}\n')
     logger.info(f'Potential: {md_variables.potential}')
-    logger.info(f'Elec: {elec} \tNotElec: {not_elec}')
+    logger.info(f'Elec: {elec} \tNotElec: {not_elec} \tNonPolar: {non_polar}')
     logger.info(f'Temperature: {T} K \tDensity: {density} g/cm3.')
     logger.info(f'Print solute: {output_settings.print_solute} \tPrint field: {output_settings.print_field} \tPrint tot_force: {output_settings.print_tot_force}')
     logger.info(f'Print energy: {output_settings.print_energy} \tPrint temperature: {output_settings.print_temperature}')
     logger.info(f'Print performance: {output_settings.print_performance} \tRestart: {output_settings.restart}')
     logger.info(f'Thermostat: {thermostat} \tRescaling of the velocities: {rescale}')
     logger.info(f'Rescaling of the forces: {grid_setting.rescale_force}')
+    logger.info(f'Transition region of width: {grid_setting.w} A')
+
+    if 2 * grid_setting.w < h_ang:
+        logger.warning(f'Transition region double width {2 * grid_setting.w} A is smaller than the grid spacing {h_ang} A. This may lead to inaccuracies in the field calculation.')
 
     ################################ STEP 0 Verlet ##########################################
     #########################################################################################
@@ -81,6 +129,8 @@ def main(grid_setting, output_settings, md_variables):
     # update dielectric and screening vectors 
     # grid.UpdateEpsAndK2()
     grid.UpdateEpsAndK2_transition()
+    # plot_contour_2D(grid=grid, field3D=grid.H['center'], plane='z', title='H (center)', index = int(grid.particles.pos[0,2] / h), cmap='viridis')
+    # print(grid.H['center'].max(), grid.H['center'].min())
     
     # initialize the electrostatic field with CG                  
     if preconditioning == "Yes":
@@ -96,12 +146,10 @@ def main(grid_setting, output_settings, md_variables):
             grid.particles.ComputeForce_FD(prev=True) 
         elif method == 'PB MaZe':
             grid.particles.ComputeForce_PB(prev=True)
-    else:
-        logger.error("There is an error here")
-        raise ValueError("There is an error here")
     
-    if non_polar:
-        print('Non-polar forces not implemented yet')
+    if non_polar and method == 'PB MaZe':
+        grid.particles.ComputeNonpolarEnergyAndForces()
+        
 
     ################################ STEP 1 Verlet ##########################################
     #########################################################################################
@@ -170,7 +218,7 @@ def main(grid_setting, output_settings, md_variables):
     #############################################################################################
 
     counter = 0 
-  
+    
     # iterate over the number of steps (i.e times I move the particle 1)
     for i in tqdm(range(N_steps)):
         #print('\nStep = ', i, ' t elapsed from init =', time.time() - end_initialization)
@@ -208,7 +256,7 @@ def main(grid_setting, output_settings, md_variables):
 
         if output_settings.print_tot_force:
             tot_force = np.zeros(3)
-            tot_force = np.sum(grid.particles.forces + grid.particles.forces_notelec, axis=0)
+            tot_force = np.sum(grid.particles.forces + grid.particles.forces_notelec + grid.particles.forces_np, axis=0)
             
             ofiles.file_output_tot_force.write(str(i) + ',' + str(tot_force[0]) + ',' + str(tot_force[1]) + ','+ str(tot_force[2]) + "\n") 
             ofiles.file_output_tot_force.flush()

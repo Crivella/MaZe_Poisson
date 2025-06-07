@@ -1,18 +1,19 @@
 # test file to run simulation with 16 ions of Na-Cl in implicit solvent (water)
 grid_setting:
-  N: 50                         # number of grid points in each direction         
+  N: 80                         # number of grid points in each direction         
   N_p: 8                        # number of particles         
   L: 31.6                       # Angstrom - box length per side
   rescale_force: false          # rescaling of the force to have tot force = 0
   cas: 'CIC'                    # charge assignment scheme     
   eps_s: 80                     # dielectric constant of the solvent
   I: 0.01                       # M - ionic strength in Molar for ions in implicit solvent - 0 if no ions in solution
+  w: 0.3                        # Angstrom - smoothing window
 
 md_variables:
   method: "PB MaZe"             # "Poisson MaZe" or "PB MaZe"
-  N_steps: 10                   # number of steps      
+  N_steps: 3                   # number of steps      
   T: 300                        # Kelvin - target temperature
-  dt_fs: 0.25                   # fs - time step
+  dt_fs: 2                      # fs - time step
   rescale: true                 # rescaling of the initial momenta to have tot momenta = 0, always true 
   tol: 1.e-10                   # tol solver convergence 
   init_steps: 0                 # number of steps to initialize the system, 0 if you put restart = true  
@@ -21,17 +22,17 @@ md_variables:
   not_elec: true                # LJ or Tosi-Fumi ON/OFF 
 
   # non-polar solvation parameters
-  non_polar: true               # compute non-polar forces
-  gamma_np: 2.23e-6             # Hartree/bohr = 0.005 kcal/mol/Å² - surface tension coefficient 
+  non_polar: true                    # compute non-polar forces
+  gamma_np: 0.03                # kcal/mol/Å² - surface tension coefficient 
   beta_np: 0.0                  # offset in kcal/mol
   probe_radius: 1.4             # radius of the solvent probe in Å
 
 output_settings: 
-  restart: false                # restart the simulation using the restart file 
-  print_tot_force: false        # print sum of total forces on the particles
+  restart: false                 # restart the simulation using the restart file 
+  print_tot_force: true        # print sum of total forces on the particles
   print_field: false            # print the electrostatic potential along the x axis
   print_performance: true       # print performance of the simulation
-  print_solute: false           # print positions, velocities and electrostatic forces on the particles
-  print_energy: false           # print kinetic and not electrostatic potential energy
-  print_temperature: false      # print temperature of the system
+  print_solute: true           # print positions, velocities and electrostatic forces on the particles
+  print_energy: true           # print kinetic and not electrostatic potential energy
+  print_temperature: true      # print temperature of the system
   generate_restart_file: false  # generate restart file at the end of the simulation

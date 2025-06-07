@@ -22,11 +22,20 @@ class Particles:
         self.forces = np.zeros((self.N_p, 3), dtype=float) # Electrostatic forces
         self.forces_notelec = np.zeros((self.N_p, 3), dtype=float) # Non-electrostatic forces
         self.potential_info = md_variables.potential
+
         if md_variables.method == 'PB MaZe':
             self.radii = np.array(radii, dtype=float) 
+            
+            # solvation radius
+            self.probe_radius = md_variables.probe_radius / a0  # convert from Angstrom to atomic units
+            self.solvation_radii = self.radii + self.probe_radius # radii for solvation
+            self.solvation_radii2 = self.solvation_radii**2  # squared radii for solvation
             # self.radii2 = self.radii ** 2  # Shape: (N_p,)
             
-            
+            # nonpolar parameters
+            self.gamma_np = md_variables.gamma_np * 0.0065934 # from kcal/mol/A^2 to a.u.
+            self.forces_np = np.zeros((self.N_p, 3), dtype=float) # Nonpolar forces
+
         # Additional attributes based on grid potential
         L = grid.L
         if self.potential_info == 'TF':
@@ -324,7 +333,7 @@ class Particles:
             Hval  = H[mask]
             Hpval = Hp[mask]
             coeff = (eps - 1.0) * Hpval / (Hval + 1e-12)         # (M,)
-            r_hat = self.grid.r_hat[d][:, :, mask]              # (Np, 3, M)
+            r_hat = self.grid.r_hat[d][:, :, mask]           # (Np, 3, M)
 
             forces_DB += np.sum((coeff * dphi)[None, None, :] * r_hat, axis=2) * h / (8 * np.pi)
 
@@ -337,12 +346,15 @@ class Particles:
         Hval  = H[mask]
         Hpval = Hp[mask]
         d_k2  = k2 * Hpval / (Hval + 1e-12)    # (M,)
-        r_hat = self.grid.r_hat['center'][:, :, mask]  # (Np, 3, M)
+        r_hat = self.grid.r_hat[d][:, :, mask]  # (Np, 3, M)
 
         forces_IB = np.sum((2 * d_k2 * phi)[None, None, :] * r_hat, axis=2) * h**3 / (8 * np.pi)
 
         #### TOTAL FORCE ####
         self.forces = forces_RF + forces_DB + forces_IB
+        print(f"1) RF: {forces_RF[0][0]}, DB: {forces_DB[0][0]}, IB: {forces_IB[0][0]}")
+        print(f"2) RF: {forces_RF[1][0]}, DB: {forces_DB[1][0]}, IB: {forces_IB[1][0]}\n")
+        # self.forces = forces_DB + forces_IB
 
         # Subtract mean force to remove net self-force
         # if self.grid.grid_setting.rescale_force:
@@ -350,7 +362,53 @@ class Particles:
         #     if np.any(net_force):
         #         self.forces -= net_force / self.forces.shape[0]
 
-  
+
+    def ComputeNonpolarEnergyAndForces(self):
+        h = self.grid.h
+        eps_s = self.grid.eps_s
+        gamma = self.gamma_np  # surface tension in a.u.
+
+        # --- Gradient of epsilon fields (central difference) ---
+        grad_eps_x = (np.roll(self.grid.eps_x, -1, axis=0) - np.roll(self.grid.eps_x, 1, axis=0)) / (2 * h)
+        grad_eps_y = (np.roll(self.grid.eps_y, -1, axis=1) - np.roll(self.grid.eps_y, 1, axis=1)) / (2 * h)
+        grad_eps_z = (np.roll(self.grid.eps_z, -1, axis=2) - np.roll(self.grid.eps_z, 1, axis=2)) / (2 * h)
+
+        norm_grad_eps = np.sqrt(grad_eps_x**2 + grad_eps_y**2 + grad_eps_z**2) + 1e-12  # Avoid /0
+
+        # --- Nonpolar energy ---
+        S = (h**3 / (eps_s - 1)) * np.sum(norm_grad_eps)
+        self.grid.energy_np = gamma * S
+
+        # --- Nonpolar force ---
+        self.forces_np.fill(0.0)
+        prefactor = -gamma * h / (eps_s - 1)
+
+        for d, grad_eps, eps_field in zip(
+            ['x', 'y', 'z'],
+            [grad_eps_x, grad_eps_y, grad_eps_z],
+            [self.grid.eps_x, self.grid.eps_y, self.grid.eps_z]
+        ):
+            mask = self.grid.H_mask[d]
+            norm_grad = norm_grad_eps[mask]         # (M,)
+            delta_eps = grad_eps[mask]              # (M,)
+            r_hat = self.grid.r_hat[d][:, :, mask]  # (Np, 3, M)
+
+            H = self.grid.H[d][mask] + 1e-12
+            Hp = self.grid.H_prime[d][mask]
+
+            # Safe ratio: avoid blow-up in solvent
+            coeff = np.where(H > 1e-4, Hp / H, 0.0)
+
+            # Per-grid contribution
+            factor = (eps_field[mask] - 1.0) * coeff * delta_eps / norm_grad  # (M,)
+            self.forces_np += np.sum(factor[None, None, :] * r_hat, axis=2) * prefactor
+
+        # Diagnostic: check if net force is conserved
+        f_tot = np.sum(self.forces_np, axis=0)
+        print("→ Nonpolar total force:", f_tot)
+        print("→ NP force on particle 1:", self.forces_np[0])
+        print("→ NP force on particle 2:", self.forces_np[1])
+    
 # distance with periodic boundary conditions
 @profile
 # returns a number - smallest distance between 2 neightbouring particles - to enforce PBC

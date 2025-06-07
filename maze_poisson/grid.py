@@ -100,17 +100,16 @@ class Grid:
             self.kbar2 = (8 * np.pi * N_A * e**2 * self.I * 1e3) / (self.eps_s * epsilon_0 * k_B * self.md_variables.T) * (meter_to_bohr**2)
             self.k2 = self.kbar2 * np.ones(self.shape, dtype=float) 
 
-            # solvation radius
-            self.probe_radius = md_variables.probe_radius / a0  # convert from Angstrom to atomic units
-            self.solvation_radii = self.particles.radii + self.probe_radius # radii for solvation
-            self.solvation_radii2 = self.solvation_radii**2  # squared radii for solvation
-
             # transition region
-            self.w = grid_setting.w  # smoothing width for the solvation radius
+            self.w = grid_setting.w / a0 # smoothing width for the solvation radius
             self.H = {}
             self.H_prime = {}
             self.H_mask = {}
             self.r_hat = {}
+
+            # non-polar solvation
+            self.non_polar = md_variables.non_polar
+            self.energy_np = 0.0
         
     
     def RescaleVelocities(self):
@@ -280,7 +279,10 @@ class Grid:
         kinetic = 0.5 * np.sum(self.particles.masses * np.sum(self.particles.vel**2, axis=1))
         
         if print_energy:
-            self.output_files.file_output_energy.write(str(iter) + ',' +  str(kinetic) + ',' + str(self.potential_notelec) + '\n')
+            if self.method == 'Poisson MaZe':
+                self.output_files.file_output_energy.write(str(iter) + ',' +  str(kinetic) + ',' + str(self.potential_notelec) + '\n')
+            elif self.method == 'PB MaZe':
+                self.output_files.file_output_energy.write(str(iter) + ',' + str(kinetic) + ',' + str(self.potential_notelec) + ',' + str(self.energy_np) + '\n')
 
     def Temperature(self, iter, print_temperature):
         mi_vi2 = self.particles.masses * np.sum(self.particles.vel**2, axis=1)
@@ -297,7 +299,7 @@ class Grid:
         delta = coords - pos_exp                                             # shape (Np, 3, N, N, N)
         delta -= self.L * np.round(delta / self.L)                                     # apply PBC
         r2 = np.sum(delta**2, axis=1)                                        # (Np, N, N, N)
-        return np.any(r2 <= self.solvation_radii2[:, None, None, None], axis=0)            # (N, N, N)
+        return np.any(r2 <= self.particles.solvation_radii2[:, None, None, None], axis=0)            # (N, N, N)
 
     def UpdateEpsAndK2(self):
         N = self.N
@@ -332,56 +334,73 @@ class Grid:
         N, h = self.N, self.h
         L = self.L
         w = self.w
-
-        pos = self.particles.pos        # (Np, 3)
-        radius = self.solvation_radii  # (Np,)
+        pos = self.particles.pos
+        radius = self.particles.solvation_radii
 
         def make_H_and_rhat(coord_x, coord_y, coord_z):
             X, Y, Z = np.meshgrid(coord_x, coord_y, coord_z, indexing='ij')
-            coords = np.stack([X, Y, Z], axis=0)[None]                      # (1, 3, N, N, N)
-            rvec = coords - pos[:, :, None, None, None]                    # (Np, 3, N, N, N)
-            rvec -= L * np.round(rvec / L)                                 # Apply PBC
-            r = np.sqrt(np.sum(rvec**2, axis=1)) + 1e-12                   # (Np, N, N, N)
-            r_hat = -rvec / r[:, None, :, :, :]                            # (Np, 3, N, N, N)
+            coords = np.stack([X, Y, Z], axis=0)[None]  # (1, 3, N, N, N)
 
-            x = r - radius[:, None, None, None] + w
+            rvec = coords - pos[:, :, None, None, None]
+            rvec -= L * np.round(rvec / L)
+            r = np.linalg.norm(rvec, axis=1) + 1e-12
+            r_hat = -rvec / r[:, None, :, :, :]
+            x = r - radius[:, None, None, None]
 
             H = np.zeros_like(r)
             H_prime = np.zeros_like(r)
 
-            inside = (r > (radius - w)[:, None, None, None]) & (r < (radius + w)[:, None, None, None])
-            outside = r >= (radius + w)[:, None, None, None]
+            if w == 0.0:
+                H = (r <= radius[:, None, None, None]).astype(np.float64)
+            else:
+                mask_inner = x <= -w
+                mask_outer = x >= w
+                mask_transition = (~mask_inner) & (~mask_outer)
+                x_t = x[mask_transition]
 
-            H[inside] = (1 / (4 * w**3)) * x[inside]**3 - (3 / (4 * w**2)) * x[inside]**2
-            H[outside] = 1.0
+                H[mask_inner] = 1.0
+                H[mask_outer] = 0.0
+                H[mask_transition] = (
+                    0.5 - 0.5 * x_t / w
+                    - (1.0 / (2.0 * np.pi)) * np.sin(np.pi * x_t / w)
+                )
+                H_prime[mask_transition] = (
+                    -0.5 / w
+                    - (1.0 / (2.0 * w)) * np.cos(np.pi * x_t / w)
+                )
 
-            H_prime[inside] = (-3 / (4 * w**3)) * x[inside]**2 + (3 / (2 * w**2)) * x[inside]
+            H_total = np.clip(1.0 - np.prod(1.0 - H, axis=0), 0.0, 1.0)
+            H_prime_total = np.sum(H_prime, axis=0)
 
-            H_total = np.clip(np.sum(H, axis=0), 0.0, 1.0)
-            Hp_total = np.sum(H_prime, axis=0)
-            r_hat_total = r_hat  # shape (Np, 3, N, N, N)
+            return H_total, H_prime_total, r_hat
 
-            return H_total, Hp_total, r_hat_total
-
-        coords = (np.arange(N) + 0.5) * h
-        faces = np.arange(N) * h + h/2
+        coords = np.arange(N) * h               # i*h → face-centered
+        centers = (np.arange(N) + 0.5) * h      # (i+½)*h → center of cells
 
         self.H = {}
         self.H_prime = {}
         self.H_mask = {}
         self.r_hat = {}
 
-        for axis, c in zip(['x', 'y', 'z'], [(faces, coords, coords), (coords, faces, coords), (coords, coords, faces)]):
-            H, Hp, r_hat = make_H_and_rhat(*c)
+        # H at faces for ε_x, ε_y, ε_z
+        grid_points = {
+            'x': (centers, coords, coords),  # (i+½, j, k)
+            'y': (coords, centers, coords),  # (i, j+½, k)
+            'z': (coords, coords, centers)   # (i, j, k+½)
+        }
+
+        for axis, (cx, cy, cz) in grid_points.items():
+            H, Hp, r_hat = make_H_and_rhat(cx, cy, cz)
             self.H[axis] = H
             self.H_prime[axis] = Hp
-            self.H_mask[axis] = (H > 0) & (H < 1)
+            self.H_mask[axis] = (H > 1e-6) & (H < 1 - 1e-6)
             self.r_hat[axis] = r_hat
 
-        Hc, Hpc, r_hatc = make_H_and_rhat(coords, coords, coords)
+        # H at cell centers for potential and k²
+        Hc, Hpc, r_hatc = make_H_and_rhat(centers, centers, centers)
         self.H['center'] = Hc
         self.H_prime['center'] = Hpc
-        self.H_mask['center'] = (Hc > 0) & (Hc < 1)
+        self.H_mask['center'] = (Hc > 1e-6) & (Hc < 1 - 1e-6)
         self.r_hat['center'] = r_hatc
 
     def UpdateEpsAndK2_transition(self):
@@ -394,6 +413,9 @@ class Grid:
         self.eps_y[...] = eps_s + (1.0 - eps_s) * self.H['y']
         self.eps_z[...] = eps_s + (1.0 - eps_s) * self.H['z']
         self.k2[...] = kbar2 * self.H['center']
+        # print(np.max(self.eps_x), np.min(self.eps_x))
+        # print("H min/max:", self.H['x'].min(), self.H['x'].max())
+        # print("H unique:", np.unique(self.H['x']))
 
     # def ComputeH(self, center_coords):
     #     pos = self.particles.pos
