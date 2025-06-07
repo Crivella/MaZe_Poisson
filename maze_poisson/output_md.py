@@ -67,7 +67,10 @@ def generate_output_files(grid, md_variables):
         # output_energy = os.path.join(path, 'energy_N' + str(N) +'_'+str(num_threads)+'.csv')
         output_energy = os.path.join(path, 'energy_N' + str(N) +'.csv')
         output_files.file_output_energy = generate_output_file(output_energy)
-        output_files.file_output_energy.write("iter,K,V_notelec\n")
+        if md_variables.method == 'Poisson MaZe':
+            output_files.file_output_energy.write("iter,K,V_notelec\n")
+        elif md_variables.method == 'PB MaZe':
+            output_files.file_output_energy.write("iter,K,V_notelec,DeltaG_nonpolar\n")
 
     if output_settings.print_temperature:
         os.makedirs(path, exist_ok=True)
