@@ -121,13 +121,14 @@ class MDVariables:
         self.elec = None # to move
         self.not_elec = None # to move
         self.potential = 'TF' # Tosi Fumi (TF) or Leonard Jones (LJ)
-        self.integrator = 'OVRVO'
+        self.integrator = 'manual' # OVRVO or VV (Velocity Verlet) or manual (fixed displacement, useful for testing)
         self.gamma = 1e-3 # OVRVO parameter
         self.method = None
         self.non_polar = False
         self.gamma_np = 0.0
         self.beta_np = 0.0
         self.probe_radius = 1.4
+        self.delta = np.array([0.005, 0., 0.]) /a0
 
     @property
     def T(self):

@@ -13,50 +13,87 @@ from ...loggers import logger
 from ...restart import generate_restart
 from ...verlet import (OVRVO_part1, OVRVO_part2, PrecondLinearConjGradPoisson, PrecondLinearConjGradPoisson_PB, VerletPB,
                        VerletPoisson, VerletSolutePart1, VerletSolutePart2)
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
+def plot_H_field_with_regions(grid, H_field,
+                                       solute_color='indigo',
+                                       bulk_color='lightgray',
+                                       cmap_name='Purples',
+                                       solute_threshold=0.999,
+                                       bulk_threshold=0.001,
+                                       max_points_bulk=200_000):
+    """
+    Plot H field with:
+    - fixed color for solute
+    - grayed-out bulk
+    - gradient colormap for transition region
 
-# import matplotlib.pyplot as plt
+    Parameters:
+        grid             : object with attribute `h`
+        H_field          : 3D numpy array in [0, 1]
+        solute_color     : matplotlib color for full solute (H ~ 1)
+        bulk_color       : color for solvent/bulk (H ~ 0)
+        cmap_name        : colormap for transition region (starts from solute_color)
+        solute_threshold : H > this → solute
+        bulk_threshold   : H < this → bulk
+        max_points_bulk  : cap on number of bulk points
+    """
+    N = H_field.shape[0]
+    h = grid.h
+    coords = np.linspace(0, (N - 1) * h, N)
+    X, Y, Z = np.meshgrid(coords, coords, coords, indexing='ij')
 
-# def plot_contour_2D(grid, field3D, plane='z', index=None, title='Field', cmap='viridis'):
-#     """
-#     Plot a 2D contour of a 3D field at a fixed plane.
+    x = X.flatten()
+    y = Y.flatten()
+    z = Z.flatten()
+    H = H_field.flatten()
 
-#     Parameters:
-#         grid     : object with attribute `h` (grid spacing)
-#         field3D  : 3D numpy array (N, N, N)
-#         plane    : one of 'x', 'y', 'z' to select slicing direction
-#         index    : index of slice (default: middle of the grid)
-#         title    : plot title
-#         cmap     : colormap for contour
-#     """
-#     N = field3D.shape[0]
-#     h = grid.h
+    # Masks
+    mask_solute = H > solute_threshold
+    mask_bulk = H < bulk_threshold
+    mask_transition = (~mask_solute) & (~mask_bulk)
 
-#     if index is None:
-#         index = N // 2
+    # Subsample bulk
+    if np.sum(mask_bulk) > max_points_bulk:
+        idx_bulk = np.random.choice(np.where(mask_bulk)[0], size=max_points_bulk, replace=False)
+    else:
+        idx_bulk = np.where(mask_bulk)[0]
 
-#     extent = [0, N * h, 0, N * h]
+    # Plot
+    fig = plt.figure(figsize=(9, 7))
+    ax = fig.add_subplot(111, projection='3d')
 
-#     if plane == 'z':
-#         slice2D = field3D[:, :, index]
-#         xlabel, ylabel = 'x (Å)', 'y (Å)'
-#     elif plane == 'y':
-#         slice2D = field3D[:, index, :]
-#         xlabel, ylabel = 'x (Å)', 'z (Å)'
-#     elif plane == 'x':
-#         slice2D = field3D[index, :, :]
-#         xlabel, ylabel = 'y (Å)', 'z (Å)'
-#     else:
-#         raise ValueError("plane must be one of 'x', 'y', 'z'")
+    # Bulk: gray + transparent
+    ax.scatter(x[idx_bulk], y[idx_bulk], z[idx_bulk],
+               color=bulk_color, alpha=0.03, s=1, label='bulk')
 
-#     plt.figure(figsize=(6, 5))
-#     plt.contourf(slice2D.T, levels=100, extent=extent, cmap=cmap)
-#     plt.colorbar(label=title)
-#     plt.xlabel(xlabel)
-#     plt.ylabel(ylabel)
-#     plt.title(f'{title} at {plane}={index}')
-#     plt.tight_layout()
-#     plt.show()
+    # Solute: fixed color
+    ax.scatter(x[mask_solute], y[mask_solute], z[mask_solute],
+               color=solute_color, alpha=1.0, s=10, label='solute')
+
+    # Transition: gradient colormap
+    from matplotlib.cm import get_cmap
+    from matplotlib.colors import Normalize
+
+    cmap = get_cmap(cmap_name)
+    norm = Normalize(vmin=bulk_threshold, vmax=solute_threshold)
+    H_trans = H[mask_transition]
+
+    sc = ax.scatter(x[mask_transition], y[mask_transition], z[mask_transition],
+                    c=H_trans, cmap=cmap, norm=norm, s=6, alpha=0.6, label='transition')
+
+    # Axes and colorbar
+    ax.set_xlabel('x (Å)')
+    ax.set_ylabel('y (Å)')
+    ax.set_zlabel('z (Å)')
+    ax.set_title('Solute Accessibility H')
+
+    cbar = fig.colorbar(sc, ax=ax, label='H value (transition only)')
+    # ax.legend()
+    plt.tight_layout()
+    plt.savefig("H_field_plot.pdf", format='pdf', bbox_inches='tight')
+    plt.show()
 
 
 def main(grid_setting, output_settings, md_variables):
@@ -97,7 +134,7 @@ def main(grid_setting, output_settings, md_variables):
 
     # log all the relevant info 
     logger.info(f'Simulation with N_p = {N_p}, N = {N} with N_steps = {N_steps} and tol = {md_variables.tol}')
-    logger.info(f'Method: {method}')
+    logger.info(f'Method: {method} \tIntegrator: {md_variables.integrator}')
     logger.info(f'Initialization is done with CG and preconditioning: {preconditioning}')
     logger.info(f'Parameters: h = {h_ang} A \ndt = {dt_fs} fs \nstride = {stride} \nL = {L_ang} A \ngamma = {md_variables.gamma}')
     logger.info(f'Charge assignment scheme: {grid_setting.cas}\n')
@@ -111,7 +148,7 @@ def main(grid_setting, output_settings, md_variables):
     logger.info(f'Rescaling of the forces: {grid_setting.rescale_force}')
     logger.info(f'Transition region of width: {grid_setting.w} A')
 
-    if 2 * grid_setting.w < h_ang:
+    if 2 * grid_setting.w < h_ang and grid_setting.w > 0:
         logger.warning(f'Transition region double width {2 * grid_setting.w} A is smaller than the grid spacing {h_ang} A. This may lead to inaccuracies in the field calculation.')
 
     ################################ STEP 0 Verlet ##########################################
@@ -121,16 +158,16 @@ def main(grid_setting, output_settings, md_variables):
     #compute 8 (CIC) or 64(B-Spline) nearest neighbors for any particle
     grid.particles.NearestNeighbors()
     q_tot = np.sum(grid.particles.charges)
-    logger.info('Total charge q = '+str(q_tot))
+    logger.info('Total charge q = '+ str(q_tot))
 
     # set charges with the weight function
     grid.SetCharges()
     
     # update dielectric and screening vectors 
     # grid.UpdateEpsAndK2()
-    grid.UpdateEpsAndK2_transition()
-    # plot_contour_2D(grid=grid, field3D=grid.H['center'], plane='z', title='H (center)', index = int(grid.particles.pos[0,2] / h), cmap='viridis')
-    # print(grid.H['center'].max(), grid.H['center'].min())
+    if method == 'PB MaZe':
+        grid.UpdateEpsAndK2_transition()
+    # plot_H_field_with_regions(grid, grid.H['center'])
     
     # initialize the electrostatic field with CG                  
     if preconditioning == "Yes":
@@ -158,8 +195,10 @@ def main(grid_setting, output_settings, md_variables):
     if md_variables.integrator == 'OVRVO':
         grid.particles = OVRVO_part1(grid, thermostat = thermostat)
         #logger.info('Thermostat being applied')
-    else:
+    elif md_variables.integrator == 'VV':
         grid.particles = VerletSolutePart1(grid, thermostat=thermostat)
+    elif md_variables.integrator == 'manual':
+        grid.particles.pos[1,:] -= md_variables.delta
         #logger.info('Thermostat is not applied')
 
     # compute 8 nearest neighbors for any particle
@@ -172,7 +211,8 @@ def main(grid_setting, output_settings, md_variables):
     
     # update dielectric and screening vectors 
     # grid.UpdateEpsAndK2()
-    grid.UpdateEpsAndK2_transition()
+    if method == 'PB MaZe':
+        grid.UpdateEpsAndK2_transition()
 
     if preconditioning == "Yes":
         grid.phi, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol, x0=grid.phi_prev)
@@ -182,8 +222,21 @@ def main(grid_setting, output_settings, md_variables):
     if md_variables.integrator == 'OVRVO':
         grid.particles = OVRVO_part2(grid, thermostat = thermostat)
         #logger.info('OVRVO part 2 being run')
-    else:
+    elif md_variables.integrator == 'VV':
         grid = VerletSolutePart2(grid)
+    elif md_variables.integrator == 'manual':
+        if not_elec:
+            grid.particles.ComputeForceNotElec()
+
+        if elec:
+            if method == 'Poisson MaZe':
+                grid.particles.ComputeForce_FD(prev=True) 
+            elif method == 'PB MaZe':
+                grid.particles.ComputeForce_PB(prev=True)
+        
+        if non_polar and method == 'PB MaZe':
+            grid.particles.ComputeNonpolarEnergyAndForces()
+        
 
     # rescaling of the velocities to get total momentum = 0
     if rescale:
@@ -224,8 +277,10 @@ def main(grid_setting, output_settings, md_variables):
         #print('\nStep = ', i, ' t elapsed from init =', time.time() - end_initialization)
         if md_variables.integrator == 'OVRVO':
             grid.particles = OVRVO_part1(grid, thermostat = thermostat)
-        else:
+        elif md_variables.integrator == 'VV':
             grid.particles = VerletSolutePart1(grid, thermostat = thermostat)
+        elif md_variables.integrator == 'manual':
+            grid.particles.pos[1,:] -= md_variables.delta
 
         if elec:
             # compute 8 nearest neighbors for any particle
@@ -251,8 +306,20 @@ def main(grid_setting, output_settings, md_variables):
 
         if md_variables.integrator == 'OVRVO':
             grid.particles = OVRVO_part2(grid, thermostat = thermostat)
-        else:
+        elif md_variables.integrator == 'VV':
             grid = VerletSolutePart2(grid)
+        elif md_variables.integrator == 'manual':
+            if not_elec:
+                grid.particles.ComputeForceNotElec()
+
+            if elec:
+                if method == 'Poisson MaZe':
+                    grid.particles.ComputeForce_FD(prev=True) 
+                elif method == 'PB MaZe':
+                    grid.particles.ComputeForce_PB(prev=True)
+            
+            if non_polar and method == 'PB MaZe':
+                grid.particles.ComputeNonpolarEnergyAndForces()
 
         if output_settings.print_tot_force:
             tot_force = np.zeros(3)
@@ -294,8 +361,14 @@ def main(grid_setting, output_settings, md_variables):
                     ofiles.file_output_performance.write(str(i - init_steps) + ',' + str(end_Verlet - start_Verlet) + ',' + str(iter_conv) + ',' + str(end_VerletPB - start_VerletPB) + ',' + str(iter_conv_PB) + ',' + str(end_update - start_update) + "\n")
             if output_settings.print_field and elec:
                 field_x_MaZe = np.array([grid.phi[l, j, k] for l in range(N)])
-                for n in range(N):
-                    ofiles.file_output_field.write(str(i - init_steps) + ',' + str(X[n] * a0) + ',' + str(field_x_MaZe[n] * V) + '\n')
+                if method == 'Poisson MaZe':
+                    for n in range(N):
+                        ofiles.file_output_field.write(str(i - init_steps) + ',' + str(X[n] * a0) + ',' + str(field_x_MaZe[n] * V) + '\n')
+                elif method == 'PB MaZe':
+                    field_x_MaZe_s = np.array([grid.phi_s[l, j, k] for l in range(N)])
+                
+                    for n in range(N):
+                        ofiles.file_output_field.write(str(i - init_steps) + ',' + str(X[n] * a0) + ',' + str(field_x_MaZe[n] * V) + ',' + str(field_x_MaZe_s[n] * V) + '\n')
 
     if output_settings.generate_restart_file:
         ofiles.file_output_solute.flush()

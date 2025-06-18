@@ -41,9 +41,12 @@ def generate_output_files(grid, md_variables):
 
     if output_settings.print_field:
         os.makedirs(path, exist_ok=True)
-        output_field = os.path.join(path, 'field_N' + str(N) +'_'+str(num_threads)+'.csv')
+        output_field = os.path.join(path, 'field_N' + str(N) + '.csv')
         output_files.file_output_field = generate_output_file(output_field)
-        output_files.file_output_field.write("iter,x,MaZe\n")
+        if md_variables.method == 'Poisson MaZe':
+            output_files.file_output_field.write("iter,x,vacuum\n")
+        elif md_variables.method == 'PB MaZe':
+            output_files.file_output_field.write("iter,x,vacuum,solvent\n")
 
     if output_settings.print_performance:
         os.makedirs(path, exist_ok=True)
