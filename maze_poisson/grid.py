@@ -347,29 +347,28 @@ class Grid:
             r_hat = -rvec / r[:, None, :, :, :]
             x = r - radius[:, None, None, None]
 
-            H = np.zeros_like(r)
+            # H = np.ones_like(r)
+            H = np.full_like(r, np.nan)
             H_prime = np.zeros_like(r)
 
             if w == 0.0:
-                H = (r <= radius[:, None, None, None]).astype(np.float64)
+                H = (r >= radius[:, None, None, None]).astype(np.float64)
             else:
                 mask_inner = x <= -w
                 mask_outer = x >= w
                 mask_transition = (~mask_inner) & (~mask_outer)
                 x_t = x[mask_transition]
 
-                H[mask_inner] = 1.0
-                H[mask_outer] = 0.0
+                H[mask_inner] = 0.0
+                H[mask_outer] = 1.0
                 H[mask_transition] = (
-                    0.5 - 0.5 * x_t / w
-                    - (1.0 / (2.0 * np.pi)) * np.sin(np.pi * x_t / w)
+                    -(1 / (4 * w**3)) * (x_t + w)**3 + (3 / (4 * w**2)) * (x_t + w)**2
                 )
                 H_prime[mask_transition] = (
-                    -0.5 / w
-                    - (1.0 / (2.0 * w)) * np.cos(np.pi * x_t / w)
+                    (-3 / (4 * w**3)) * (x_t + w)**2 + (3 / (2 * w**2)) * (x_t + w)
                 )
-
-            H_total = np.clip(1.0 - np.prod(1.0 - H, axis=0), 0.0, 1.0)
+            
+            H_total = np.prod(H, axis=0)
             H_prime_total = np.sum(H_prime, axis=0)
 
             return H_total, H_prime_total, r_hat
@@ -402,6 +401,31 @@ class Grid:
         self.H_prime['center'] = Hpc
         self.H_mask['center'] = (Hc > 1e-6) & (Hc < 1 - 1e-6)
         self.r_hat['center'] = r_hatc
+        # i0 = int(np.rint(self.particles.pos[0,0] / h))
+
+        # line = self.H['center'][i0, :, self.N // 2]
+        # line_p = self.H_prime['center'][i0, :, self.N // 2]
+        # import matplotlib.pyplot as plt
+        # plt.plot(np.arange(self.N) * self.h * a0, line, label='H', marker='.', linestyle='-')
+        # plt.plot(np.arange(self.N) * self.h * a0, line_p, label='H_p', marker='.', linestyle='-')
+        # plt.xlabel('x [Å]')
+        # plt.axvline(self.particles.pos[0,0] * a0, label='x_1', color='m', linestyle=':')
+        # plt.axvline(self.particles.pos[1,0] * a0, label='x_2', color='k', linestyle=':')
+        # plt.axvline(a0 * (self.particles.pos[0,0] + self.particles.solvation_radii[0] - w), color='r', label='1) R - w')
+        # plt.axvline(a0 * (self.particles.pos[0,0] + self.particles.solvation_radii[0] + w), color='orange', label='1) R + w')
+        # plt.axvline(a0 * (self.particles.pos[0,0] - (self.particles.solvation_radii[0] - w)), color='r', label='1) R - w')
+        # plt.axvline(a0 * (self.particles.pos[0,0] - (self.particles.solvation_radii[0] + w)), color='orange', label='1) R + w')
+        # plt.axvline(a0 * (self.particles.pos[1,0] - (self.particles.solvation_radii[1] - w)), color='r', linestyle = '--', label='2) R - w')
+        # plt.axvline(a0 * (self.particles.pos[1,0] - (self.particles.solvation_radii[1] + w)), color='orange', linestyle = '--', label='2) R + w')
+        # plt.axvline(a0 * (self.particles.pos[1,0] + (self.particles.solvation_radii[1] - w)), color='r', linestyle = '--', label='2) R - w')
+        # plt.axvline(a0 * (self.particles.pos[1,0] + (self.particles.solvation_radii[1] + w)), color='orange', linestyle = '--', label='2) R + w')
+
+        # plt.legend()
+        # plt.xlim([0, 13.65])
+        # plt.ylabel('H')
+        # plt.title('H along x at y = z = center')
+        # plt.grid()
+        # plt.show()
 
     def UpdateEpsAndK2_transition(self):
         self.ComputeH()
@@ -409,10 +433,11 @@ class Grid:
         eps_s = self.eps_s
         kbar2 = self.kbar2
 
-        self.eps_x[...] = eps_s + (1.0 - eps_s) * self.H['x']
-        self.eps_y[...] = eps_s + (1.0 - eps_s) * self.H['y']
-        self.eps_z[...] = eps_s + (1.0 - eps_s) * self.H['z']
+        self.eps_x[...] = 1 + (eps_s - 1) * self.H['x']
+        self.eps_y[...] = 1 + (eps_s - 1) * self.H['y']
+        self.eps_z[...] = 1 + (eps_s - 1) * self.H['z']
         self.k2[...] = kbar2 * self.H['center']
+  
         # print(np.max(self.eps_x), np.min(self.eps_x))
         # print("H min/max:", self.H['x'].min(), self.H['x'].max())
         # print("H unique:", np.unique(self.H['x']))
