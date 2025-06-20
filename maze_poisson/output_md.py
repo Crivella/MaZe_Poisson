@@ -11,6 +11,7 @@ class OutputFiles:
     file_output_temperature = None
     file_output_solute = None
     file_output_tot_force = None
+    file_output_force = None
 
 open_files = []
 
@@ -73,7 +74,7 @@ def generate_output_files(grid, md_variables):
         if md_variables.method == 'Poisson MaZe':
             output_files.file_output_energy.write("iter,K,V_notelec\n")
         elif md_variables.method == 'PB MaZe':
-            output_files.file_output_energy.write("iter,K,V_notelec,DeltaG_nonpolar\n")
+            output_files.file_output_energy.write("iter,K,V_notelec,DeltaG_elec,DeltaG_nonpolar\n")
 
     if output_settings.print_temperature:
         os.makedirs(path, exist_ok=True)
@@ -87,7 +88,13 @@ def generate_output_files(grid, md_variables):
         # output_solute = os.path.join(path, 'solute_N' + str(N) +'_'+str(num_threads)+'.csv')
         output_solute = os.path.join(path, 'solute_N' + str(N) +'.csv')
         output_files.file_output_solute = generate_output_file(output_solute)
-        output_files.file_output_solute.write("charge,iter,particle,x,y,z,vx,vy,vz,fx_elec,fy_elec,fz_elec\n")
+        output_files.file_output_solute.write("charge,iter,particle,x,y,z,vx,vy,vz\n")
+    
+    if output_settings.print_components_force:
+        os.makedirs(path, exist_ok=True)
+        output_force = os.path.join(path, 'force_N' + str(N) +'.csv')
+        output_files.file_output_force = generate_output_file(output_force)
+        output_files.file_output_force.write("iter,particle,fx_RF,fy_RF,fz_RF,fx_DB,fy_DB,fz_DB,fx_IB,fy_IB,fz_IB,fx_NP,fy_NP,fz_NP\n")    
 
     if output_settings.print_tot_force:
         os.makedirs(path, exist_ok=True)

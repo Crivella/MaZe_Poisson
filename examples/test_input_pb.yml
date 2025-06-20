@@ -1,8 +1,8 @@
 # test file to run simulation with 16 ions of Na-Cl in implicit solvent (water)
 grid_setting:
-  N: 80                         # number of grid points in each direction         
-  N_p: 8                        # number of particles         
-  L: 31.6                       # Angstrom - box length per side
+  N: 65                         # number of grid points in each direction         
+  N_p: 2                        # number of particles         
+  L: 13.65                       # Angstrom - box length per side
   rescale_force: false          # rescaling of the force to have tot force = 0
   cas: 'CIC'                    # charge assignment scheme     
   eps_s: 80                     # dielectric constant of the solvent
@@ -11,10 +11,10 @@ grid_setting:
 
 md_variables:
   method: "PB MaZe"             # "Poisson MaZe" or "PB MaZe"
-  N_steps: 3                   # number of steps      
+  N_steps: 100                  # number of steps      
   T: 300                        # Kelvin - target temperature
-  dt_fs: 2                      # fs - time step
-  rescale: true                 # rescaling of the initial momenta to have tot momenta = 0, always true 
+  dt_fs: 2.5                      # fs - time step
+  rescale: false                 # rescaling of the initial momenta to have tot momenta = 0, always true 
   tol: 1.e-10                   # tol solver convergence 
   init_steps: 0                 # number of steps to initialize the system, 0 if you put restart = true  
   thermostat: false             # thermostat ON/OFF  
@@ -30,9 +30,10 @@ md_variables:
 output_settings: 
   restart: false                 # restart the simulation using the restart file 
   print_tot_force: true        # print sum of total forces on the particles
-  print_field: false            # print the electrostatic potential along the x axis
-  print_performance: true       # print performance of the simulation
+  print_field: true            # print the electrostatic potential along the x axis
+  print_performance: false       # print performance of the simulation
   print_solute: true           # print positions, velocities and electrostatic forces on the particles
   print_energy: true           # print kinetic and not electrostatic potential energy
-  print_temperature: true      # print temperature of the system
+  print_temperature: false      # print temperature of the system
+  print_components_force: true  # print components of all forces related to solvation
   generate_restart_file: false  # generate restart file at the end of the simulation

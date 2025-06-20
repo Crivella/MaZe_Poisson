@@ -8,6 +8,7 @@ from .constants import a0
 from .indices import GetDictTF
 from .profiling import profile
 
+import matplotlib.pyplot as plt
 
 class Particles:
     def __init__(self, grid, md_variables, charges, masses, positions, radii=None):
@@ -35,6 +36,10 @@ class Particles:
             # nonpolar parameters
             self.gamma_np = md_variables.gamma_np * 0.0065934 # from kcal/mol/A^2 to a.u.
             self.forces_np = np.zeros((self.N_p, 3), dtype=float) # Nonpolar forces
+            self.forces_rf = np.zeros_like(self.forces_np)
+            self.forces_db = np.zeros_like(self.forces_np)
+            self.forces_ib = np.zeros_like(self.forces_np)
+            
 
         # Additional attributes based on grid potential
         L = grid.L
@@ -294,67 +299,182 @@ class Particles:
 
     def ComputeForce_PB(self, prev):
         h = self.grid.h
+        L = self.grid.L
         phi_v = self.grid.phi_prev if prev else self.grid.phi
         phi_s = self.grid.phi_s_prev if prev else self.grid.phi_s
-
+        w = self.grid.w
+   
         #### REACTION FIELD FORCE ####
         delta_phi = phi_s - phi_v
 
-        E_x = (np.roll(delta_phi, -1, axis=0) - np.roll(delta_phi, 1, axis=0)) / (2 * h)
-        E_y = (np.roll(delta_phi, -1, axis=1) - np.roll(delta_phi, 1, axis=1)) / (2 * h)
-        E_z = (np.roll(delta_phi, -1, axis=2) - np.roll(delta_phi, 1, axis=2)) / (2 * h)
+        if self.grid.md_variables.benoit:
+            ### BENOIT'S VERSION ###
+            neigh_coords = self.neighbors * h  # (N_p, 8, 3)
 
-        neighbors = self.neighbors  # shape: (n_particles, 8, 3)
-        q_neighbors = self.grid.q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]  # (n_particles, 8)
+            # Compute r_alpha - r_i for all neighbors
+            # Shape: (N_p, 8, 3)
+            diffs = self.pos[:, None, :] - neigh_coords
 
-        E_neighbors = np.stack([
-            E_x[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
-            E_y[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
-            E_z[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
-        ], axis=-1)  # shape: (n_particles, 8, 3)
+            # Apply PBC to diffs
+            # diffs = diffs - L * np.rint(diffs / L)
 
-        forces_RF = -np.sum(q_neighbors[:, :, np.newaxis] * E_neighbors, axis=1)  # (n_particles, 3)
+            # Calcola g e g_prime per ciascuna componente (shape: N_p, 8)
+            gx  = g(diffs[..., 0], L, h)
+            gy  = g(diffs[..., 1], L, h)
+            gz  = g(diffs[..., 2], L, h)
+            gpx = g_prime(diffs[..., 0], L, h)
+            gpy = g_prime(diffs[..., 1], L, h)
+            gpz = g_prime(diffs[..., 2], L, h)
 
-        #### DIELECTRIC BOUNDARY FORCE (DB) ####
-        forces_DB = np.zeros_like(forces_RF)
+            # Ottieni i valori di delta_phi nei punti dei vicini: (N_p, 8)
+            ix = self.neighbors[:, :, 0]
+            iy = self.neighbors[:, :, 1]
+            iz = self.neighbors[:, :, 2]
+            delta_phi_values = delta_phi[ix, iy, iz]
 
-        grad_phi = {
-            'x': np.roll(phi_s, -1, axis=0) - phi_s,
-            'y': np.roll(phi_s, -1, axis=1) - phi_s,
-            'z': np.roll(phi_s, -1, axis=2) - phi_s
-        }
+            # Calcola la forza reaction field per ciascuna particella: (N_p, 3)
+            self.forces_rf = -self.charges[:, None] * np.stack([
+                np.sum(delta_phi_values * gpx * gy * gz, axis=1),
+                np.sum(delta_phi_values * gx * gpy * gz, axis=1),
+                np.sum(delta_phi_values * gx * gy * gpz, axis=1)
+            ], axis=1)  # shape: (N_p, 3)
+            
+            print('\nBenoit version:')
+            print(f"RF:  ({self.forces_rf[0][0]}, {self.forces_rf[0][1]}, {self.forces_rf[0][2]})")
+            print(f"     ({self.forces_rf[1][0]}, {self.forces_rf[1][1]}, {self.forces_rf[1][2]})\n")
+        else:
+            ### Electric field version ###
+            E_x = (np.roll(delta_phi, -1, axis=0) - np.roll(delta_phi, 1, axis=0)) / (2 * h)
+            E_y = (np.roll(delta_phi, -1, axis=1) - np.roll(delta_phi, 1, axis=1)) / (2 * h)
+            E_z = (np.roll(delta_phi, -1, axis=2) - np.roll(delta_phi, 1, axis=2)) / (2 * h)
 
-        for d in ['x', 'y', 'z']:
-            H     = self.grid.H[d]
-            Hp    = self.grid.H_prime[d]
-            mask  = self.grid.H_mask[d]
-            eps   = getattr(self.grid, f'eps_{d}')[mask]        # (M,)
-            dphi  = grad_phi[d][mask]                           # (M,)
-            Hval  = H[mask]
-            Hpval = Hp[mask]
-            coeff = (eps - 1.0) * Hpval / (Hval + 1e-12)         # (M,)
-            r_hat = self.grid.r_hat[d][:, :, mask]           # (Np, 3, M)
+            neighbors = self.neighbors  # shape: (n_particles, 8, 3)
+            q_neighbors = self.grid.q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]  # (n_particles, 8)
 
-            forces_DB += np.sum((coeff * dphi)[None, None, :] * r_hat, axis=2) * h / (8 * np.pi)
+            E_neighbors = np.stack([
+                E_x[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
+                E_y[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
+                E_z[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
+            ], axis=-1)  # shape: (n_particles, 8, 3)
 
-        #### IONIC BOUNDARY FORCE (IB) ####
-        H     = self.grid.H['center']
-        Hp    = self.grid.H_prime['center']
-        mask  = self.grid.H_mask['center']
-        k2    = self.grid.k2[mask]             # (M,)
-        phi   = phi_s[mask]                    # (M,)
-        Hval  = H[mask]
-        Hpval = Hp[mask]
-        d_k2  = k2 * Hpval / (Hval + 1e-12)    # (M,)
-        r_hat = self.grid.r_hat[d][:, :, mask]  # (Np, 3, M)
+            self.forces_rf = -np.sum(q_neighbors[:, :, np.newaxis] * E_neighbors, axis=1)  # (n_particles, 3)
+            
+            # print('FD version:')
+            # print(f"RF:  ({self.forces_rf[0][0]}, {self.forces_rf[0][1]}, {self.forces_rf[0][2]})")
+            # print(f"     ({self.forces_rf[1][0]}, {self.forces_rf[1][1]}, {self.forces_rf[1][2]})\n")
+            
 
-        forces_IB = np.sum((2 * d_k2 * phi)[None, None, :] * r_hat, axis=2) * h**3 / (8 * np.pi)
+        if w > 0:
+            #### DIELECTRIC BOUNDARY FORCE (DB) – Eq. (30) con H' e H_mask predefinita ####
+            self.forces_db = np.zeros_like(self.forces)  # (N_p, 3)
+            h = self.grid.h
+            # rhat = self.grid.r_hat['node']                 # (N_p, 3, Nx, Ny, Nz)
+            
+            for d, axis in zip(['x', 'y', 'z'], [0, 1, 2]):
+                eps = getattr(self.grid, f'eps_{d}')           # (Nx, Ny, Nz)
+                mask = self.grid.H_mask[d]                     # (N_p, Nx, Ny, Nz)
+                ratio = self.grid.H_ratio[d]                   # (N_p, Nx, Ny, Nz)
+                rhat = self.grid.r_hat[d]                 # (N_p, 3, Nx, Ny, Nz)
+
+                N = self.grid.N
+                
+                for a in range(self.N_p):
+                    mask_a = mask[a]
+                    ratio_a = ratio[a]
+                    rhat_a = rhat[a]  # (3, Nx, Ny, Nz)
+
+                    for i in range(N):
+                        for j in range(N):
+                            for k in range(N):
+                                
+                                # previous point (b) and next one (f) 
+                                if axis == 0:
+                                    i_b, j_b, k_b = (i - 1) % N, j, k
+                                    i_f, j_f, k_f = (i + 1) % N, j, k
+                                elif axis == 1:
+                                    i_b, j_b, k_b = i, (j - 1) % N, k
+                                    i_f, j_f, k_f = i, (j + 1) % N, k
+                                else:
+                                    i_b, j_b, k_b = i, j, (k - 1) % N
+                                    i_f, j_f, k_f = i, j, (k + 1) % N
+
+                                phi_center = phi_s[i, j, k]
+                                
+                                term_fwd = np.zeros(3)
+                                term_bwd = np.zeros(3)
+
+                                if mask_a[i_b,j_b,k_b]:
+                                    # phi(i_b, j_b, k_b) - phi(i, j, k)
+                                    dphi_bwd = phi_s[i_b, j_b, k_b] - phi_s[i, j, k]
+
+                                    # d eps(i_b, j_b , k_b) / d r_alpha
+                                    coeff_bwd = (eps[i_b, j_b, k_b] - 1.0) * ratio_a[i_b, j_b, k_b]
+                                    rhat_vec_bwd = rhat_a[:, i_b, j_b, k_b]  # direzione da particella → punto
+                                    der_eps_bwd = coeff_bwd * rhat_vec_bwd
+
+                                    # (phi(i_b, j_b, k_b) - phi(i, j, k)) * d eps(i_b, j_b , k_b) / d r_alpha
+                                    term_bwd = dphi_bwd * der_eps_bwd
+                                       
+                                if mask_a[i,j,k]:                               
+                                    # phi(i_f, j_f, k_f) - phi(i, j, k)
+                                    dphi_fwd = phi_s[i_f, j_f, k_f] - phi_s[i, j, k]
+
+                                    # d eps(i, j , k) / d r_alpha
+                                    coeff = (eps[i, j, k] - 1.0) * ratio_a[i, j, k]
+                                    rhat_vec = rhat_a[:, i, j, k]  # direzione da particella → punto
+                                    der_eps = coeff * rhat_vec
+                                    # (phi(i_f, j_f, k_f) - phi(i, j, k)) * d eps(i, j , k) / d r_alpha
+                                    term_fwd = dphi_fwd * der_eps
+                                
+                                contrib = phi_center * (term_bwd + term_fwd)     
+                                self.forces_db[a] -= contrib * h / (8 * np.pi)
+                                
+               
+                    
+            #### IONIC BOUNDARY FORCE (IB) ####
+            self.forces_ib = np.zeros((self.N_p, 3))  # (N_p, 3)
+            k2_grid = self.grid.k2
+            ratio = self.grid.H_ratio['node']        # (N_p, Nx, Ny, Nz)
+            mask  = self.grid.H_mask['node']         # (N_p, Nx, Ny, Nz)
+            rhat = self.grid.r_hat['node']
+
+            for a in range(self.N_p):
+                ratio_a = ratio[a]
+                mask_a = mask[a]
+                rhat_a = rhat[a]  # (3, Nx, Ny, Nz)
+
+                for i in range(N):
+                    for j in range(N):
+                        for k in range(N):
+                            if not mask_a[i, j, k]:
+                                continue
+
+                            phi_n = phi_s[i, j, k]
+                            k2_n = k2_grid[i, j, k]
+                            ratio_n = ratio_a[i, j, k]
+                            rhat_vec = rhat_a[:, i, j, k]
+
+                            contrib = phi_n**2 * k2_n * ratio_n * rhat_vec
+                            self.forces_ib[a] += contrib 
+
+            self.forces_ib * h**3 / (8 * np.pi)
+            # print(f"RF:  ({self.forces_rf[0][0]}, {self.forces_rf[0][1]}, {self.forces_rf[0][2]})")
+            # print(f"     ({self.forces_rf[1][0]}, {self.forces_rf[1][1]}, {self.forces_rf[1][2]})\n")
+
+            # print(f"DB:  ({self.forces_db[0][0]}, {self.forces_db[0][1]}, {self.forces_db[0][2]})")
+            # print(f"     ({self.forces_db[1][0]}, {self.forces_db[1][1]}, {self.forces_db[1][2]})\n")
+
+            # print(f"IB:  ({self.forces_ib[0][0]}, {self.forces_ib[0][1]}, {self.forces_ib[0][2]})")
+            # print(f"     ({self.forces_ib[1][0]}, {self.forces_ib[1][1]}, {self.forces_ib[1][2]})\n")   
+        else:
+            self.forces_db = np.zeros_like(self.forces)
+            self.forces_ib = np.zeros_like(self.forces)
+            # print(f"1) RF: ({forces_RF[0][0]}, {forces_RF[0][1]}, {forces_RF[0][2]})")
+            # print(f"2) RF: ({forces_RF[1][0]}, {forces_RF[1][1]}, {forces_RF[1][2]})\n")
 
         #### TOTAL FORCE ####
-        self.forces = forces_RF + forces_DB + forces_IB
-        print(f"1) RF: {forces_RF[0][0]}, DB: {forces_DB[0][0]}, IB: {forces_IB[0][0]}")
-        print(f"2) RF: {forces_RF[1][0]}, DB: {forces_DB[1][0]}, IB: {forces_IB[1][0]}\n")
-        # self.forces = forces_DB + forces_IB
+        self.forces = self.forces_rf + self.forces_db + self.forces_ib
+         # self.forces = forces_DB + forces_IB
 
         # Subtract mean force to remove net self-force
         # if self.grid.grid_setting.rescale_force:
@@ -362,18 +482,18 @@ class Particles:
         #     if np.any(net_force):
         #         self.forces -= net_force / self.forces.shape[0]
 
-
     def ComputeNonpolarEnergyAndForces(self):
         h = self.grid.h
+        N = self.grid.N
         eps_s = self.grid.eps_s
         gamma = self.gamma_np  # surface tension in a.u.
 
-        # --- Gradient of epsilon fields (central difference) ---
-        grad_eps_x = (np.roll(self.grid.eps_x, -1, axis=0) - np.roll(self.grid.eps_x, 1, axis=0)) / (2 * h)
-        grad_eps_y = (np.roll(self.grid.eps_y, -1, axis=1) - np.roll(self.grid.eps_y, 1, axis=1)) / (2 * h)
-        grad_eps_z = (np.roll(self.grid.eps_z, -1, axis=2) - np.roll(self.grid.eps_z, 1, axis=2)) / (2 * h)
+        # --- Gradient of epsilon fields ---
+        delta_eps_x = self.grid.eps_x - np.roll(self.grid.eps_x, 1, axis=0)
+        delta_eps_y = self.grid.eps_y - np.roll(self.grid.eps_y, 1, axis=1)
+        delta_eps_z = self.grid.eps_z - np.roll(self.grid.eps_z, 1, axis=2)
 
-        norm_grad_eps = np.sqrt(grad_eps_x**2 + grad_eps_y**2 + grad_eps_z**2) + 1e-12  # Avoid /0
+        norm_grad_eps = np.sqrt(delta_eps_x**2 + delta_eps_y**2 + delta_eps_z**2) / h  
 
         # --- Nonpolar energy ---
         S = (h**3 / (eps_s - 1)) * np.sum(norm_grad_eps)
@@ -383,31 +503,49 @@ class Particles:
         self.forces_np.fill(0.0)
         prefactor = -gamma * h / (eps_s - 1)
 
-        for d, grad_eps, eps_field in zip(
-            ['x', 'y', 'z'],
-            [grad_eps_x, grad_eps_y, grad_eps_z],
-            [self.grid.eps_x, self.grid.eps_y, self.grid.eps_z]
-        ):
-            mask = self.grid.H_mask[d]
-            norm_grad = norm_grad_eps[mask]         # (M,)
-            delta_eps = grad_eps[mask]              # (M,)
-            r_hat = self.grid.r_hat[d][:, :, mask]  # (Np, 3, M)
+        for d, axis in zip(['x', 'y', 'z'], [0, 1, 2]):
+            eps = getattr(self.grid, f'eps_{d}')
+            delta_eps = eps - np.roll(eps, 1, axis=axis)
 
-            H = self.grid.H[d][mask] + 1e-12
-            Hp = self.grid.H_prime[d][mask]
+            for a in range(self.N_p):
+                mask_a = self.grid.H_mask[d][a]             # (Nx, Ny, Nz) boolean
+                ratio_a = self.grid.H_ratio[d][a]           # (Nx, Ny, Nz)
+                rhat_a = self.grid.r_hat[d][a]              # (3, Nx, Ny, Nz)
 
-            # Safe ratio: avoid blow-up in solvent
-            coeff = np.where(H > 1e-4, Hp / H, 0.0)
+                for i in range(N):
+                    for j in range(N):
+                        for k in range(N):
+                            der_eps_bwd = np.zeros(3)
+                            der_eps = np.zeros_like(der_eps_bwd)
 
-            # Per-grid contribution
-            factor = (eps_field[mask] - 1.0) * coeff * delta_eps / norm_grad  # (M,)
-            self.forces_np += np.sum(factor[None, None, :] * r_hat, axis=2) * prefactor
+                            if axis == 0:
+                                i_b, j_b, k_b = (i - 1) % N, j, k
+                            elif axis == 1:
+                                i_b, j_b, k_b = i, (j - 1) % N, k
+                            elif axis == 2:
+                                i_b, j_b, k_b = i, j, (k - 1) % N
 
-        # Diagnostic: check if net force is conserved
-        f_tot = np.sum(self.forces_np, axis=0)
-        print("→ Nonpolar total force:", f_tot)
-        print("→ NP force on particle 1:", self.forces_np[0])
-        print("→ NP force on particle 2:", self.forces_np[1])
+                            delta_eps_contr = delta_eps[i,j,k]
+
+                            if norm_grad_eps[i,j,k] > 0.:
+                                inv_grad = 1 / norm_grad_eps[i,j,k]
+                            else:
+                                inv_grad = 0
+
+                            if mask_a[i, j, k]:                                
+                                der_eps = (eps[i,j,k] - 1.) * ratio_a[i,j,k] * rhat_a[:,i,j,k]
+
+
+                            if mask_a[i_b, j_b, k_b]:
+                                der_eps_bwd = (eps[i_b,j_b,k_b] - 1.) * ratio_a[i_b,j_b,k_b] * rhat_a[:,i_b,j_b,k_b]
+                            
+                            self.forces_np[a] += inv_grad * delta_eps_contr * (der_eps - der_eps_bwd)
+            
+        self.forces_np *= prefactor 
+
+        # Diagnostic
+        # print("NP: ", self.forces_np[0])
+        # print("    ", self.forces_np[1])
     
 # distance with periodic boundary conditions
 @profile
@@ -443,12 +581,12 @@ def g(x, L, h):
 # derivative of the weight function as defined in the paper Im et al. (1998) - eqn 27
 def g_prime(x, L, h):
     x = x - L * np.rint(x / L)
-    if x < 0:
-        return 1 / h
-    elif x == 0:
-        return 0
-    else:
-        return - 1 / h
+    result = np.zeros_like(x)
+
+    result[x < 0]  =  1 / h
+    result[x > 0]  = -1 / h
+    # result[x == 0] resta 0 (già inizializzato così)
+    return result
 
 
 def cubic_bspline(x, L, h):
@@ -487,3 +625,21 @@ def LJPotential(r, epsilon, sigma):
         V_mag = 4 * epsilon * ((sigma/r)**12 - (sigma/r)**6)
         return V_mag
 
+
+def safe_roll(arr, shift, axis):
+    result = np.zeros_like(arr)
+    if shift == 0:
+        return arr.copy()
+    elif shift > 0:
+        slicer_src = [slice(None)] * arr.ndim
+        slicer_dst = [slice(None)] * arr.ndim
+        slicer_src[axis] = slice(0, -shift)
+        slicer_dst[axis] = slice(shift, None)
+        result[tuple(slicer_dst)] = arr[tuple(slicer_src)]
+    else:
+        slicer_src = [slice(None)] * arr.ndim
+        slicer_dst = [slice(None)] * arr.ndim
+        slicer_src[axis] = slice(-shift, None)
+        slicer_dst[axis] = slice(0, shift)
+        result[tuple(slicer_dst)] = arr[tuple(slicer_src)]
+    return result

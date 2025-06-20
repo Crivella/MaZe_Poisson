@@ -7,7 +7,7 @@ from .output_md import generate_output_files
 from .particles import Particles, g, cubic_bspline, quadratic_bspline
 from scipy.constants import epsilon_0, k as k_B, N_A, elementary_charge as e, physical_constants
 
-
+import matplotlib.pyplot as plt
 ### grid class to represent the grid and the fields operating on it ###
 class Grid:
     def __init__(self, grid_setting, md_variables, output_settings):
@@ -103,7 +103,7 @@ class Grid:
             # transition region
             self.w = grid_setting.w / a0 # smoothing width for the solvation radius
             self.H = {}
-            self.H_prime = {}
+            self.H_ratio = {}
             self.H_mask = {}
             self.r_hat = {}
 
@@ -274,15 +274,20 @@ class Grid:
             exit() # exits running otherwise it hangs the code
                 
     # returns only kinetic energy and not electrostatic one
-    def Energy(self, iter, print_energy):
+    def Energy(self, iter, print_energy, prev=False):
         # kinetic E
         kinetic = 0.5 * np.sum(self.particles.masses * np.sum(self.particles.vel**2, axis=1))
         
+        if prev:
+            energy_elec = 0.5 * np.sum(self.q * (self.phi_s_prev - self.phi_prev))
+        else:
+            energy_elec = 0.5 * np.sum(self.q * (self.phi_s - self.phi))
+
         if print_energy:
             if self.method == 'Poisson MaZe':
                 self.output_files.file_output_energy.write(str(iter) + ',' +  str(kinetic) + ',' + str(self.potential_notelec) + '\n')
             elif self.method == 'PB MaZe':
-                self.output_files.file_output_energy.write(str(iter) + ',' + str(kinetic) + ',' + str(self.potential_notelec) + ',' + str(self.energy_np) + '\n')
+                self.output_files.file_output_energy.write(str(iter) + ',' + str(kinetic) + ',' + str(self.potential_notelec) + ',' + str(energy_elec) + ',' + str(self.energy_np) + '\n')
 
     def Temperature(self, iter, print_temperature):
         mi_vi2 = self.particles.masses * np.sum(self.particles.vel**2, axis=1)
@@ -291,44 +296,44 @@ class Grid:
         if print_temperature:
             self.output_files.file_output_temperature.write(str(iter) + ',' +  str(self.temperature) + '\n')
 
-    def ComputeMask(self, center_x, center_y, center_z):
-        X, Y, Z = np.meshgrid(center_x, center_y, center_z, indexing='ij')   # (N,N,N)
-        coords = np.stack([X, Y, Z], axis=0)[None]                            # shape (1, 3, N, N, N)
-        pos_exp = self.particles.pos[:, :, None, None, None]                                # shape (Np, 3, 1, 1, 1)
+    # def ComputeMask(self, center_x, center_y, center_z):
+    #     X, Y, Z = np.meshgrid(center_x, center_y, center_z, indexing='ij')   # (N,N,N)
+    #     coords = np.stack([X, Y, Z], axis=0)[None]                            # shape (1, 3, N, N, N)
+    #     pos_exp = self.particles.pos[:, :, None, None, None]                                # shape (Np, 3, 1, 1, 1)
 
-        delta = coords - pos_exp                                             # shape (Np, 3, N, N, N)
-        delta -= self.L * np.round(delta / self.L)                                     # apply PBC
-        r2 = np.sum(delta**2, axis=1)                                        # (Np, N, N, N)
-        return np.any(r2 <= self.particles.solvation_radii2[:, None, None, None], axis=0)            # (N, N, N)
+    #     delta = coords - pos_exp                                             # shape (Np, 3, N, N, N)
+    #     delta -= self.L * np.round(delta / self.L)                                     # apply PBC
+    #     r2 = np.sum(delta**2, axis=1)                                        # (Np, N, N, N)
+    #     return np.any(r2 <= self.particles.solvation_radii2[:, None, None, None], axis=0)            # (N, N, N)
 
-    def UpdateEpsAndK2(self):
-        N = self.N
-        h = self.h
+    # def UpdateEpsAndK2(self):
+    #     N = self.N
+    #     h = self.h
        
-        eps_s = self.eps_s
-        kbar2 = self.kbar2
+    #     eps_s = self.eps_s
+    #     kbar2 = self.kbar2
 
-        # Coordinates of voxel centers
-        centers = (np.arange(N) + 0.5) * h
+    #     # Coordinates of voxel centers
+    #     centers = (np.arange(N) + 0.5) * h
 
-        # k2 update
-        mask_k2 = self.ComputeMask(centers, centers, centers)
-        self.k2[...] = np.where(mask_k2, kbar2, 0.0)
+    #     # k2 update
+    #     mask_k2 = self.ComputeMask(centers, centers, centers)
+    #     self.k2[...] = np.where(mask_k2, kbar2, 0.0)
 
-        # eps_x at x + h/2
-        x_face = np.arange(N) * h + h/2
-        mask_x = self.ComputeMask(x_face, centers, centers)
-        self.eps_x[...] = np.where(mask_x, 1.0, eps_s)
+    #     # eps_x at x + h/2
+    #     x_face = np.arange(N) * h + h/2
+    #     mask_x = self.ComputeMask(x_face, centers, centers)
+    #     self.eps_x[...] = np.where(mask_x, 1.0, eps_s)
 
-        # eps_y at y + h/2
-        y_face = np.arange(N) * h + h/2
-        mask_y = self.ComputeMask(centers, y_face, centers)
-        self.eps_y[...] = np.where(mask_y, 1.0, eps_s)
+    #     # eps_y at y + h/2
+    #     y_face = np.arange(N) * h + h/2
+    #     mask_y = self.ComputeMask(centers, y_face, centers)
+    #     self.eps_y[...] = np.where(mask_y, 1.0, eps_s)
 
-        # eps_z at z + h/2
-        z_face = np.arange(N) * h + h/2
-        mask_z = self.ComputeMask(centers, centers, z_face)
-        self.eps_z[...] = np.where(mask_z, 1.0, eps_s)
+    #     # eps_z at z + h/2
+    #     z_face = np.arange(N) * h + h/2
+    #     mask_z = self.ComputeMask(centers, centers, z_face)
+    #     self.eps_z[...] = np.where(mask_z, 1.0, eps_s)
     
     def ComputeH(self):
         N, h = self.N, self.h
@@ -338,87 +343,95 @@ class Grid:
         radius = self.particles.solvation_radii
 
         def make_H_and_rhat(coord_x, coord_y, coord_z):
+            # Build meshgrid and shift by h/2 to place edges between grid nodes
             X, Y, Z = np.meshgrid(coord_x, coord_y, coord_z, indexing='ij')
-            coords = np.stack([X, Y, Z], axis=0)[None]  # (1, 3, N, N, N)
+            coords = np.stack([X, Y, Z], axis=0)[None]   # (1, 3, N, N, N)
 
-            rvec = coords - pos[:, :, None, None, None]
-            rvec -= L * np.round(rvec / L)
-            r = np.linalg.norm(rvec, axis=1) + 1e-12
-            r_hat = -rvec / r[:, None, :, :, :]
-            x = r - radius[:, None, None, None]
+            # Compute vector distances and apply PBC
+            rvec = coords - pos[:, :, None, None, None]  # (Np, 3, N, N, N)
+            rvec -= L * np.rint(rvec / L)
+            r = np.linalg.norm(rvec, axis=1) + 1e-12  # (Np, N, N, N)
 
-            # H = np.ones_like(r)
-            H = np.full_like(r, np.nan)
+            r_hat = -rvec / r[:, None, :, :, :]  # (Np, 3, N, N, N)
+            x = r - radius[:, None, None, None]  # (Np, N, N, N)
+
+            H_per_particle = np.zeros_like(r)
             H_prime = np.zeros_like(r)
 
             if w == 0.0:
-                H = (r >= radius[:, None, None, None]).astype(np.float64)
+                H_per_particle = (r >= radius[:, None, None, None]).astype(np.float64)
             else:
                 mask_inner = x <= -w
                 mask_outer = x >= w
-                mask_transition = (~mask_inner) & (~mask_outer)
+                mask_transition = (x > -w) & (x < w)
                 x_t = x[mask_transition]
 
-                H[mask_inner] = 0.0
-                H[mask_outer] = 1.0
-                H[mask_transition] = (
+                H_per_particle[mask_inner] = 0.0
+                H_per_particle[mask_outer] = 1.0
+                H_per_particle[mask_transition] = (
                     -(1 / (4 * w**3)) * (x_t + w)**3 + (3 / (4 * w**2)) * (x_t + w)**2
                 )
                 H_prime[mask_transition] = (
                     (-3 / (4 * w**3)) * (x_t + w)**2 + (3 / (2 * w**2)) * (x_t + w)
                 )
-            
-            H_total = np.prod(H, axis=0)
-            H_prime_total = np.sum(H_prime, axis=0)
 
-            return H_total, H_prime_total, r_hat
+            H_total = np.prod(H_per_particle, axis=0)  # (N, N, N)
 
-        coords = np.arange(N) * h               # i*h → face-centered
-        centers = (np.arange(N) + 0.5) * h      # (i+½)*h → center of cells
+            # Per-particle H'/H only in transition region
+            H_ratio = []
+            H_mask = []
+            for a in range(pos.shape[0]):
+                mask_a = (H_per_particle[a] > 1e-12) & (H_per_particle[a] < 1 - 1e-12)
+                ratio_a = np.zeros_like(H_per_particle[a])
+                ratio_a[mask_a] = H_prime[a][mask_a] / H_per_particle[a][mask_a]
+                H_ratio.append(ratio_a)
+                H_mask.append(mask_a)
 
+            return H_total, np.array(H_ratio), np.array(H_mask), r_hat
+
+        coords = np.arange(N) * h               # i*h → nodi della griglia
+        centers = (np.arange(N) + 0.5) * h      # (i+1/2)*h → centro delle celle
         self.H = {}
-        self.H_prime = {}
+        self.H_ratio = {}
         self.H_mask = {}
         self.r_hat = {}
 
-        # H at faces for ε_x, ε_y, ε_z
         grid_points = {
-            'x': (centers, coords, coords),  # (i+½, j, k)
-            'y': (coords, centers, coords),  # (i, j+½, k)
-            'z': (coords, coords, centers)   # (i, j, k+½)
+            'x': (centers, coords, coords),
+            'y': (coords, centers, coords),
+            'z': (coords, coords, centers)
         }
 
         for axis, (cx, cy, cz) in grid_points.items():
-            H, Hp, r_hat = make_H_and_rhat(cx, cy, cz)
-            self.H[axis] = H
-            self.H_prime[axis] = Hp
-            self.H_mask[axis] = (H > 1e-6) & (H < 1 - 1e-6)
+            H_total, H_ratio, H_mask, r_hat = make_H_and_rhat(cx, cy, cz)
+            self.H[axis] = H_total
+            self.H_ratio[axis] = H_ratio
+            self.H_mask[axis] = H_mask
             self.r_hat[axis] = r_hat
 
-        # H at cell centers for potential and k²
-        Hc, Hpc, r_hatc = make_H_and_rhat(centers, centers, centers)
-        self.H['center'] = Hc
-        self.H_prime['center'] = Hpc
-        self.H_mask['center'] = (Hc > 1e-6) & (Hc < 1 - 1e-6)
-        self.r_hat['center'] = r_hatc
-        # i0 = int(np.rint(self.particles.pos[0,0] / h))
-
-        # line = self.H['center'][i0, :, self.N // 2]
+        # H al centro dei nodi: serve per IB force (phi, k2 definiti sui nodi)
+        Hc, Hrc, Hmc, r_hatc = make_H_and_rhat(coords, coords, coords)
+        self.H['node'] = Hc
+        self.H_ratio['node'] = Hrc
+        self.H_mask['node'] = Hmc
+        self.r_hat['node'] = r_hatc
+        line = self.H['node'][:, self.N // 2, self.N // 2]
         # line_p = self.H_prime['center'][i0, :, self.N // 2]
-        # import matplotlib.pyplot as plt
+        
         # plt.plot(np.arange(self.N) * self.h * a0, line, label='H', marker='.', linestyle='-')
-        # plt.plot(np.arange(self.N) * self.h * a0, line_p, label='H_p', marker='.', linestyle='-')
+        # # plt.plot(np.arange(self.N) * self.h * a0, line_p, label='H_p', marker='.', linestyle='-')
         # plt.xlabel('x [Å]')
-        # plt.axvline(self.particles.pos[0,0] * a0, label='x_1', color='m', linestyle=':')
-        # plt.axvline(self.particles.pos[1,0] * a0, label='x_2', color='k', linestyle=':')
-        # plt.axvline(a0 * (self.particles.pos[0,0] + self.particles.solvation_radii[0] - w), color='r', label='1) R - w')
-        # plt.axvline(a0 * (self.particles.pos[0,0] + self.particles.solvation_radii[0] + w), color='orange', label='1) R + w')
-        # plt.axvline(a0 * (self.particles.pos[0,0] - (self.particles.solvation_radii[0] - w)), color='r', label='1) R - w')
-        # plt.axvline(a0 * (self.particles.pos[0,0] - (self.particles.solvation_radii[0] + w)), color='orange', label='1) R + w')
-        # plt.axvline(a0 * (self.particles.pos[1,0] - (self.particles.solvation_radii[1] - w)), color='r', linestyle = '--', label='2) R - w')
-        # plt.axvline(a0 * (self.particles.pos[1,0] - (self.particles.solvation_radii[1] + w)), color='orange', linestyle = '--', label='2) R + w')
-        # plt.axvline(a0 * (self.particles.pos[1,0] + (self.particles.solvation_radii[1] - w)), color='r', linestyle = '--', label='2) R - w')
-        # plt.axvline(a0 * (self.particles.pos[1,0] + (self.particles.solvation_radii[1] + w)), color='orange', linestyle = '--', label='2) R + w')
+        # plt.axvline(pos[0,0] * a0, label='$x_1$', color='k', linestyle='-')
+        
+        # plt.axvline(a0 * (pos[0,0] + radius[0] - w), color='r', label='$R_1$ - w')
+        # plt.axvline(a0 * (pos[0,0] + radius[0] + w), color='orange', label='$R_1$ + w')
+        # plt.axvline(a0 * (pos[0,0] - (radius[0] - w)), color='r')
+        # plt.axvline(a0 * (pos[0,0] - (radius[0] + w)), color='orange')
+        # plt.axvline(pos[1,0] * a0, label='$x_2$', color='k', linestyle='--')
+        # plt.axvline(a0 * (pos[1,0] - (radius[1] - w)), color='r', linestyle = '--', label='$R_2$ - w')
+        # plt.axvline(a0 * (pos[1,0] - (radius[1] + w)), color='orange', linestyle = '--', label='$R_2$ + w')
+        # plt.axvline(a0 * (pos[1,0] + (radius[1] - w)), color='r', linestyle = '--')
+        # plt.axvline(a0 * (pos[1,0] + (radius[1] + w)), color='orange', linestyle = '--')
 
         # plt.legend()
         # plt.xlim([0, 13.65])
@@ -433,10 +446,10 @@ class Grid:
         eps_s = self.eps_s
         kbar2 = self.kbar2
 
-        self.eps_x[...] = 1 + (eps_s - 1) * self.H['x']
-        self.eps_y[...] = 1 + (eps_s - 1) * self.H['y']
-        self.eps_z[...] = 1 + (eps_s - 1) * self.H['z']
-        self.k2[...] = kbar2 * self.H['center']
+        self.eps_x[...] = 1. + (eps_s - 1.) * self.H['x']
+        self.eps_y[...] = 1. + (eps_s - 1.) * self.H['y']
+        self.eps_z[...] = 1. + (eps_s - 1.) * self.H['z']
+        self.k2[...] = kbar2 * self.H['node']
   
         # print(np.max(self.eps_x), np.min(self.eps_x))
         # print("H min/max:", self.H['x'].min(), self.H['x'].max())

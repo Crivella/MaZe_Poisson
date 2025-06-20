@@ -20,6 +20,7 @@ class OutputSettings:
     print_temperature = None 
     print_tot_force = None 
     print_iters = False
+    print_components_force = None
     path = 'Outputs/'
     debug = False
     restart = None
@@ -128,7 +129,8 @@ class MDVariables:
         self.gamma_np = 0.0
         self.beta_np = 0.0
         self.probe_radius = 1.4
-        self.delta = np.array([0.005, 0., 0.]) /a0
+        self.delta = np.array([0.005, 0., 0.]) / a0
+        self.benoit = False
 
     @property
     def T(self):
