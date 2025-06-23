@@ -64,6 +64,7 @@ grid * grid_init(int n, double L, double h, double tol, int grid_type, int preco
 
 void grid_pb_init(grid *grid, double eps_s, double I, double w, double kbar2) {
     // Initialize the grid for Poisson-Boltzmann simulations
+    grid->pb_enabled = 1;  // Enable Poisson-Boltzmann
     grid->eps_s = eps_s;
     grid->I = I;
     grid->w = w;
@@ -72,13 +73,14 @@ void grid_pb_init(grid *grid, double eps_s, double I, double w, double kbar2) {
     // Initialize the solvent potential and dielectric constant arrays
     int n = grid->n;
     int n_local = grid->n_local;
+    grid->y_s = mpi_grid_allocate(n_local, n);
     grid->phi_s_prev = mpi_grid_allocate(n_local, n);
     grid->phi_s = mpi_grid_allocate(n_local, n);
 
     // long int eps_size = grid->size * 3;
-    grid->eps_x = (double *)malloc(grid->size * sizeof(double));
-    grid->eps_y = (double *)malloc(grid->size * sizeof(double));
-    grid->eps_z = (double *)malloc(grid->size * sizeof(double));
+    grid->eps_x = mpi_grid_allocate(n_local, n);
+    grid->eps_y = mpi_grid_allocate(n_local, n);
+    grid->eps_z = mpi_grid_allocate(n_local, n);
     #pragma omp parallel for
     for (long int i = 0; i < grid->size; i++) {
         grid->eps_x[i] = eps_s;  // Initialize the dielectric constant in x direction
@@ -89,6 +91,13 @@ void grid_pb_init(grid *grid, double eps_s, double I, double w, double kbar2) {
     grid->eps[1] = grid->eps_y;  // Assign y dielectric constant
     grid->eps[2] = grid->eps_z;  // Assign z dielectric constant
 
+    for (int i = 0; i < 5; i++) {
+        grid->H[i] = (double *)malloc(grid->size * sizeof(double));
+        grid->H_ratio[i] = (double *)malloc(grid->size * sizeof(double));
+        grid->H_mask[i] = (double *)malloc(grid->size * sizeof(double));
+        grid->r_hat[i] = (double *)malloc(grid->size * sizeof(double));
+    }
+
     grid->k2 = (double *)malloc(grid->size * sizeof(double));
     #pragma omp parallel for
     for (long int i = 0; i < grid->size; i++) {
@@ -97,13 +106,21 @@ void grid_pb_init(grid *grid, double eps_s, double I, double w, double kbar2) {
 }
 
 void grid_pb_free(grid *grid) {
-    if (grid->phi_s != NULL) {
+    if (grid->pb_enabled) {
+        mpi_grid_free(grid->y_s, grid->n);
         mpi_grid_free(grid->phi_s_prev, grid->n);
         mpi_grid_free(grid->phi_s, grid->n);
 
-        free(grid->eps_x);
-        free(grid->eps_y);
-        free(grid->eps_z);
+        mpi_grid_free(grid->eps_x, grid->n);
+        mpi_grid_free(grid->eps_y, grid->n);
+        mpi_grid_free(grid->eps_z, grid->n);
+
+        for (int i = 0; i < 5; i++) {
+            free(grid->H[i]);
+            free(grid->H_ratio[i]);
+            free(grid->H_mask[i]);
+            free(grid->r_hat[i]);
+        }
     }
 }
 
@@ -124,22 +141,6 @@ void grid_free(grid *grid) {
     free(grid);
 }
 
-void update_eps_and_k2_transition(grid *grid) {
-    // Update the dielectric constant and screening factor based on the grid's transition state
-    double eps_s = grid->eps_s;
-    double kbar2 = grid->kbar2;
-
-    int n = grid->n;
-    int n_local = grid->n_local;
-
-    #pragma omp parallel for
-    for (long int i = 0; i < grid->size; i++) {
-        grid->eps_x[i] = 1.0 + (eps_s - 1.0) * grid->H[0];  // Update x dielectric constant
-        grid->eps_y[i] = 1.0 + (eps_s - 1.0) * grid->H[1];  // Update y dielectric constant
-        grid->eps_z[i] = 1.0 + (eps_s - 1.0) * grid->H[2];  // Update z dielectric constant
-        grid->k2[i] = kbar2 * grid->H[5];  // Update screening factor
-    }
-}    
 
 void grid_compute_h(grid *grid, particles *particles) {
     // Compute the H function and its derivatives for the transition region
@@ -154,3 +155,22 @@ void grid_compute_h(grid *grid, particles *particles) {
     mpi_fprintf(stderr, "Computing H function not implemented yet\n");
     exit(1);
 }
+
+void grid_update_eps_and_k2(grid *grid, particles *particles) {
+    // Update the dielectric constant and screening factor based on the grid's transition regions
+    grid_compute_h(grid, particles);  // Compute the H function and its derivatives
+
+    double eps_s = grid->eps_s;
+    double kbar2 = grid->kbar2;
+
+    int n = grid->n;
+    int n_local = grid->n_local;
+
+    #pragma omp parallel for
+    for (long int i = 0; i < grid->size; i++) {
+        grid->eps_x[i] = 1.0 + (eps_s - 1.0) * grid->H[0][i];  // Update x dielectric constant
+        grid->eps_y[i] = 1.0 + (eps_s - 1.0) * grid->H[1][i];  // Update y dielectric constant
+        grid->eps_z[i] = 1.0 + (eps_s - 1.0) * grid->H[2][i];  // Update z dielectric constant
+        grid->k2[i] = kbar2 * grid->H[5][i];  // Update screening factor
+    }
+}    

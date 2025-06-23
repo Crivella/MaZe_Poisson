@@ -250,7 +250,7 @@ double compute_forces_reaction_field(
 
 double compute_forces_dielec_boundary(
     int n_grid, int n_p, double h, int num_neigh,
-    double *k2, double *H_ratio[], double *H_mask[], double *r_hat[],
+    double *eps[], double *k2, double *H_ratio[], double *H_mask[], double *r_hat[],
     double *forces_db
 ) {
     #pragma omp parallel for
@@ -278,4 +278,10 @@ double compute_forces_ionic_boundary(
 
     mpi_fprintf(stderr, "Warning: compute_forces_ionic_boundary is not implemented yet\n");
     exit(1);
+}
+
+double compute_forces_nonpolar(){
+    mpi_fprintf(stderr, "Warning: compute_forces_nonpolar is not implemented yet\n");
+    exit(1);
+    return 0.0;
 }

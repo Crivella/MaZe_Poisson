@@ -100,6 +100,11 @@ capi.register_function(
     'solver_update_field', ctypes.c_int, [],
 )
 
+# void solver_update_eps_k2() {
+capi.register_function(
+    'solver_update_eps_k2', None, [],
+)
+
 # void solver_compute_forces_elec() {
 capi.register_function(
     'solver_compute_forces_elec', None, [],
@@ -118,6 +123,11 @@ capi.register_function(
 # double solver_compute_forces_ionic_boundary() {
 capi.register_function(
     'solver_compute_forces_ionic_boundary', ctypes.c_double, [],
+)
+
+# double solver_compute_forces_nonpolar() {
+capi.register_function(
+    'solver_compute_forces_nonpolar', ctypes.c_double, [],
 )
 
 # void solver_compute_forces_tot() {

@@ -106,7 +106,6 @@ particles * particles_init(int n, int n_p, double L, double h, int cas_type) {
 }
 
 void particles_pb_init(particles *p, double gamma_np, double beta_np, double probe_radius) {
-    p->non_polar = 1;
     p->gamma_np = gamma_np;
     p->beta_np = beta_np;
     p->probe_radius = probe_radius;
@@ -119,7 +118,7 @@ void particles_pb_init(particles *p, double gamma_np, double beta_np, double pro
     // TODO: Initialize the solvation radii for each particle
 
     // Allocate forces for dielectric and ionic boundary conditions
-    // p->fcs_rf = (double *)calloc(p->n_p * 3, sizeof(double));  // Reaction field forces
+    p->fcs_np = (double *)calloc(p->n_p * 3, sizeof(double));  // Non-polar forces
     p->fcs_db = (double *)calloc(p->n_p * 3, sizeof(double));  // Dielectric boundary forces
     p->fcs_ib = (double *)calloc(p->n_p * 3, sizeof(double));  // Ionic boundary forces
     
@@ -132,6 +131,7 @@ void particles_pb_free(particles *p) {
         free(p->solv_radii);
         free(p->fcs_db);
         free(p->fcs_ib);
+        free(p->fcs_np);
     }
 }
 
@@ -394,6 +394,17 @@ double particles_compute_forces_ionic_boundary(particles *p, grid *grid) {
     return 0.0;
 }
 
+double particles_compute_forces_nonpolar(particles *p, grid *grid) {
+    if (p->fcs_np != NULL) {
+        return compute_forces_nonpolar(
+            // p->n, p->n_p, p->h, p->num_neighbors,
+            // p->gamma_np, p->beta_np, p->probe_radius,
+            // p->solv_radii, p->fcs_np
+        );
+    }
+    return 0.0;
+}
+
 void particles_compute_forces_tot(particles *p) {
     int size = p->n_p * 3;
     vec_copy(p->fcs_elec, p->fcs_tot, size);
@@ -406,7 +417,10 @@ void particles_compute_forces_tot(particles *p) {
     if (p->fcs_ib != NULL) {
         daxpy(p->fcs_ib, p->fcs_tot, 1.0, size);
     }
-}
+    if (p->fcs_np != NULL) {
+        daxpy(p->fcs_np, p->fcs_tot, 1.0, size);
+    }
+} 
 
 
 double particles_get_temperature(particles *p) {

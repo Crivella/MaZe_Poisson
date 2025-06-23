@@ -130,6 +130,11 @@ int solver_update_field() {
     return g_grid->update_field(g_grid);
 }
 
+void solver_update_eps_k2() {
+    // Update the dielectric constant and screening factor based on the grid's transition state
+    grid_update_eps_and_k2(g_grid, g_particles);
+}
+
 void solver_compute_forces_elec() {
     g_particles->compute_forces_field(g_particles, g_grid);
 }
@@ -138,18 +143,16 @@ double solver_compute_forces_noel() {
     return g_particles->compute_forces_noel(g_particles);
 }
 
-// double solver_compute_forces_pb() {
-//     if (g_particles->compute_forces_pb != NULL) {
-//         return g_particles->compute_forces_pb(g_particles, g_grid);
-//     }
-//     return 0.0;
-// }
 double solver_compute_forces_dielec_boundary() {
     return g_particles->compute_forces_dielec_boundary(g_particles, g_grid);
 }
 
 double solver_compute_forces_ionic_boundary() {
     return g_particles->compute_forces_ionic_boundary(g_particles, g_grid);
+}
+
+double solver_compute_forces_nonpolar() {
+    return g_particles->compute_forces_nonpolar(g_particles, g_grid);
 }
 
 void solver_compute_forces_tot() {

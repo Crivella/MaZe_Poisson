@@ -46,6 +46,7 @@ void grid_pb_init(grid *grid, double eps_s, double I, double w, double kbar2);
 void grid_pb_free(grid *grid);
 void particles_pb_init(particles *p, double gamma_np, double beta_np, double probe_radius);
 void particles_pb_free(particles *p);
+void grid_update_eps_and_k2(grid *grid, particles *particles);
 
 void lcg_grid_init(grid * grid);
 void lcg_grid_cleanup(grid * grid);
@@ -71,6 +72,7 @@ double particles_compute_forces_ld(particles *p);
 double particles_compute_forces_pb(particles *p, grid *grid);
 double particles_compute_forces_dielec_boundary(particles *p, grid *grid);
 double particles_compute_forces_ionic_boundary(particles *p, grid *grid);
+double particle_compute_forces_nonpolar(particles *p, grid *grid);
 void particles_compute_forces_tot(particles *p);
 
 double particles_get_temperature(particles *p);
@@ -119,10 +121,12 @@ struct grid {
     int precond_type;  // Type of the preconditioner
 
     // Poisson-Boltzmann specific
+    int pb_enabled;  // Poisson-Boltzmann enabled
     double eps_s;  // Dielectric constant of the solvent
     double I;  // Ionic strength
     double w;  // Ionic boundary width
     double kbar2;  // Screening factor
+    double *y_s;  // Intermediate field constraint for solvent
     double *k2;  // Screening factor
     double *phi_s_prev;  // Solvent potential
     double *phi_s;  // Solvent potential
@@ -130,7 +134,7 @@ struct grid {
     double *eps_y;  // Dielectric constant
     double *eps_z;  // Dielectric constant
     double *eps[3];  // Dielectric constant for x, y, z directions
-    double H[5];  // H values for x,y,z, center, node
+    double *H[5];  // H values for x,y,z, center, node
     double *H_ratio[5];
     double *H_mask[5];  // H mask for x,y,z, center, node
     double *r_hat[5];
@@ -171,13 +175,14 @@ struct particles {
     double *tf_params;  // Parameters for the TF potential (6 x n_p x n_p)
 
     // Poisson-Boltzmann specific
-    int non_polar;
+    // int non_polar;
     double gamma_np;
     double beta_np;
     double probe_radius;
     // double *fcs_rf; // Particle reaction field forces (n_p x 3)
     double *fcs_db; // Dielectric boundary forces (n_p x 3)
     double *fcs_ib; // Ionic boundary forces (n_p x 3)
+    double *fcs_np; // Non-polar forces (n_p x 3)
     double *solv_radii; // Solvation radii for each particle (n_p)
 
     void    (*free)( particles *);
@@ -194,6 +199,7 @@ struct particles {
     void    (*compute_forces_tot)( particles *);
     double  (*compute_forces_dielec_boundary)( particles *, grid *);
     double  (*compute_forces_ionic_boundary)( particles *, grid *);
+    double (*compute_forces_nonpolar)( particles *, grid *);
 
     double  (*get_temperature)( particles *);
     double  (*get_kinetic_energy)( particles *);

@@ -108,6 +108,21 @@ void lcg_grid_init_field(grid *grid) {
         grid->phi_n[i] = constant * grid->q[i];
     }
     conj_grad(grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n);
+
+    if (grid->pb_enabled) {
+        memcpy(grid->phi_s_prev, grid->phi_s, grid->size * sizeof(double));
+
+        #pragma omp parallel for
+        for (i = 0; i < grid->size; i++) {
+            grid->y_s[i] = 0.0;
+            grid->phi_s[i] = constant * grid->q[i];
+        }
+
+        conj_grad_pb(
+            grid->phi_s, grid->y_s, grid->phi_s, grid->tol, grid->n_local, grid->n,
+            grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
+        );
+    }
 }
 
 int lcg_grid_update_field(grid *grid) {
@@ -131,6 +146,14 @@ int lcg_grid_update_field(grid *grid) {
             break;
         default:
             break;
+    }
+
+    if (grid->pb_enabled) {
+        verlet_poisson_pb(
+            grid->tol, grid->h, grid->phi_s, grid->phi_s_prev, grid->q, grid->y_s,
+            grid->n_local, grid->n,
+            grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
+        );
     }
     return verlet_poisson(
         grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,

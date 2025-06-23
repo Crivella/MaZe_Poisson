@@ -225,6 +225,8 @@ class SolverMD(Logger):
             # STEP 0 Verlet
             self.logger.debug("---- Udpating charges")
             self.update_charges()
+
+            self.update_eps_k2()
             # if self.mdv.preconditioning:
             self.logger.debug("---- Initializing field")
             self.initialize_field()
@@ -236,6 +238,8 @@ class SolverMD(Logger):
             self.integrator_part1()
             self.logger.debug("---- Updating charges")
             self.update_charges()
+
+            self.update_eps_k2()
             # if self.mdv.preconditioning:
             self.logger.debug("---- Initializing field")
             self.initialize_field()
@@ -254,6 +258,12 @@ class SolverMD(Logger):
 
         if self.mdv.rescale:
             capi.solver_rescale_velocities()
+
+    @Clock('update_eps_k2')
+    def update_eps_k2(self):
+        """Update the k^2 grid for Poisson-Boltzmann."""
+        if self.mdv.poisson_boltzmann:
+            capi.solver_update_eps_k2()
 
     @Clock('field')
     def initialize_field(self):
@@ -279,6 +289,7 @@ class SolverMD(Logger):
         if self.mdv.poisson_boltzmann:
             self.compute_forces_dielec_boundary()
             self.compute_forces_ionic_boundary()
+            self.compute_forces_nonpolar()
         capi.solver_compute_forces_tot()
 
     @Clock('forces_field')
@@ -300,6 +311,11 @@ class SolverMD(Logger):
     def compute_forces_ionic_boundary(self):
         """Compute the forces on the particles due to ionic boundary."""
         self.potential_ionic = capi.solver_compute_forces_ionic_boundary()
+
+    @Clock('forces_nonpolar')
+    def compute_forces_nonpolar(self):
+        """Compute the forces on the particles due to non-polar interactions."""
+        self.potential_nonpolar = capi.solver_compute_forces_nonpolar()
 
     @Clock('file_output')
     def md_loop_output(self, i: int, force: bool = False):
@@ -327,6 +343,7 @@ class SolverMD(Logger):
         """Run one iteration of the molecular dynamics loop."""
         self.integrator_part1()
         if self.mdv.elec:
+            self.update_eps_k2()
             self.update_charges()
             self.n_iters = self.update_field()
             self.t_iters = Clock.get_clock('field').last_call

@@ -28,4 +28,6 @@ double compute_forces_ionic_boundary(
     double *forces_ib
 );
 
+double compute_forces_nonpolar();
+
 #endif
