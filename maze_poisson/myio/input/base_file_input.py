@@ -53,6 +53,7 @@ class OutputSettings(BaseSettings):
         self.print_energy = False
         self.print_temperature = False
         self.print_tot_force = False
+        self.print_force = False
         self.print_restart = False
         self.print_restart_field = False
         self.path = 'Outputs/'
@@ -78,6 +79,13 @@ class GridSetting(BaseSettings):
 
         self.precond = 'NONE'
         self.smoother = 'LCG'
+
+        # Poisson-Boltzmann specific
+        self.rescale_force = None
+        self.eps_s = 80  # Relative permittivity of the solvent (water by default)
+        self.I = None
+        self._w = None
+        self._w_ang = None
         
     @property
     def N(self):
@@ -120,6 +128,27 @@ class GridSetting(BaseSettings):
             self.h = self.L / self.N
 
     @property
+    def w(self):
+        return self._w
+    @L.setter
+    def w(self, value):
+        """Set the width of the transition region in atomic units."""
+        if value <= 0:
+            raise ValueError("Width must be positive.")
+        self._w = value
+        self._w_ang = value * a0  # Convert to Angstroms if needed
+    @property
+    def w_ang(self):
+        return self._w_ang
+    @w_ang.setter
+    def w_ang(self, value):
+        """Set the width of the transition region in Angstroms."""
+        if value <= 0:
+            raise ValueError("Width must be positive.")
+        self._w_ang = value
+        self._w = value / a0  # Convert to atomic units if needed
+
+    @property
     def file(self):
         return self.restart_file or self.input_file
 
@@ -144,6 +173,16 @@ class MDVariables(BaseSettings):
         self.tol = 1e-7
         self.gamma = 1e-3
         self._invert_time = False
+
+        # Poisson-Boltzmann specific
+        self.poisson_boltzmann = False
+        self.non_polar = False
+        self.gamma_np = 0.0
+        self.beta_np = 0.0
+        self.probe_radius = 1.4
+        # I think used for manual dynamics?
+        # self.delta = np.array([0.005, 0., 0.]) / a0  # TODO: Rename for clarity
+        # self.benoit = False  # TODO: This is probably just a debug option?
     
     @property
     def T(self):

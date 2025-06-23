@@ -3,14 +3,11 @@
 #include <string.h>
 #include <math.h>
 
+#include "constants.h"
 #include "charges.h"
 #include "laplace.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
 
 #ifdef __MPI
 void lcg_grid_init_mpi(grid *grid) {

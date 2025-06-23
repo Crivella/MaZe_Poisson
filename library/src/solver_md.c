@@ -37,8 +37,15 @@ void solver_initialize() {
     mpi_printf("******************************************************\n");
 }
 
-void solver_initialize_grid(int n_grid, double L, double h, double tol, int grid_type, int precond_type) {
+void solver_initialize_grid(
+    int n_grid, double L, double h, double tol, int grid_type, int precond_type
+) {
     g_grid = grid_init(n_grid, L, h, tol, grid_type, precond_type);
+}
+
+void solver_initialize_grid_pois_boltz(double eps_s, double I, double w, double kbar2) {
+    // Initialize the solvent potential and dielectric constant arrays
+    grid_pb_init(g_grid, eps_s, I, w, kbar2);
 }
 
 void solver_initialize_particles(
@@ -53,6 +60,11 @@ void solver_initialize_particles(
     memcpy(g_particles->charges, charges, n_p * sizeof(long int));
     
     g_particles->init_potential(g_particles, pot_type);
+}
+
+void solver_initialize_particles_pois_boltz(double gamma_np, double beta_np, double probe_radius) {
+    particles_pb_init(g_particles, gamma_np, beta_np, probe_radius);
+    // g_particles->update_nearest_neighbors(g_particles);
 }
 
 void solver_initialize_integrator(int n_p, double dt, double T, double gamma, int itg_type, int itg_enabled) {
@@ -124,6 +136,20 @@ void solver_compute_forces_elec() {
 
 double solver_compute_forces_noel() {
     return g_particles->compute_forces_noel(g_particles);
+}
+
+// double solver_compute_forces_pb() {
+//     if (g_particles->compute_forces_pb != NULL) {
+//         return g_particles->compute_forces_pb(g_particles, g_grid);
+//     }
+//     return 0.0;
+// }
+double solver_compute_forces_dielec_boundary() {
+    return g_particles->compute_forces_dielec_boundary(g_particles, g_grid);
+}
+
+double solver_compute_forces_ionic_boundary() {
+    return g_particles->compute_forces_ionic_boundary(g_particles, g_grid);
 }
 
 void solver_compute_forces_tot() {

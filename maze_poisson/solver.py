@@ -7,9 +7,9 @@ from typing import Dict
 import numpy as np
 import pandas as pd
 
+from . import constants as cst
 from .c_api import capi
 from .clocks import Clock
-from .constants import a0, conv_mass
 from .myio import OutputFiles, ProgressBar
 from .myio.input import GridSetting, MDVariables, OutputSettings
 from .myio.loggers import Logger
@@ -135,7 +135,19 @@ class SolverMD(Logger):
 
         grid_id = method_grid_map[method]
         precond_id = precond_map[precond]
-        capi.solver_initialize_grid(self.N, self.L, self.h, self.mdv.tol, grid_id, precond_id)
+        capi.solver_initialize_grid(
+            self.N, self.L, self.h, self.mdv.tol,
+            grid_id, precond_id
+        )
+
+        if self.mdv.poisson_boltzmann:
+            eps_s = self.gset.eps_s
+            I = self.gset.I
+            kbar2 = (8 * np.pi * cst.NA * cst.EC**2 * I * 1e3) / (eps_s * cst.eps0 * cst.kB_si * self.mdv.T) * cst.BR ** 2
+            self.logger.info("Initializing grid for Poisson-Boltzmann.")
+            capi.solver_initialize_grid_pois_boltz(
+                self.gset.eps_s, self.gset.I, self.gset.w_ang, kbar2
+            )
 
     def initialize_particles(self):
         """Initialize the particles."""
@@ -157,8 +169,8 @@ class SolverMD(Logger):
 
         df = pd.read_csv(start_file)
         charges = np.ascontiguousarray(df['charge'].values, dtype=np.int64)
-        mass = np.ascontiguousarray(df['mass'].values * conv_mass, dtype=np.float64)
-        pos = np.ascontiguousarray(df[['x', 'y', 'z']].values / a0, dtype=np.float64)
+        mass = np.ascontiguousarray(df['mass'].values * cst.conv_mass, dtype=np.float64)
+        pos = np.ascontiguousarray(df[['x', 'y', 'z']].values / cst.a0, dtype=np.float64)
 
         if not pos.size:
             raise ValueError(f"Empty or incorrect input file `{start_file}`.")
@@ -180,9 +192,14 @@ class SolverMD(Logger):
             )
         capi.solver_initialize_particles(
             self.N, self.L, self.h, self.N_p,
-            pot_id, ca_scheme_id,
-            pos, vel, mass, charges
+            pot_id, ca_scheme_id, pos, vel, mass, charges
         )
+
+        if self.mdv.poisson_boltzmann:
+            self.logger.info("Initializing particles for Poisson-Boltzmann.")
+            capi.solver_initialize_particles_pois_boltz(
+                self.mdv.gamma_np, self.mdv.beta_np, self.mdv.probe_radius
+            )
 
     def initialize_integrator(self):
         """Initialize the MD integrator."""
@@ -259,6 +276,9 @@ class SolverMD(Logger):
             self.compute_forces_field()
         if self.mdv.not_elec:
             self.compute_forces_notelec()
+        if self.mdv.poisson_boltzmann:
+            self.compute_forces_dielec_boundary()
+            self.compute_forces_ionic_boundary()
         capi.solver_compute_forces_tot()
 
     @Clock('forces_field')
@@ -270,6 +290,16 @@ class SolverMD(Logger):
     def compute_forces_notelec(self):
         """Compute the forces on the particles due to non-electric interactions."""
         self.potential_notelec = capi.solver_compute_forces_noel()
+
+    @Clock('forces_dielec_boundary')
+    def compute_forces_dielec_boundary(self):
+        """Compute the forces on the particles due to Poisson-Boltzmann interactions."""
+        self.potential_dielec = capi.solver_compute_forces_dielec_boundary()
+
+    @Clock('forces_ionic_boundary')
+    def compute_forces_ionic_boundary(self):
+        """Compute the forces on the particles due to ionic boundary."""
+        self.potential_ionic = capi.solver_compute_forces_ionic_boundary()
 
     @Clock('file_output')
     def md_loop_output(self, i: int, force: bool = False):
@@ -356,3 +386,19 @@ class SolverMD(Logger):
         self.logger.info(f'  Elec: {self.mdv.elec}    NotElec: {self.mdv.not_elec}')
         self.logger.info(f'  Temperature: {self.mdv.T} K,  Thermostat: {self.mdv.thermostat},  Gamma: {self.mdv.gamma}')
         self.logger.info(f'  Velocity rescaling: {self.mdv.rescale}')
+        if self.mdv.poisson_boltzmann:
+            w_ang = self.gset.w_ang
+            h_ang = self.gset.h * cst.a0
+            self.logger.info('  ***************************************')
+            self.logger.info('  Poisson-Boltzmann: ENABLED')
+            self.logger.info(f'  Transition region width: {w_ang} A')
+            if 2 * w_ang < h_ang:
+                self.logger.warning(
+                    f'  Warning: transition region width ({w_ang:.2f} A) is smaller than grid spacing ({h_ang:.2f} A)'
+                )
+            self.logger.info(f'  Ionic strength: {self.gset.I} M')
+            self.logger.info(f'  Solvent dielectric constant: {self.gset.eps_s}')
+            self.logger.info(f'  Gamma NP: {self.mdv.gamma_np}')
+            self.logger.info(f'  Beta NP: {self.mdv.beta_np}')
+
+

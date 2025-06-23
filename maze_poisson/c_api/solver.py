@@ -21,6 +21,16 @@ capi.register_function(
     ],
 )
 
+# void solver_initialize_grid_pois_boltz(double eps_s, double I, double w, double kbar2) {
+capi.register_function(
+    'solver_initialize_grid_pois_boltz', None, [
+        ctypes.c_double,
+        ctypes.c_double,
+        ctypes.c_double,
+        ctypes.c_double,
+    ],
+)
+
 # void solverinitialize_particles(
 #     int n, double L, double h, int n_p, int pot_type, int cas_type,
 #     double *pos, double *vel, double *mass, long int *charges
@@ -37,6 +47,15 @@ capi.register_function(
         npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.int64, ndim=1, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void solver_initialize_particles_pois_boltz(double gamma_np, double beta_np, double probe_radius) {
+capi.register_function(
+    'solver_initialize_particles_pois_boltz', None, [
+        ctypes.c_double,
+        ctypes.c_double,
+        ctypes.c_double,
     ],
 )
 
@@ -89,6 +108,16 @@ capi.register_function(
 # double solver_compute_forces_noel() {
 capi.register_function(
     'solver_compute_forces_noel', ctypes.c_double, [],
+)
+
+# double solver_compute_forces_dielec_boundary() {
+capi.register_function(
+    'solver_compute_forces_dielec_boundary', ctypes.c_double, [],
+)
+
+# double solver_compute_forces_ionic_boundary() {
+capi.register_function(
+    'solver_compute_forces_ionic_boundary', ctypes.c_double, [],
 )
 
 # void solver_compute_forces_tot() {

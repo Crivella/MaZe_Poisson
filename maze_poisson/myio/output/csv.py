@@ -66,10 +66,27 @@ class MomentumCSVOutputFile(CSVOutputFile):
             'Pz': [momentum[2]]
         })
 
+class TotForcesCSVOutputFile(CSVOutputFile):
+    name = 'forces'
+    headers = ['iter', 'Fx', 'Fy', 'Fz']
+    def get_data(self, iter: int, solver):
+        forces = np.empty((solver.N_p, 3), dtype=np.float64)
+        capi.get_fcs_tot(forces)
+        df = pd.DataFrame(forces.sum(axis=0).reshape(1,3), columns=['Fx', 'Fy', 'Fz'])
+        df['iter'] = iter
+        return df
+
 class ForcesCSVOutputFile(CSVOutputFile):
     name = 'forces'
     headers = ['iter', 'Fx', 'Fy', 'Fz']
     def get_data(self, iter: int, solver):
+        # if output_settings.print_components_force:
+        #     os.makedirs(path, exist_ok=True)
+        #     output_force = os.path.join(path, 'force_N' + str(N) +'.csv')
+        #     output_files.file_output_force = generate_output_file(output_force)
+        #     output_files.file_output_force.write("iter,particle,fx_RF,fy_RF,fz_RF,fx_DB,fy_DB,fz_DB,fx_IB,fy_IB,fz_IB,fx_NP,fy_NP,fz_NP\n")    
+
+        raise NotImplementedError("TODO")
         forces = np.empty((solver.N_p, 3), dtype=np.float64)
         capi.get_fcs_tot(forces)
         df = pd.DataFrame(forces.sum(axis=0).reshape(1,3), columns=['Fx', 'Fy', 'Fz'])
@@ -161,7 +178,8 @@ OutputFiles.register_format(
         'momentum': MomentumCSVOutputFile,
         'temperature': TemperatureCSVOutputFile,
         'solute': SolutesCSVOutputFile,
-        'tot_force': ForcesCSVOutputFile,
+        'tot_force': TotForcesCSVOutputFile,
+        'force': ForcesCSVOutputFile,
         'restart': RestartCSVOutputFile,
         'restart_field': RestartFieldCSVOutputFile
     }

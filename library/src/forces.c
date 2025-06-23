@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include "mpi_base.h"
+#include "linalg.h"
 
 // /*
 // Compute the forces on each particle by computing the field from the potential using finite differences.
@@ -182,3 +183,99 @@ double compute_tf_forces(int n_p, double L, double *pos, double B, double *param
     return potential_energy / 2;
 }
 
+/*
+Rescale the forces on each particle so that the total force is zero.
+Remove from each force the average force on all particles.
+
+@param n_grid: the number of grid points in each dimension
+@param n_p: the number of particles
+@param forces: the forces on each particle to rescale (n_p, 3)
+*/
+void rescale_forces(int n_grid, int n_p, double *forces) {
+    double sum_x = 0.0, sum_y = 0.0, sum_z = 0.0;
+    double avg_x, avg_y, avg_z;
+
+    #pragma omp parallel for reduction(+:sum_x, sum_y, sum_z)
+    for (int i = 0; i < n_p; i++) {
+        int idx = i * 3;
+        sum_x += forces[idx];
+        sum_y += forces[idx + 1];
+        sum_z += forces[idx + 2];
+    }
+
+    avg_x = sum_x / n_p;
+    avg_y = sum_y / n_p;
+    avg_z = sum_z / n_p;
+
+    #pragma omp parallel for
+    for (int i = 0; i < n_p; i++) {
+        int idx = i * 3;
+        forces[idx] -= avg_x;
+        forces[idx + 1] -= avg_y;
+        forces[idx + 2] -= avg_z;
+    }
+}
+
+/*
+Compute the reaction force using the finite difference method.
+
+@param n_grid: the number of grid points in each dimension
+@param n_p: the number of particles
+@param h: the grid spacing
+@param num_neigh: the number of neighbors for each particle
+@param phi_v: the potential field of size n_grid * n_grid * n_grid (elect pot in vacuum)
+@param phi_s: the potential field of size n_grid * n_grid * n_grid (elect pot in solvent)
+*/
+double compute_forces_reaction_field(
+    int n_grid, int n_p, double h, int num_neigh,
+    double *phi_v, double *phi_s, long int *neighbors, long int *charges, double *pos,
+    double *forces_rf, double (*g)(double, double, double)
+) {
+    int n_loc = get_n_loc();
+
+    double *delta_phi = mpi_grid_allocate(n_loc, n_grid);
+
+    long int n3 = n_loc * n_grid * n_grid;
+
+    vec_copy(phi_s, delta_phi, n3);
+    daxpy(phi_v, delta_phi, -1.0, n3);  // delta_phi = phi_s - phi_v
+
+    compute_force_fd(
+        n_grid, n_p, h, num_neigh,
+        delta_phi, neighbors, charges, pos, forces_rf, g
+    );
+
+    mpi_grid_free(delta_phi, n_grid);
+}
+
+double compute_forces_dielec_boundary(
+    int n_grid, int n_p, double h, int num_neigh,
+    double *k2, double *H_ratio[], double *H_mask[], double *r_hat[],
+    double *forces_db
+) {
+    #pragma omp parallel for
+    for (int i = 0; i < n_p; i++) {
+        forces_db[i * 3] = 0.0;
+        forces_db[i * 3 + 1] = 0.0;
+        forces_db[i * 3 + 2] = 0.0;
+    }
+
+    mpi_fprintf(stderr, "Warning: compute_forces_dielec_boundary is not implemented yet\n");
+    exit(1);
+}
+
+double compute_forces_ionic_boundary(
+    int n_grid, int n_p, double h, int num_neigh,
+    double *k2, double *H_ratio[], double *H_mask[], double *r_hat[],
+    double *forces_ib
+) {
+    #pragma omp parallel for
+    for (int i = 0; i < n_p; i++) {
+        forces_ib[i * 3] = 0.0;
+        forces_ib[i * 3 + 1] = 0.0;
+        forces_ib[i * 3 + 2] = 0.0;
+    }
+
+    mpi_fprintf(stderr, "Warning: compute_forces_ionic_boundary is not implemented yet\n");
+    exit(1);
+}

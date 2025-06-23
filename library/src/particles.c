@@ -3,6 +3,7 @@
 // #include <string.h>
 #include <math.h>
 
+#include "linalg.h"
 #include "charges.h"
 #include "constants.h"
 #include "forces.h"
@@ -79,6 +80,10 @@ particles * particles_init(int n, int n_p, double L, double h, int cas_type) {
     p->mass = (double *)malloc(n_p * sizeof(double));
     p->charges = (long int *)malloc(n_p * sizeof(long int));
 
+    p->fcs_db = NULL;
+    p->fcs_ib = NULL;
+    p->solv_radii = NULL;
+
     // p->neighbors = (long int *)malloc(n_p * 24 * sizeof(long int));
     particle_charges_init(p, cas_type);
 
@@ -100,6 +105,36 @@ particles * particles_init(int n, int n_p, double L, double h, int cas_type) {
     return p;
 }
 
+void particles_pb_init(particles *p, double gamma_np, double beta_np, double probe_radius) {
+    p->non_polar = 1;
+    p->gamma_np = gamma_np;
+    p->beta_np = beta_np;
+    p->probe_radius = probe_radius;
+
+    p->compute_forces_field = particles_compute_forces_pb;
+    p->compute_forces_dielec_boundary = particles_compute_forces_dielec_boundary;
+    p->compute_forces_ionic_boundary = particles_compute_forces_ionic_boundary;
+
+    p->solv_radii = (double *)malloc(p->n_p * sizeof(double));
+    // TODO: Initialize the solvation radii for each particle
+
+    // Allocate forces for dielectric and ionic boundary conditions
+    // p->fcs_rf = (double *)calloc(p->n_p * 3, sizeof(double));  // Reaction field forces
+    p->fcs_db = (double *)calloc(p->n_p * 3, sizeof(double));  // Dielectric boundary forces
+    p->fcs_ib = (double *)calloc(p->n_p * 3, sizeof(double));  // Ionic boundary forces
+    
+    // // Initialize the potential for Poisson-Boltzmann
+    // p->init_potential(p, PARTICLE_POTENTIAL_TYPE_LD);
+}
+
+void particles_pb_free(particles *p) {
+    if (p->solv_radii != NULL) {
+        free(p->solv_radii);
+        free(p->fcs_db);
+        free(p->fcs_ib);
+    }
+}
+
 void particles_free(particles *p) {
     free(p->pos);
     free(p->vel);
@@ -112,6 +147,9 @@ void particles_free(particles *p) {
     if (p->tf_params != NULL) {
         free(p->tf_params);
     }
+
+    particles_pb_free(p);
+
     free(p);
 }
 
@@ -318,14 +356,55 @@ double particles_compute_forces_ld(particles *p) {
     return 0.0;
 }
 
+double particles_compute_forces_pb(particles *p, grid *grid) {
+    compute_forces_reaction_field(
+        p->n, p->n_p, p->h, p->num_neighbors,
+        grid->phi_n, grid->phi_s, p->neighbors, p->charges, p->pos,
+        p->fcs_elec, p->charges_spread_func
+    );
+}
+
+double particles_compute_forces_dielec_boundary(particles *p, grid *grid) {
+    if (grid->w == 0.0) {
+        // If the dielectric boundary is not set, we do not compute forces
+        return 0.0;
+    }
+    if (p->fcs_db != NULL) {
+        compute_forces_dielec_boundary(
+            p->n, p->n_p, p->h, p->num_neighbors,
+            grid->k2, grid->H_ratio, grid->H_mask, grid->r_hat,
+            p->fcs_db
+        );
+    }
+    return 0.0;
+}
+
+double particles_compute_forces_ionic_boundary(particles *p, grid *grid) {
+    if (grid->w == 0.0) {
+        // If the dielectric boundary is not set, we do not compute forces
+        return 0.0;
+    }
+    if (p->fcs_ib != NULL) {
+        return compute_forces_ionic_boundary(
+            p->n, p->n_p, p->h, p->num_neighbors,
+            grid->k2, grid->H_ratio, grid->H_mask, grid->r_hat,
+            p->fcs_ib
+        );
+    }
+    return 0.0;
+}
+
 void particles_compute_forces_tot(particles *p) {
-    int ni;
-    #pragma omp parallel for private(ni)
-    for (int i = 0; i < p->n_p; i++) {
-        ni = i * 3;
-        for (int j = 0; j < 3; j++) {
-            p->fcs_tot[ni + j] = p->fcs_elec[ni + j] + p->fcs_noel[ni + j];
-        }
+    int size = p->n_p * 3;
+    vec_copy(p->fcs_elec, p->fcs_tot, size);
+    if (p->fcs_noel != NULL) {
+        daxpy(p->fcs_noel, p->fcs_tot, 1.0, size);
+    }
+    if (p->fcs_db != NULL) {
+        daxpy(p->fcs_db, p->fcs_tot, 1.0, size);
+    }
+    if (p->fcs_ib != NULL) {
+        daxpy(p->fcs_ib, p->fcs_tot, 1.0, size);
     }
 }
 

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "constants.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
 #include "linalg.h"
@@ -10,10 +11,6 @@
 #define EXTERN_C extern "C"                                                           
 #else
 #define EXTERN_C
-#endif
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
 #endif
 
 /*
