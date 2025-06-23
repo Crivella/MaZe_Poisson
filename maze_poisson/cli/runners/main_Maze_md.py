@@ -167,7 +167,6 @@ def main(grid_setting, output_settings, md_variables):
     # grid.UpdateEpsAndK2()
     if method == 'PB MaZe':
         grid.UpdateEpsAndK2_transition()
-    # plot_H_field_with_regions(grid, grid.H['center'])
     
     # initialize the electrostatic field with CG                  
     if preconditioning == "Yes":
@@ -198,17 +197,14 @@ def main(grid_setting, output_settings, md_variables):
     elif md_variables.integrator == 'VV':
         grid.particles = VerletSolutePart1(grid, thermostat=thermostat)
     elif md_variables.integrator == 'manual':
-        grid.particles.pos[0,:] += md_variables.delta
-        grid.particles.pos[1,:] -= md_variables.delta
-        #logger.info('Thermostat is not applied')
+        # grid.particles.pos[0,:] += md_variables.delta
+        grid.particles.pos[1,:] += md_variables.delta
 
     # compute 8 nearest neighbors for any particle
     grid.particles.NearestNeighbors()
-    #logger.info('Nearest neighbours calculated')
 
     # set charges with the weight function
     grid.SetCharges()
-    #logger.info("Charges set with weight function")
     
     # update dielectric and screening vectors 
     # grid.UpdateEpsAndK2()
@@ -231,9 +227,9 @@ def main(grid_setting, output_settings, md_variables):
 
         if elec:
             if method == 'Poisson MaZe':
-                grid.particles.ComputeForce_FD(prev=True) 
+                grid.particles.ComputeForce_FD() 
             elif method == 'PB MaZe':
-                grid.particles.ComputeForce_PB(prev=True)
+                grid.particles.ComputeForce_PB()
         
         if non_polar and method == 'PB MaZe':
             grid.particles.ComputeNonpolarEnergyAndForces()
@@ -281,8 +277,8 @@ def main(grid_setting, output_settings, md_variables):
         elif md_variables.integrator == 'VV':
             grid.particles = VerletSolutePart1(grid, thermostat = thermostat)
         elif md_variables.integrator == 'manual':
-            grid.particles.pos[0,:] += md_variables.delta
-            grid.particles.pos[1,:] -= md_variables.delta
+            # grid.particles.pos[0,:] += md_variables.delta
+            grid.particles.pos[1,:] += md_variables.delta
 
         if elec:
             # compute 8 nearest neighbors for any particle
@@ -316,9 +312,9 @@ def main(grid_setting, output_settings, md_variables):
 
             if elec:
                 if method == 'Poisson MaZe':
-                    grid.particles.ComputeForce_FD(prev=True) 
+                    grid.particles.ComputeForce_FD() 
                 elif method == 'PB MaZe':
-                    grid.particles.ComputeForce_PB(prev=True)
+                    grid.particles.ComputeForce_PB()
             
             if non_polar and method == 'PB MaZe':
                 grid.particles.ComputeNonpolarEnergyAndForces()
