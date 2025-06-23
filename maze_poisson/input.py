@@ -126,11 +126,11 @@ class MDVariables:
         self.gamma = 1e-3 # OVRVO parameter
         self.method = None
         self.non_polar = False
-        self.gamma_np = 0.0
-        self.beta_np = 0.0
+        self.gamma_np = None
+        self.beta_np = None
         self.probe_radius = 1.4
         self.delta = np.array([0.005, 0., 0.]) / a0
-        self.benoit = False
+        self.benoit = False # to check Benoit's formula for the reaction field force
 
     @property
     def T(self):

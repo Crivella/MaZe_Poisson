@@ -336,6 +336,7 @@ class Grid:
     #     self.eps_z[...] = np.where(mask_z, 1.0, eps_s)
     
     def ComputeH(self):
+        "Compute the H function and its derivatives for the transition region."
         N, h = self.N, self.h
         L = self.L
         w = self.w
@@ -415,9 +416,8 @@ class Grid:
         self.H_ratio['node'] = Hrc
         self.H_mask['node'] = Hmc
         self.r_hat['node'] = r_hatc
-        line = self.H['node'][:, self.N // 2, self.N // 2]
-        # line_p = self.H_prime['center'][i0, :, self.N // 2]
         
+        # line = self.H['node'][:, self.N // 2, self.N // 2]
         # plt.plot(np.arange(self.N) * self.h * a0, line, label='H', marker='.', linestyle='-')
         # # plt.plot(np.arange(self.N) * self.h * a0, line_p, label='H_p', marker='.', linestyle='-')
         # plt.xlabel('x [Å]')
@@ -450,10 +450,6 @@ class Grid:
         self.eps_y[...] = 1. + (eps_s - 1.) * self.H['y']
         self.eps_z[...] = 1. + (eps_s - 1.) * self.H['z']
         self.k2[...] = kbar2 * self.H['node']
-  
-        # print(np.max(self.eps_x), np.min(self.eps_x))
-        # print("H min/max:", self.H['x'].min(), self.H['x'].max())
-        # print("H unique:", np.unique(self.H['x']))
 
     # def ComputeH(self, center_coords):
     #     pos = self.particles.pos

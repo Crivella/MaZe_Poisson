@@ -298,6 +298,7 @@ class Particles:
         ])
 
     def ComputeForce_PB(self, prev):
+        ''' Compute electrostatic forces (DB and IB from Eq. (30) - (32)) from Im., RF from our approach'''
         h = self.grid.h
         L = self.grid.L
         phi_v = self.grid.phi_prev if prev else self.grid.phi
@@ -339,9 +340,9 @@ class Particles:
                 np.sum(delta_phi_values * gx * gy * gpz, axis=1)
             ], axis=1)  # shape: (N_p, 3)
             
-            print('\nBenoit version:')
-            print(f"RF:  ({self.forces_rf[0][0]}, {self.forces_rf[0][1]}, {self.forces_rf[0][2]})")
-            print(f"     ({self.forces_rf[1][0]}, {self.forces_rf[1][1]}, {self.forces_rf[1][2]})\n")
+            # print('\nBenoit version:')
+            # print(f"RF:  ({self.forces_rf[0][0]}, {self.forces_rf[0][1]}, {self.forces_rf[0][2]})")
+            # print(f"     ({self.forces_rf[1][0]}, {self.forces_rf[1][1]}, {self.forces_rf[1][2]})\n")
         else:
             ### Electric field version ###
             E_x = (np.roll(delta_phi, -1, axis=0) - np.roll(delta_phi, 1, axis=0)) / (2 * h)
@@ -365,10 +366,9 @@ class Particles:
             
 
         if w > 0:
-            #### DIELECTRIC BOUNDARY FORCE (DB) – Eq. (30) con H' e H_mask predefinita ####
+            #### DIELECTRIC BOUNDARY FORCE (DB) – Eq. (30) ####
             self.forces_db = np.zeros_like(self.forces)  # (N_p, 3)
             h = self.grid.h
-            # rhat = self.grid.r_hat['node']                 # (N_p, 3, Nx, Ny, Nz)
             
             for d, axis in zip(['x', 'y', 'z'], [0, 1, 2]):
                 eps = getattr(self.grid, f'eps_{d}')           # (Nx, Ny, Nz)
@@ -427,11 +427,12 @@ class Particles:
                                     term_fwd = dphi_fwd * der_eps
                                 
                                 contrib = phi_center * (term_bwd + term_fwd)     
-                                self.forces_db[a] -= contrib * h / (8 * np.pi)
-                                
-               
+                                self.forces_db[a] -= contrib #* h / (8 * np.pi)
+            
+            self.forces_db *= h / (8 * np.pi)
+                                  
                     
-            #### IONIC BOUNDARY FORCE (IB) ####
+            #### IONIC BOUNDARY FORCE (IB) - Eq.(32) ####
             self.forces_ib = np.zeros((self.N_p, 3))  # (N_p, 3)
             k2_grid = self.grid.k2
             ratio = self.grid.H_ratio['node']        # (N_p, Nx, Ny, Nz)
@@ -474,7 +475,6 @@ class Particles:
 
         #### TOTAL FORCE ####
         self.forces = self.forces_rf + self.forces_db + self.forces_ib
-         # self.forces = forces_DB + forces_IB
 
         # Subtract mean force to remove net self-force
         # if self.grid.grid_setting.rescale_force:
@@ -483,6 +483,7 @@ class Particles:
         #         self.forces -= net_force / self.forces.shape[0]
 
     def ComputeNonpolarEnergyAndForces(self):
+        ''' Compute non polar energy (Eq. 34) and forces (Eq. 36)'''
         h = self.grid.h
         N = self.grid.N
         eps_s = self.grid.eps_s
@@ -534,7 +535,6 @@ class Particles:
 
                             if mask_a[i, j, k]:                                
                                 der_eps = (eps[i,j,k] - 1.) * ratio_a[i,j,k] * rhat_a[:,i,j,k]
-
 
                             if mask_a[i_b, j_b, k_b]:
                                 der_eps_bwd = (eps[i_b,j_b,k_b] - 1.) * ratio_a[i_b,j_b,k_b] * rhat_a[:,i_b,j_b,k_b]
