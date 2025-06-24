@@ -297,7 +297,7 @@ class Particles:
             np.sum(phi_values * g_x * g_y * g_prime_z)
         ])
 
-    def ComputeForce_PB(self, prev):
+    def ComputeForce_PB(self, prev=False):
         ''' Compute electrostatic forces (DB and IB from Eq. (30) - (32)) from Im., RF from our approach'''
         h = self.grid.h
         L = self.grid.L
@@ -458,7 +458,7 @@ class Particles:
                             contrib = phi_n**2 * k2_n * ratio_n * rhat_vec
                             self.forces_ib[a] += contrib 
 
-            self.forces_ib * h**3 / (8 * np.pi)
+            self.forces_ib *= h**3 / (8 * np.pi)
             # print(f"RF:  ({self.forces_rf[0][0]}, {self.forces_rf[0][1]}, {self.forces_rf[0][2]})")
             # print(f"     ({self.forces_rf[1][0]}, {self.forces_rf[1][1]}, {self.forces_rf[1][2]})\n")
 

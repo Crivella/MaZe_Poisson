@@ -198,7 +198,7 @@ def main(grid_setting, output_settings, md_variables):
         grid.particles = VerletSolutePart1(grid, thermostat=thermostat)
     elif md_variables.integrator == 'manual':
         # grid.particles.pos[0,:] += md_variables.delta
-        grid.particles.pos[1,:] += md_variables.delta
+        grid.particles.pos[1,:] -= md_variables.delta
 
     # compute 8 nearest neighbors for any particle
     grid.particles.NearestNeighbors()
@@ -278,7 +278,7 @@ def main(grid_setting, output_settings, md_variables):
             grid.particles = VerletSolutePart1(grid, thermostat = thermostat)
         elif md_variables.integrator == 'manual':
             # grid.particles.pos[0,:] += md_variables.delta
-            grid.particles.pos[1,:] += md_variables.delta
+            grid.particles.pos[1,:] -= md_variables.delta
 
         if elec:
             # compute 8 nearest neighbors for any particle
