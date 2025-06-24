@@ -410,7 +410,7 @@ def PrecondLinearConjGradPoisson_PB(b, grid, x0 = None, tol=1e-10, print_iters=F
         x0 = np.zeros_like(b)
     P_inv = - 1 / 6
     x = np.copy(x0)
-    r = MatrixVectorProduct_PB(x, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2) - b
+    r = MatrixVectorProduct_PB(x, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2 * grid.h**2) - b
     v = P_inv * r  
     p = -v
     
@@ -425,7 +425,7 @@ def PrecondLinearConjGradPoisson_PB(b, grid, x0 = None, tol=1e-10, print_iters=F
         # if print_iters:
         #     output_file.write(str(iter) + ',' + str(np.max(np.abs(r_new))) + ',' + str(np.linalg.norm(np.abs(r_new))) + "\n") #+ ',' + str(end_Matrix - start_Matrix) + "\n")
         
-        Ap = MatrixVectorProduct_PB(p, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2) # A @ d for row-by-column product
+        Ap = MatrixVectorProduct_PB(p, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2 * grid.h**2) # A @ d for row-by-column product
         r_dot_v = np.sum(r * v)
         alpha = r_dot_v / np.sum(p * Ap)
         x = alpha * p + x
@@ -452,7 +452,7 @@ def VerletPB(grid, y, tol):
     grid.phi_s_prev = tmp
 
     # compute the constraint with the provisional value of the field phi
-    matrixmult = MatrixVectorProduct_PB(grid.phi_s, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2)
+    matrixmult = MatrixVectorProduct_PB(grid.phi_s, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2 * grid.h**2)
     sigma_p = grid.q + h / (4 * np.pi) * matrixmult  # M @ grid.phi for row-by-column product
 
     # apply LCG
