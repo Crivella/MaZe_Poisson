@@ -196,9 +196,12 @@ class SolverMD(Logger):
         )
 
         if self.mdv.poisson_boltzmann:
+            if 'radius' not in df.columns:
+                raise ValueError("Probe radius must be provided in the input file for Poisson-Boltzmann.")
+            radius = np.ascontiguousarray(df['radius'].values, dtype=np.float64) + self.mdv.probe_radius_au
             self.logger.info("Initializing particles for Poisson-Boltzmann.")
             capi.solver_initialize_particles_pois_boltz(
-                self.mdv.gamma_np, self.mdv.beta_np, self.mdv.probe_radius
+                self.mdv.gamma_np_au, self.mdv.beta_np, radius
             )
 
     def initialize_integrator(self):

@@ -180,6 +180,7 @@ class MDVariables(BaseSettings):
         self.gamma_np = 0.0
         self.beta_np = 0.0
         self.probe_radius = 1.4
+
         # I think used for manual dynamics?
         # self.delta = np.array([0.005, 0., 0.]) / a0  # TODO: Rename for clarity
         # self.benoit = False  # TODO: This is probably just a debug option?
@@ -220,6 +221,16 @@ class MDVariables(BaseSettings):
             self._dt_fs = dt_fs
             self.dt = dt_fs / t_au
         self._invert_time = value
+
+    @property
+    def probe_radius_au(self):
+        """Return the probe radius in internal units for the code (atomic units)."""
+        return self.probe_radius / a0
+
+    @property
+    def gamma_np_au(self):
+        """Return the non-polarization gamma in internal units for the code (atomic units)."""
+        return self.gamma_np * 0.0065934 # from kcal/mol/A^2 to a.u.
 
 def mpi_file_loader(func):
     @wraps(func)

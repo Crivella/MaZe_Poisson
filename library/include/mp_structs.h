@@ -44,7 +44,7 @@ void integrator_free(integrator *integrator);
 
 void grid_pb_init(grid *grid, double eps_s, double I, double w, double kbar2);
 void grid_pb_free(grid *grid);
-void particles_pb_init(particles *p, double gamma_np, double beta_np, double probe_radius);
+void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
 void particles_pb_free(particles *p);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
 
@@ -176,9 +176,9 @@ struct particles {
 
     // Poisson-Boltzmann specific
     // int non_polar;
+    int pb_enabled;  // Poisson-Boltzmann enabled
     double gamma_np;
     double beta_np;
-    double probe_radius;
     // double *fcs_rf; // Particle reaction field forces (n_p x 3)
     double *fcs_db; // Dielectric boundary forces (n_p x 3)
     double *fcs_ib; // Ionic boundary forces (n_p x 3)

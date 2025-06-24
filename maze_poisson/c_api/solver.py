@@ -50,12 +50,12 @@ capi.register_function(
     ],
 )
 
-# void solver_initialize_particles_pois_boltz(double gamma_np, double beta_np, double probe_radius) {
+# void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
 capi.register_function(
     'solver_initialize_particles_pois_boltz', None, [
         ctypes.c_double,
         ctypes.c_double,
-        ctypes.c_double,
+        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
     ],
 )
 

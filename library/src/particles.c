@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-// #include <string.h>
+#include <string.h>
 #include <math.h>
 
 #include "linalg.h"
@@ -80,6 +80,7 @@ particles * particles_init(int n, int n_p, double L, double h, int cas_type) {
     p->mass = (double *)malloc(n_p * sizeof(double));
     p->charges = (long int *)malloc(n_p * sizeof(long int));
 
+    p->pb_enabled = 0;  // Poisson-Boltzmann not enabled by default
     p->fcs_db = NULL;
     p->fcs_ib = NULL;
     p->solv_radii = NULL;
@@ -105,17 +106,17 @@ particles * particles_init(int n, int n_p, double L, double h, int cas_type) {
     return p;
 }
 
-void particles_pb_init(particles *p, double gamma_np, double beta_np, double probe_radius) {
+void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii) {
+    p->pb_enabled = 1;  // Enable Poisson-Boltzmann
     p->gamma_np = gamma_np;
     p->beta_np = beta_np;
-    p->probe_radius = probe_radius;
 
     p->compute_forces_field = particles_compute_forces_pb;
     p->compute_forces_dielec_boundary = particles_compute_forces_dielec_boundary;
     p->compute_forces_ionic_boundary = particles_compute_forces_ionic_boundary;
 
     p->solv_radii = (double *)malloc(p->n_p * sizeof(double));
-    // TODO: Initialize the solvation radii for each particle
+    memcpy(p->solv_radii, solv_radii, p->n_p * sizeof(double));
 
     // Allocate forces for dielectric and ionic boundary conditions
     p->fcs_np = (double *)calloc(p->n_p * 3, sizeof(double));  // Non-polar forces
@@ -127,7 +128,7 @@ void particles_pb_init(particles *p, double gamma_np, double beta_np, double pro
 }
 
 void particles_pb_free(particles *p) {
-    if (p->solv_radii != NULL) {
+    if (p->pb_enabled) {
         free(p->solv_radii);
         free(p->fcs_db);
         free(p->fcs_ib);
