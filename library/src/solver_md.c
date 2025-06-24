@@ -43,9 +43,9 @@ void solver_initialize_grid(
     g_grid = grid_init(n_grid, L, h, tol, grid_type, precond_type);
 }
 
-void solver_initialize_grid_pois_boltz(double eps_s, double I, double w, double kbar2) {
+void solver_initialize_grid_pois_boltz(double eps_s, double w, double kbar2) {
     // Initialize the solvent potential and dielectric constant arrays
-    grid_pb_init(g_grid, eps_s, I, w, kbar2);
+    grid_pb_init(g_grid, eps_s, w, kbar2);
 }
 
 void solver_initialize_particles(
@@ -142,16 +142,8 @@ double solver_compute_forces_noel() {
     return g_particles->compute_forces_noel(g_particles);
 }
 
-double solver_compute_forces_dielec_boundary() {
-    return g_particles->compute_forces_dielec_boundary(g_particles, g_grid);
-}
-
-double solver_compute_forces_ionic_boundary() {
-    return g_particles->compute_forces_ionic_boundary(g_particles, g_grid);
-}
-
-double solver_compute_forces_nonpolar() {
-    return g_particles->compute_forces_nonpolar(g_particles, g_grid);
+double solver_compute_forces_pb() {
+    return g_particles->compute_forces_pb(g_particles, g_grid);
 }
 
 void solver_compute_forces_tot() {

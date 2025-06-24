@@ -130,7 +130,7 @@ class GridSetting(BaseSettings):
     @property
     def w(self):
         return self._w
-    @L.setter
+    @w.setter
     def w(self, value):
         """Set the width of the transition region in atomic units."""
         if value <= 0:

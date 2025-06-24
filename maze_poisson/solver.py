@@ -142,11 +142,10 @@ class SolverMD(Logger):
 
         if self.mdv.poisson_boltzmann:
             eps_s = self.gset.eps_s
-            I = self.gset.I
-            kbar2 = (8 * np.pi * cst.NA * cst.EC**2 * I * 1e3) / (eps_s * cst.eps0 * cst.kB_si * self.mdv.T) * cst.BR ** 2
+            kbar2 = (8 * np.pi * cst.NA * cst.EC**2 * self.gset.I * 1e3) / (eps_s * cst.eps0 * cst.kB_si * self.mdv.T) * cst.BR ** 2
             self.logger.info("Initializing grid for Poisson-Boltzmann.")
             capi.solver_initialize_grid_pois_boltz(
-                self.gset.eps_s, self.gset.I, self.gset.w_ang, kbar2
+                self.gset.eps_s, self.gset.w, kbar2
             )
 
     def initialize_particles(self):
@@ -198,7 +197,7 @@ class SolverMD(Logger):
         if self.mdv.poisson_boltzmann:
             if 'radius' not in df.columns:
                 raise ValueError("Probe radius must be provided in the input file for Poisson-Boltzmann.")
-            radius = np.ascontiguousarray(df['radius'].values, dtype=np.float64) + self.mdv.probe_radius_au
+            radius = np.ascontiguousarray(df['radius'].values, dtype=np.float64) / cst.a0 + self.mdv.probe_radius_au
             self.logger.info("Initializing particles for Poisson-Boltzmann.")
             capi.solver_initialize_particles_pois_boltz(
                 self.mdv.gamma_np_au, self.mdv.beta_np, radius
@@ -290,9 +289,7 @@ class SolverMD(Logger):
         if self.mdv.not_elec:
             self.compute_forces_notelec()
         if self.mdv.poisson_boltzmann:
-            self.compute_forces_dielec_boundary()
-            self.compute_forces_ionic_boundary()
-            self.compute_forces_nonpolar()
+            self.compute_forces_pb()
         capi.solver_compute_forces_tot()
 
     @Clock('forces_field')
@@ -305,20 +302,10 @@ class SolverMD(Logger):
         """Compute the forces on the particles due to non-electric interactions."""
         self.potential_notelec = capi.solver_compute_forces_noel()
 
-    @Clock('forces_dielec_boundary')
-    def compute_forces_dielec_boundary(self):
+    @Clock('forces_PBoltz')
+    def compute_forces_pb(self):
         """Compute the forces on the particles due to Poisson-Boltzmann interactions."""
-        self.potential_dielec = capi.solver_compute_forces_dielec_boundary()
-
-    @Clock('forces_ionic_boundary')
-    def compute_forces_ionic_boundary(self):
-        """Compute the forces on the particles due to ionic boundary."""
-        self.potential_ionic = capi.solver_compute_forces_ionic_boundary()
-
-    @Clock('forces_nonpolar')
-    def compute_forces_nonpolar(self):
-        """Compute the forces on the particles due to non-polar interactions."""
-        self.potential_nonpolar = capi.solver_compute_forces_nonpolar()
+        self.potential_pb = capi.solver_compute_forces_pb()
 
     @Clock('file_output')
     def md_loop_output(self, i: int, force: bool = False):

@@ -42,7 +42,7 @@ void grid_free(grid *grid);
 void particles_free(particles *p);
 void integrator_free(integrator *integrator);
 
-void grid_pb_init(grid *grid, double eps_s, double I, double w, double kbar2);
+void grid_pb_init(grid *grid, double eps_s, double w, double kbar2);
 void grid_pb_free(grid *grid);
 void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
 void particles_pb_free(particles *p);
@@ -69,10 +69,8 @@ void particles_update_nearest_neighbors_spline(particles *p);
 double particles_compute_forces_field(particles *p, grid *grid);
 double particles_compute_forces_tf(particles *p);
 double particles_compute_forces_ld(particles *p);
+double particles_compute_forces_rf(particles *p, grid *grid);
 double particles_compute_forces_pb(particles *p, grid *grid);
-double particles_compute_forces_dielec_boundary(particles *p, grid *grid);
-double particles_compute_forces_ionic_boundary(particles *p, grid *grid);
-double particle_compute_forces_nonpolar(particles *p, grid *grid);
 void particles_compute_forces_tot(particles *p);
 
 double particles_get_temperature(particles *p);
@@ -101,6 +99,8 @@ void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_st
 void precond_blockjacobi_init();
 void precond_blockjacobi_cleanup();
 
+#define H_ARR_SIZE 4
+
 // Struct definitions
 struct grid {
     int type;  // Type of the grid
@@ -123,7 +123,6 @@ struct grid {
     // Poisson-Boltzmann specific
     int pb_enabled;  // Poisson-Boltzmann enabled
     double eps_s;  // Dielectric constant of the solvent
-    double I;  // Ionic strength
     double w;  // Ionic boundary width
     double kbar2;  // Screening factor
     double *y_s;  // Intermediate field constraint for solvent
@@ -134,10 +133,10 @@ struct grid {
     double *eps_y;  // Dielectric constant
     double *eps_z;  // Dielectric constant
     double *eps[3];  // Dielectric constant for x, y, z directions
-    double *H[5];  // H values for x,y,z, center, node
-    double *H_ratio[5];
-    double *H_mask[5];  // H mask for x,y,z, center, node
-    double *r_hat[5];
+    double *H[H_ARR_SIZE];  // H values for x,y,z, center, node
+    double *H_ratio[H_ARR_SIZE];
+    double *H_mask[H_ARR_SIZE];  // H mask for x,y,z, center, node
+    double *r_hat[H_ARR_SIZE];
 
     double tol;  // Tolerance for the LCG
     long int n_iters;  // Number of iterations for convergence of the LCG
@@ -197,9 +196,7 @@ struct particles {
     double  (*compute_forces_field)( particles *, grid *);
     double  (*compute_forces_noel)( particles *);
     void    (*compute_forces_tot)( particles *);
-    double  (*compute_forces_dielec_boundary)( particles *, grid *);
-    double  (*compute_forces_ionic_boundary)( particles *, grid *);
-    double (*compute_forces_nonpolar)( particles *, grid *);
+    double  (*compute_forces_pb)( particles *, grid *);
 
     double  (*get_temperature)( particles *);
     double  (*get_kinetic_energy)( particles *);

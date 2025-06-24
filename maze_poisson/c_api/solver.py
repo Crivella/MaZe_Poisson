@@ -27,7 +27,6 @@ capi.register_function(
         ctypes.c_double,
         ctypes.c_double,
         ctypes.c_double,
-        ctypes.c_double,
     ],
 )
 
@@ -115,19 +114,9 @@ capi.register_function(
     'solver_compute_forces_noel', ctypes.c_double, [],
 )
 
-# double solver_compute_forces_dielec_boundary() {
+# double solver_compute_forces_pb() {
 capi.register_function(
-    'solver_compute_forces_dielec_boundary', ctypes.c_double, [],
-)
-
-# double solver_compute_forces_ionic_boundary() {
-capi.register_function(
-    'solver_compute_forces_ionic_boundary', ctypes.c_double, [],
-)
-
-# double solver_compute_forces_nonpolar() {
-capi.register_function(
-    'solver_compute_forces_nonpolar', ctypes.c_double, [],
+    'solver_compute_forces_pb', ctypes.c_double, [],
 )
 
 # void solver_compute_forces_tot() {
