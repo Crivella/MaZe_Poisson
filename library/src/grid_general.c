@@ -21,9 +21,6 @@ char *get_precond_type_str(int n) {
     return precond_type_str[n];
 }
 
-
-
-
 grid * grid_init(int n, double L, double h, double tol, int grid_type, int precond_type) {
     void   (*init_func)(grid *);
     switch (grid_type) {
@@ -100,16 +97,6 @@ void grid_pb_init(grid *grid, double eps_s, double w, double kbar2) {
         grid->eps_y[i] = eps_s;  // Initialize the dielectric constant in y direction
         grid->eps_z[i] = eps_s;  // Initialize the dielectric constant in z direction
     }
-    grid->eps[0] = grid->eps_x;  // Assign x dielectric constant
-    grid->eps[1] = grid->eps_y;  // Assign y dielectric constant
-    grid->eps[2] = grid->eps_z;  // Assign z dielectric constant
-
-    for (int i = 0; i < H_ARR_SIZE; i++) {
-        grid->H[i] = (double *)malloc(grid->size * sizeof(double));
-        grid->H_ratio[i] = (double *)malloc(grid->size * sizeof(double));
-        grid->H_mask[i] = (double *)malloc(grid->size * sizeof(double));
-        grid->r_hat[i] = (double *)malloc(grid->size * sizeof(double));
-    }
 
     grid->k2 = (double *)malloc(grid->size * sizeof(double));
     #pragma omp parallel for
@@ -127,13 +114,6 @@ void grid_pb_free(grid *grid) {
         mpi_grid_free(grid->eps_x, grid->n);
         mpi_grid_free(grid->eps_y, grid->n);
         mpi_grid_free(grid->eps_z, grid->n);
-
-        for (int i = 0; i < H_ARR_SIZE; i++) {
-            free(grid->H[i]);
-            free(grid->H_ratio[i]);
-            free(grid->H_mask[i]);
-            free(grid->r_hat[i]);
-        }
     }
 }
 

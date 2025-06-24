@@ -132,11 +132,6 @@ struct grid {
     double *eps_x;  // Dielectric constant
     double *eps_y;  // Dielectric constant
     double *eps_z;  // Dielectric constant
-    double *eps[3];  // Dielectric constant for x, y, z directions
-    double *H[H_ARR_SIZE];  // H values for x,y,z, center, node
-    double *H_ratio[H_ARR_SIZE];
-    double *H_mask[H_ARR_SIZE];  // H mask for x,y,z, center, node
-    double *r_hat[H_ARR_SIZE];
 
     double tol;  // Tolerance for the LCG
     long int n_iters;  // Number of iterations for convergence of the LCG

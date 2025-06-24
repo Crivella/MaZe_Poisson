@@ -16,18 +16,4 @@ double compute_forces_reaction_field(
     double *forces_rf, double (*g)(double, double, double)
 );
 
-double compute_forces_dielec_boundary(
-    int n_grid, int n_p, double h, int num_neigh,
-    double *k2, double *H_ratio[], double *H_mask[], double *r_hat[],
-    double *forces_db
-);
-
-double compute_forces_ionic_boundary(
-    int n_grid, int n_p, double h, int num_neigh,
-    double *k2,double *H_ratio[], double *H_mask[], double *r_hat[],
-    double *forces_ib
-);
-
-double compute_forces_nonpolar();
-
 #endif
