@@ -229,7 +229,7 @@ class SolverMD(Logger):
             # STEP 0 Verlet
             self.logger.debug("---- Udpating charges")
             self.update_charges()
-
+            self.logger.debug("---- Updating eps_k2")
             self.update_eps_k2()
             # if self.mdv.preconditioning:
             self.logger.debug("---- Initializing field")
@@ -242,7 +242,7 @@ class SolverMD(Logger):
             self.integrator_part1()
             self.logger.debug("---- Updating charges")
             self.update_charges()
-
+            self.logger.debug("---- Updating eps_k2")
             self.update_eps_k2()
             # if self.mdv.preconditioning:
             self.logger.debug("---- Initializing field")
@@ -335,8 +335,8 @@ class SolverMD(Logger):
         """Run one iteration of the molecular dynamics loop."""
         self.integrator_part1()
         if self.mdv.elec:
-            self.update_eps_k2()
             self.update_charges()
+            self.update_eps_k2()
             self.n_iters = self.update_field()
             self.t_iters = Clock.get_clock('field').last_call
         self.compute_forces()
