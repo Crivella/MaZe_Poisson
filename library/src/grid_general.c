@@ -102,6 +102,8 @@ void grid_pb_free(grid *grid) {
         mpi_grid_free(grid->eps_x, grid->n);
         mpi_grid_free(grid->eps_y, grid->n);
         mpi_grid_free(grid->eps_z, grid->n);
+
+        free(grid->k2);
     }
 }
 
