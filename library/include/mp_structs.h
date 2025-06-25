@@ -44,9 +44,8 @@ void integrator_free(integrator *integrator);
 
 void grid_pb_init(grid *grid, double eps_s, double w, double kbar2);
 void grid_pb_free(grid *grid);
-void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
-void particles_pb_free(particles *p);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
+double grid_get_pb_delta_energy_elec(grid *grid);
 
 void lcg_grid_init(grid * grid);
 void lcg_grid_cleanup(grid * grid);
@@ -59,6 +58,9 @@ void fft_grid_cleanup(grid * grid);
 void fft_grid_init_field(grid *grid);
 int fft_grid_update_field(grid *grid);
 double fft_grid_update_charges(grid *grid, particles *p);
+
+void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
+void particles_pb_free(particles *p);
 
 void particles_init_potential(particles *p, int pot_type);
 void particles_init_potential_tf(particles *p);

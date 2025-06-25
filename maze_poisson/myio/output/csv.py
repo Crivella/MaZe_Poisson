@@ -44,13 +44,17 @@ class CSVOutputFile(BaseOutputFile):
 
 class EnergyCSVOutputFile(CSVOutputFile):
     name = 'energy'
-    headers = ['iter', 'K', 'V_notelec']
+    headers = ['iter', 'K', 'V_notelec', 'DeltaG_elec', 'DeltaG_nonpolar']
     def get_data(self, iter: int, solver):
         kin = capi.get_kinetic_energy()
+        deltaG_elec = capi.get_pb_delta_energy_elec()
+
         return pd.DataFrame({
             'iter': [iter],
             'K': [kin],
-            'V_notelec': [solver.potential_notelec]
+            'V_notelec': [solver.potential_notelec],
+            'DeltaG_elec': [deltaG_elec],
+            'DeltaG_nonpolar': [solver.energy_nonpolar],
         })
 
 class MomentumCSVOutputFile(CSVOutputFile):
@@ -67,7 +71,7 @@ class MomentumCSVOutputFile(CSVOutputFile):
         })
 
 class TotForcesCSVOutputFile(CSVOutputFile):
-    name = 'forces'
+    name = 'forces_tot'
     headers = ['iter', 'Fx', 'Fy', 'Fz']
     def get_data(self, iter: int, solver):
         forces = np.empty((solver.N_p, 3), dtype=np.float64)
@@ -76,21 +80,31 @@ class TotForcesCSVOutputFile(CSVOutputFile):
         df['iter'] = iter
         return df
 
-class ForcesCSVOutputFile(CSVOutputFile):
-    name = 'forces'
-    headers = ['iter', 'Fx', 'Fy', 'Fz']
+class ForcesPBoltzCSVOutputFile(CSVOutputFile):
+    name = 'forces_pb'
+    headers = [
+        'iter', 'particle',
+        'Fx_RF', 'Fy_RF', 'Fz_RF',
+        'Fx_DB', 'Fy_DB', 'Fz_DB', 'Fx_IB', 'Fy_IB', 'Fz_IB', 'Fx_NP', 'Fy_NP', 'Fz_NP'
+        ]
     def get_data(self, iter: int, solver):
-        # if output_settings.print_components_force:
-        #     os.makedirs(path, exist_ok=True)
-        #     output_force = os.path.join(path, 'force_N' + str(N) +'.csv')
-        #     output_files.file_output_force = generate_output_file(output_force)
-        #     output_files.file_output_force.write("iter,particle,fx_RF,fy_RF,fz_RF,fx_DB,fy_DB,fz_DB,fx_IB,fy_IB,fz_IB,fx_NP,fy_NP,fz_NP\n")    
-
-        raise NotImplementedError("TODO")
+        df = pd.DataFrame()
         forces = np.empty((solver.N_p, 3), dtype=np.float64)
-        capi.get_fcs_tot(forces)
-        df = pd.DataFrame(forces.sum(axis=0).reshape(1,3), columns=['Fx', 'Fy', 'Fz'])
+
+        capi.get_fcs_elec(forces)
+        df[['Fx_RF', 'Fy_RF', 'Fz_RF']] = forces
+
+        capi.get_fcs_db(forces)
+        df[['Fx_DB', 'Fy_DB', 'Fz_DB']] = forces
+
+        capi.get_fcs_ib(forces)
+        df[['Fx_IB', 'Fy_IB', 'Fz_IB']] = forces
+
+        capi.get_fcs_noel(forces)
+        df[['Fx_NP', 'Fy_NP', 'Fz_NP']] = forces
+
         df['iter'] = iter
+        df['particle'] = range(solver.N_p)
         return df
 
 class TemperatureCSVOutputFile(CSVOutputFile):
@@ -158,7 +172,7 @@ class RestartCSVOutputFile(CSVOutputFile):
 
 class RestartFieldCSVOutputFile(CSVOutputFile):
     name = 'restart_field'
-    headers = ['phi_prev', 'phi']
+    headers = ['phi_prev', 'phi', 'phi_s', 'phi_s_prev']
     def get_data(self, iter: int, solver):
         df = pd.DataFrame()
         tmp = np.empty((solver.N, solver.N, solver.N), dtype=np.float64)
@@ -179,7 +193,7 @@ OutputFiles.register_format(
         'temperature': TemperatureCSVOutputFile,
         'solute': SolutesCSVOutputFile,
         'tot_force': TotForcesCSVOutputFile,
-        'force': ForcesCSVOutputFile,
+        'forces_pb': ForcesPBoltzCSVOutputFile,
         'restart': RestartCSVOutputFile,
         'restart_field': RestartFieldCSVOutputFile
     }

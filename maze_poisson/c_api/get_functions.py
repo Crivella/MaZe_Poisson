@@ -94,6 +94,27 @@ capi.register_function(
     ],
 )
 
+# void get_fcs_db(double *recv) {
+capi.register_function(
+    'get_fcs_db', None, [
+        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void get_fcs_ib(double *recv) {
+capi.register_function(
+    'get_fcs_ib', None, [
+        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void get_fcs_np(double *recv) {
+capi.register_function(
+    'get_fcs_np', None, [
+        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+    ],
+)
+
 # void get_fcs_tot(double *recv) {
 capi.register_function(
     'get_fcs_tot', None, [
@@ -139,6 +160,11 @@ capi.register_function(
 # double get_kinetic_energy() {
 capi.register_function(
     'get_kinetic_energy', ctypes.c_double, [],
+)
+
+# double get_pb_delta_energy_elec() {
+capi.register_function(
+    'get_pb_delta_energy_elec', ctypes.c_double, [],
 )
 
 # void get_momentum(double *recv) {

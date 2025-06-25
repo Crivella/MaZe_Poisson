@@ -53,7 +53,7 @@ class OutputSettings(BaseSettings):
         self.print_energy = False
         self.print_temperature = False
         self.print_tot_force = False
-        self.print_force = False
+        self.print_forces_pb = False
         self.print_restart = False
         self.print_restart_field = False
         self.path = 'Outputs/'

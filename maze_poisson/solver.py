@@ -64,6 +64,8 @@ class SolverMD(Logger):
 
         self.n_iters = 0
 
+        self.energy_nonpolar = 0.0
+
         self.ofiles = OutputFiles(self.outset)
         self.out_stride = outset.stride
         self.out_flushstride = outset.flushstride * outset.stride
@@ -305,7 +307,7 @@ class SolverMD(Logger):
     @Clock('forces_PBoltz')
     def compute_forces_pb(self):
         """Compute the forces on the particles due to Poisson-Boltzmann interactions."""
-        self.potential_pb = capi.solver_compute_forces_pb()
+        self.energy_nonpolar = capi.solver_compute_forces_pb()
 
     @Clock('file_output')
     def md_loop_output(self, i: int, force: bool = False):

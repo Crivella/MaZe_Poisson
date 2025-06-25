@@ -322,3 +322,22 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
     //     grid->k2[i] = kbar2 * grid->H[5][i];  // Update screening factor
     // }
 }    
+
+double grid_get_pb_delta_energy_elec(grid *g){
+    if (! g->pb_enabled) {
+        // Poisson-Boltzmann is not enabled, return 0
+        return 0.0;
+    }
+
+    double delta_energy = 0.0;
+
+    #pragma omp parallel for reduction(+:delta_energy)
+    for (long int i = 0; i < g->size; i++) {
+        // Calculate the change in energy due to the Poisson-Boltzmann potential
+        delta_energy += 0.5 * (g->phi_s[i] - g->phi_n[i]);
+    }
+
+    allreduce_sum(&delta_energy, 1);
+
+    return delta_energy;
+}

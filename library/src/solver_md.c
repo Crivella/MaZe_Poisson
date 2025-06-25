@@ -257,6 +257,30 @@ void get_fcs_noel(double *recv) {
     memcpy(recv, g_particles->fcs_noel, g_particles->n_p * 3 * sizeof(double));
 }
 
+void get_fcs_db(double *recv) {
+    if (g_particles->fcs_db != NULL) {
+        memcpy(recv, g_particles->fcs_db, g_particles->n_p * 3 * sizeof(double));
+    } else {
+        memset(recv, 0, g_particles->n_p * 3 * sizeof(double));
+    }
+}
+
+void get_fcs_ib(double *recv) {
+    if (g_particles->fcs_ib != NULL) {
+        memcpy(recv, g_particles->fcs_ib, g_particles->n_p * 3 * sizeof(double));
+    } else {
+        memset(recv, 0, g_particles->n_p * 3 * sizeof(double));
+    }
+}
+
+void get_fcs_np(double *recv) {
+    if (g_particles->fcs_np != NULL) {
+        memcpy(recv, g_particles->fcs_np, g_particles->n_p * 3 * sizeof(double));
+    } else {
+        memset(recv, 0, g_particles->n_p * 3 * sizeof(double));
+    }
+}
+
 void get_fcs_tot(double *recv) {
     memcpy(recv, g_particles->fcs_tot, g_particles->n_p * 3 * sizeof(double));
 }
@@ -278,12 +302,32 @@ void get_field_prev(double *recv) {
     mpi_grid_collect_buffer(ptr, recv, g_grid->n);
 }
 
+// void get_field_s(double *recv) {
+//     if (g_grid->phi_s != NULL) {
+//         mpi_grid_collect_buffer(g_grid->phi_s, recv, g_grid->n);
+//     } else {
+//         memset(recv, 0, g_grid->n * sizeof(double));
+//     }
+// }
+
+// void get_phi_s_prev(double *recv) {
+//     if (g_grid->phi_s_prev != NULL) {
+//         mpi_grid_collect_buffer(g_grid->phi_s_prev, recv, g_grid->n);
+//     } else {
+//         memset(recv, 0, g_grid->n * sizeof(double));
+//     }
+// }
+
 void get_q(double *recv) {
     mpi_grid_collect_buffer(g_grid->q, recv, g_grid->n);
 }
 
 double get_kinetic_energy() {
     return g_particles->get_kinetic_energy(g_particles);
+}
+
+double get_pb_delta_energy_elec() {
+    return grid_get_pb_delta_energy_elec(g_grid);
 }
 
 void get_momentum(double *recv) {

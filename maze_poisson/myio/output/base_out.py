@@ -76,11 +76,11 @@ class OutputFiles:
     temperature = None
     solute = None
     tot_force = None
-    force = None
+    forces_pb = None
     restart = None
     restart_field = None
 
-    files = ['performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force', 'force']
+    files = ['performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force', 'forces_pb']
     files_restart = ['restart', 'restart_field']
 
     format_classes = {}
