@@ -294,7 +294,7 @@ EXTERN_C void laplace_filter_pb(
     long int idx0, idx_x, idx_y, idx_z;
 
     if (u == u_new) {
-        mpi_fprintf(stderr, "laplace_filter: u and u_new are the same array (in-place operation not supported)\n");
+        mpi_fprintf(stderr, "laplace_filter_pb: u and u_new are the same array (in-place operation not supported)\n");
         exit(1);
     }
 

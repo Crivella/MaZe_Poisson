@@ -151,13 +151,13 @@ int lcg_grid_update_field(grid *grid) {
 
     if (grid->pb_enabled) {
         double h2 = grid->h * grid->h;
-        dscal(grid->k2, h2, grid->size);
+        dscal(grid->k2, h2, grid->size);  // Conj grad expects k2 to be scaled by h^2
         verlet_poisson_pb(
             grid->tol, grid->h, grid->phi_s, grid->phi_s_prev, grid->q, grid->y_s,
             grid->n_local, grid->n,
             grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
         );
-        dscal(grid->k2, 1.0 / h2, grid->size);  // Restore k2 to original value
+        dscal(grid->k2, 1.0 / h2, grid->size);  // Restore k2 to original value for forces calculation after
     }
     return verlet_poisson(
         grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,

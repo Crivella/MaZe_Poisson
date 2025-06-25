@@ -62,7 +62,6 @@ grid * grid_init(int n, double L, double h, double tol, int grid_type, int preco
     new->eps_y = NULL;  // Dielectric constant in y direction
     new->eps_z = NULL;  // Dielectric constant in z direction
     
-
     init_func(new);
 
     new->tol = tol;
@@ -134,23 +133,8 @@ void grid_free(grid *grid) {
     free(grid);
 }
 
-void grid_compute_h(grid *grid, particles *particles) {
-    // Compute the H function and its derivatives for the transition region
-    int n = grid->n;
-    double h = grid->h;
-    double L = grid->L;
-    double w = grid->w;
-
-    double *pos = particles->pos;
-    double *radii = particles->solv_radii;
-
-    mpi_fprintf(stderr, "Computing H function not implemented yet\n");
-    exit(1);
-}
-
 void grid_update_eps_and_k2(grid *g, particles *p) {
     // Update the dielectric constant and screening factor based on the grid's transition regions
-    // grid_compute_h(g, p);  // Compute the H function and its derivatives
     int n = g->n;
     int n_local = g->n_local;
     int n_start = g->n_start;

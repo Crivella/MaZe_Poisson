@@ -370,6 +370,12 @@ double particles_compute_forces_pb(particles *p, grid *g) {
         return 0.0;
     }
 
+    int size = get_size();
+    if (size > 1) {
+        mpi_fprintf(stderr, "Poisson-Boltzmann forces are not supported in parallel yet.\n");
+        exit(1);
+    }
+
     int n = g->n;
     int n_local = g->n_local;
     int n_start = g->n_start;
