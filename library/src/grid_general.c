@@ -90,18 +90,7 @@ void grid_pb_init(grid *grid, double eps_s, double w, double kbar2) {
     grid->eps_x = mpi_grid_allocate(n_local, n);
     grid->eps_y = mpi_grid_allocate(n_local, n);
     grid->eps_z = mpi_grid_allocate(n_local, n);
-    #pragma omp parallel for
-    for (long int i = 0; i < grid->size; i++) {
-        grid->eps_x[i] = eps_s;  // Initialize the dielectric constant in x direction
-        grid->eps_y[i] = eps_s;  // Initialize the dielectric constant in y direction
-        grid->eps_z[i] = eps_s;  // Initialize the dielectric constant in z direction
-    }
-
     grid->k2 = (double *)malloc(grid->size * sizeof(double));
-    #pragma omp parallel for
-    for (long int i = 0; i < grid->size; i++) {
-        grid->k2[i] = kbar2;  // Initialize the screening factor
-    }
 }
 
 void grid_pb_free(grid *grid) {
