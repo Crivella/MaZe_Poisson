@@ -367,7 +367,8 @@ double particles_compute_forces_rf(particles *p, grid *grid) {
 double particles_compute_forces_pb(particles *p, grid *g) {
     if (! g->pb_enabled) {
         // Poisson-Boltzmann is not enabled
-        return 0.0;
+        mpi_fprintf(stderr, "Poisson-Boltzmann forces are not enabled in the grid.\n");
+        exit(1);
     }
 
     int size = get_size();
@@ -427,30 +428,30 @@ double particles_compute_forces_pb(particles *p, grid *g) {
         idx_y = (int)floor(py / h);
         idx_z = (int)floor(pz / h);
 
-        int start_x = idx_x - idx_range;
-        int end_x = idx_x + idx_range;
-        start_x -= n_start;  // Adjust for local grid start
-        end_x -= n_start;  // Adjust for local grid start
-        if (start_x >= n_local || end_x < 0) continue;  // Skip if the particle is outside the local grid
-        if (start_x < 0) start_x = 0;
-        if (end_x >= n_local) end_x = n_local - 1;
+        // int start_x = idx_x - idx_range;
+        // int end_x = idx_x + idx_range;
+        // start_x -= n_start;  // Adjust for local grid start
+        // end_x -= n_start;  // Adjust for local grid start
+        // if (start_x >= n_local || end_x < 0) continue;  // Skip if the particle is outside the local grid
+        // if (start_x < 0) start_x = 0;
+        // if (end_x >= n_local) end_x = n_local - 1;
 
-        int start_y = idx_y - idx_range;
-        int end_y = idx_y + idx_range;
-        if (start_y < 0) start_y = 0;
-        if (end_y >= n) end_y = n - 1;
+        // int start_y = idx_y - idx_range;
+        // int end_y = idx_y + idx_range;
+        // if (start_y < 0) start_y = 0;
+        // if (end_y >= n) end_y = n - 1;
 
-        int start_z = idx_z - idx_range;
-        int end_z = idx_z + idx_range;
-        if (start_z < 0) start_z = 0;
-        if (end_z >= n) end_z = n - 1;
+        // int start_z = idx_z - idx_range;
+        // int end_z = idx_z + idx_range;
+        // if (start_z < 0) start_z = 0;
+        // if (end_z >= n) end_z = n - 1;
 
         double dx, dy, dz;
         double dx2, dy2, dz2;
         double rx, ry, rz;  // Relative coordinates
         double app1, app2;
 
-        int i1, i2, j1, j2, k1, k2;
+        int i0, j0, k0, i1, i2, j1, j2, k1, k2;
         long int idx_cen;
         long int idx_bwd_x, idx_bwd_y, idx_bwd_z;
         long int idx_fwd_x, idx_fwd_y, idx_fwd_z;
@@ -461,31 +462,39 @@ double particles_compute_forces_pb(particles *p, grid *g) {
         double d_eps_x, d_eps_y, d_eps_z, d_eps_norm, inv_grad;
         double S = 0.0;
 
-        for (int i = start_x; i <= end_x; i++) {
-            i1 = (i + 1);
-            i2 = (i - 1);
-            dx = px - (i + n_start) * h;  // Calculate the distance in x direction
+        for (int di = -idx_range; di <= idx_range; di++) {
+            i0 = idx_x + di;
+            dx = px - i0 * h;  // Calculate the distance in x direction
             dx2 = dx * dx;
-            for (int j = start_y; j <= end_y; j++) {
-                j1 = (j + 1) % n;
-                j2 = (j - 1 + n) % n;  // Wrap around for periodic boundary conditions
-                dy = py - j * h;  // Calculate the distance in y direction
+            // TODO stuff for MPI
+            i0 = ((i0 + n) % n) * n2;  // Wrap around for periodic boundary conditions
+            i1 = i0 + n2;
+            i2 = i0 - n2;
+            for (int dj = -idx_range; dj <= idx_range; dj++) {
+                j0 = idx_y + dj;
+                dy = py - j0 * h;  // Calculate the distance in y direction
                 dy2 = dy * dy;
-                for (int k = start_z; k <= end_z; k++) {
-                    k1 = (k + 1) % n;
-                    k2 = (k - 1 + n) % n;  // Wrap around for periodic boundary conditions
-                    dz = pz - k * h;  // Calculate the distance in z direction
+                j0 = (j0 + n) % n;  // Wrap around for periodic boundary conditions
+                j1 = ((j0 + 1) % n) * n;
+                j2 = ((j0 - 1 + n) % n) * n;  // Wrap around for periodic boundary conditions
+                j0 *= n;
+                for (int dk = -idx_range; dk <= idx_range; dk++) {
+                    k0 = idx_z + dk;
+                    dz = pz - k0 * h;  // Calculate the distance in z direction
                     dz2 = dz * dz;
+                    k0 = (k0 + n) % n;  // Wrap around for periodic boundary conditions
+                    k1 = (k0 + 1) % n;
+                    k2 = (k0 - 1 + n) % n;  // Wrap around for periodic boundary conditions
 
                     r2 = dx2 + dy2 + dz2;
 
-                    idx_cen = i * n2 + j * n + k;  // Calculate the index in the grid
-                    idx_fwd_x = i1 * n2 + j * n + k;
-                    idx_fwd_y = i * n2 + j1 * n + k;
-                    idx_fwd_z = i * n2 + j * n + k1;
-                    idx_bwd_x = i2 * n2 + j * n + k;
-                    idx_bwd_y = i * n2 + j2 * n + k;
-                    idx_bwd_z = i * n2 + j * n + k2;
+                    idx_cen   = i0 + j0 + k0;  // Calculate the index in the grid
+                    idx_fwd_x = i1 + j0 + k0;
+                    idx_fwd_y = i0 + j1 + k0;
+                    idx_fwd_z = i0 + j0 + k1;
+                    idx_bwd_x = i2 + j0 + k0;
+                    idx_bwd_y = i0 + j2 + k0;
+                    idx_bwd_z = i0 + j0 + k2;
 
                     d_eps_x = g->eps_x[idx_cen] - g->eps_x[idx_bwd_x];
                     d_eps_y = g->eps_y[idx_cen] - g->eps_y[idx_bwd_y];
