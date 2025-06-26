@@ -126,11 +126,11 @@ void grid_free(grid *grid) {
 
 void grid_update_eps_and_k2(grid *g, particles *p) {
     // Update the dielectric constant and screening factor based on the grid's transition regions
-    int size = get_size();
-    if (size > 1) {
-        mpi_fprintf(stderr, "Poisson-Boltzmann update_eps_and_k2 not supported in parallel yet.\n");
-        exit(1);
-    }
+    // int size = get_size();
+    // if (size > 1) {
+    //     mpi_fprintf(stderr, "Poisson-Boltzmann update_eps_and_k2 not supported in parallel yet.\n");
+    //     exit(1);
+    // }
     int n = g->n;
     int n_local = g->n_local;
     int n_start = g->n_start;
@@ -152,15 +152,23 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
     double w3 = w2 * w;  // Cube of the ionic boundary width
     double hd2 = h / 2.0;  // Half the grid spacing
 
+    long int size = g->size;
+    double *k2 = g->k2;
+    double *eps_x = g->eps_x;
+    double *eps_y = g->eps_y;
+    double *eps_z = g->eps_z;
+
     #pragma omp parallel for
-    for (long int i = 0; i < g->size; i++) {
-        g->eps_x[i] = (eps_s - 1.0);
-        g->eps_y[i] = (eps_s - 1.0);
-        g->eps_z[i] = (eps_s - 1.0);
-        g->k2[i] = kbar2;  // Update screening factor
+    for (long int i = 0; i < size; i++) {
+        eps_x[i] = (eps_s - 1.0);
+        eps_y[i] = (eps_s - 1.0);
+        eps_z[i] = (eps_s - 1.0);
+        k2[i] = kbar2;  // Update screening factor
     }
 
-    #pragma omp parallel for private(r_solv, px, py, pz, idx_x, idx_y, idx_z)
+    // #pragma \
+    //     omp parallel for private(r_solv, px, py, pz, idx_x, idx_y, idx_z) \
+    //     reduction(*:k2[:size], eps_x[:size], eps_y[:size], eps_z[:size])
     for (int np = 0; np < p->n_p; np++) {
         r_solv = p->solv_radii[np];
         px = p->pos[np * 3];
@@ -178,33 +186,9 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
         idx_y = (int)floor(py / h);
         idx_z = (int)floor(pz / h);
 
-        // mpi_printf("Doing particle %d with radius %f at position (%f, %f, %f) w=%f, h=%f\n", np, r_solv, px, py, pz, w, h);
-        // mpi_printf(" - idx_x=%d, idx_y=%d, idx_z=%d, idx_range=%d\n", idx_x, idx_y, idx_z, idx_range);
-        // int start_x = idx_x - idx_range;
-        // int end_x = idx_x + idx_range;
-        // start_x -= n_start;  // Adjust for local grid start
-        // end_x -= n_start;  // Adjust for local grid start
-        // if (start_x >= n_local || end_x < 0) continue;  // Skip if the particle is outside the local grid
-        // if (start_x < 0) start_x = 0;
-        // if (end_x >= n_local) end_x = n_local - 1;
-
-        // int start_y = idx_y - idx_range;
-        // int end_y = idx_y + idx_range;
-        // if (start_y < 0) start_y = 0;
-        // if (end_y >= n) end_y = n - 1;
-
-        // int start_z = idx_z - idx_range;
-        // int end_z = idx_z + idx_range;
-        // if (start_z < 0) start_z = 0;
-        // if (end_z >= n) end_z = n - 1;
-
         double dx, dy, dz;
         double dx2, dy2, dz2;
         double app1, app2;
-
-        // mpi_printf(" - start_x=%d, end_x=%d\n", start_x, end_x);
-        // mpi_printf(" - start_y=%d, end_y=%d\n", start_y, end_y);
-        // mpi_printf(" - start_z=%d, end_z=%d\n", start_z, end_z);
 
         int i0, j0, k0;
         long int idx_cen;
@@ -213,8 +197,10 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
             i0 = idx_x + di;
             dx = px - i0 * h;  // Calculate the distance in x direction
             dx2 = dx * dx;
-            // TODO stuff for MPI
-            i0 = ((i0 + n) % n) * n2;  // Wrap around for periodic boundary conditions
+            i0 = ((i0 + n) % n);  // Wrap around for periodic boundary conditions
+            i0 -= n_start;  // Adjust for local grid start
+            if (i0 < 0 || i0 >= n_local) continue;  // Skip if the point is outside the local grid
+            i0 *= n2;  // Convert to linear index
             for (int dj = -idx_range; dj <= idx_range; dj++) {
                 j0 = idx_y + dj;
                 dy = py - j0 * h;  // Calculate the distance in y direction
@@ -237,74 +223,77 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
                     } else if (r2 > r_solv_m2) {
                         // Inside the transition region, set dielectric constant to a fraction
                         app2 = sqrt(r2) - r_solv + w;  // Calculate the distance in the transition region
-                        g->k2[idx_cen] *= (
+                        k2[idx_cen] *= (
                             -(1 / (4 * w3)) * pow(app2, 3) +
                              (3 / (4 * w2)) * pow(app2, 2) 
                         );
                         // mpi_printf("Transition region (0): i=%d, j=%d, k=%d\n", i, j, k);
                     } else {
                         // Inside the radius, set dielectric constant to zero
-                        g->k2[idx_cen] = 0.0;  // Set screening factor to zero
+                        k2[idx_cen] = 0.0;  // Set screening factor to zero
                     }
 
-                    app1 = dx + hd2;  // Adjust for half the grid spacing
+                    // *************** X + h/2 ***************
+                    app1 = dx - hd2;  // Adjust for half the grid spacing
                     app2 = app1 * app1 + dy2 + dz2;
                     if (app2 > r_solv_p2) {
                         // Do nothihng
                     } else if (app2 > r_solv_m2) {
                         // Apply the transition region formula
                         app2 = sqrt(app2) - r_solv + w;
-                        g->eps_x[idx_cen] *= (
+                        eps_x[idx_cen] *= (
                             -(1 / (4 * w3)) * pow(app2, 3) +
                              (3 / (4 * w2)) * pow(app2, 2) 
                         );
                         // mpi_printf("Transition region (X): i=%d, j=%d, k=%d\n", i, j, k);
                     } else {
                         // Inside the radius, set dielectric constant to zero
-                        g->eps_x[idx_cen] = 0.0;
+                        eps_x[idx_cen] = 0.0;
                     }
 
-                    app1 = dy + hd2;  // Adjust for half the grid spacing
+                    // *************** Y + h/2 ***************
+                    app1 = dy - hd2;  // Adjust for half the grid spacing
                     app2 = dx2 + app1 * app1 + dz2;
                     if (app2 > r_solv_p2) {
                         // Do nothihng
                     } else if (app2 > r_solv_m2) {
                         // Apply the transition region formula
                         app2 = sqrt(app2) - r_solv + w;
-                        g->eps_y[idx_cen] *= (
+                        eps_y[idx_cen] *= (
                             -(1 / (4 * w3)) * pow(app2, 3) +
                              (3 / (4 * w2)) * pow(app2, 2) 
                         );
                         // mpi_printf("Transition region (Y): i=%d, j=%d, k=%d\n", i, j, k);
                     } else {
                         // Inside the radius, set dielectric constant to zero
-                        g->eps_y[idx_cen] = 0.0;
+                        eps_y[idx_cen] = 0.0;
                     }
 
-                    app1 = dz + hd2;  // Adjust for half the grid spacing
+                    // *************** Z + h/2 ***************
+                    app1 = dz - hd2;  // Adjust for half the grid spacing
                     app2 = dx2 + dy2 + app1 * app1;
                     if (app2 > r_solv_p2) {
                         // Do nothihng
                     } else if (app2 > r_solv_m2) {
                         // Apply the transition region formula
                         app2 = sqrt(app2) - r_solv + w;
-                        g->eps_z[idx_cen] *= (
+                        eps_z[idx_cen] *= (
                             -(1 / (4 * w3)) * pow(app2, 3) +
                              (3 / (4 * w2)) * pow(app2, 2) 
                         );
                         // mpi_printf("Transition region (Z): i=%d, j=%d, k=%d\n", i, j, k);
                     } else {
                         // Inside the radius, set dielectric constant to zero
-                        g->eps_z[idx_cen] = 0.0;
+                        eps_z[idx_cen] = 0.0;
                     }
                 }
             }
         }
     }
     for (long int i = 0; i < g->size; i++) {
-        g->eps_x[i] += 1.0;  // Update x dielectric constant
-        g->eps_y[i] += 1.0;  // Update y dielectric constant
-        g->eps_z[i] += 1.0;  // Update z dielectric constant
+        eps_x[i] += 1.0;  // Update x dielectric constant
+        eps_y[i] += 1.0;  // Update y dielectric constant
+        eps_z[i] += 1.0;  // Update z dielectric constant
         // mpi_printf("%.1f  ", g->eps_x[i]);
     }
     // for (long int i = 0; i < grid->size; i++) {

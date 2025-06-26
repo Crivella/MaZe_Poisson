@@ -144,10 +144,14 @@ class SolverMD(Logger):
 
         if self.mdv.poisson_boltzmann:
             eps_s = self.gset.eps_s
-            kbar2 = (8 * np.pi * cst.NA * cst.EC**2 * self.gset.I * 1e3) / (eps_s * cst.eps0 * cst.kB_si * self.mdv.T) * cst.BR ** 2
+            kbar2 = (
+                8 * np.pi * cst.NA * cst.EC**2 * self.gset.I * 1e3
+            ) / (
+                eps_s * cst.eps0 * cst.kB_si * self.mdv.T
+            ) * cst.BR ** 2
             self.logger.info("Initializing grid for Poisson-Boltzmann.")
             capi.solver_initialize_grid_pois_boltz(
-                self.gset.eps_s, self.gset.w, kbar2
+                self.gset.eps_s, self.gset.w_au, kbar2
             )
 
     def initialize_particles(self):

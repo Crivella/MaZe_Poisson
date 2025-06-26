@@ -364,18 +364,32 @@ double particles_compute_forces_rf(particles *p, grid *grid) {
     );
 }
 
+double calc_h_ratio(double rad, double w2, double w3) {
+    return (
+        (
+            -(3 / (4 * w3)) * pow(rad, 2) +
+                (3 / (2 * w2)) * rad
+        ) /
+        (
+            -(1 / (4 * w3)) * pow(rad, 3) +
+                (3 / (4 * w2)) * pow(rad, 2)
+        ) 
+    );
+}
+
 double particles_compute_forces_pb(particles *p, grid *g) {
     if (! g->pb_enabled) {
         // Poisson-Boltzmann is not enabled
         mpi_fprintf(stderr, "Poisson-Boltzmann forces are not enabled in the grid.\n");
         exit(1);
     }
+    // return 0.0;
 
-    int size = get_size();
-    if (size > 1) {
-        mpi_fprintf(stderr, "Poisson-Boltzmann forces are not supported in parallel yet.\n");
-        exit(1);
-    }
+    // int size = get_size();
+    // if (size > 1) {
+    //     mpi_fprintf(stderr, "Poisson-Boltzmann forces are not supported in parallel yet.\n");
+    //     exit(1);
+    // }
 
     int n = g->n;
     int n_local = g->n_local;
@@ -400,10 +414,28 @@ double particles_compute_forces_pb(particles *p, grid *g) {
     double h3 = h * h * h;  // Cube of the grid spacing
 
     // double S = 0.0;  // Sum of the derivatives of the dielectric constant
-
     double non_polar_energy = 0.0;
 
-    #pragma omp parallel for private(r_solv, px, py, pz, idx_x, idx_y, idx_z)
+    long int size = p->n_p * 3;
+    double *fcs_db = p->fcs_db;
+    double *fcs_ib = p->fcs_ib;
+    double *fcs_np = p->fcs_np;
+
+    memset(fcs_db, 0, size * sizeof(double));  // Initialize forces to zero
+    memset(fcs_ib, 0, size * sizeof(double));  // Initialize forces to zero
+    memset(fcs_np, 0, size * sizeof(double));  // Initialize non-polar forces to zero
+
+    mpi_grid_exchange_bot_top(g->phi_s, n_local, n);
+    mpi_grid_exchange_bot_top(g->eps_x, n_local, n);
+    mpi_grid_exchange_bot_top(g->eps_y, n_local, n);
+    mpi_grid_exchange_bot_top(g->eps_z, n_local, n);
+
+    int mpi_proc_id = get_rank();
+    int mpi_size = get_size();
+
+    // #pragma \
+    //     omp parallel for private(r_solv, px, py, pz, idx_x, idx_y, idx_z) \
+    //     reduction(+:non_polar_energy, fcs_db[:size], fcs_ib[:size], fcs_np[:size])
     for (int np = 0; np < p->n_p; np++) {
         int np3 = np * 3;
 
@@ -412,43 +444,20 @@ double particles_compute_forces_pb(particles *p, grid *g) {
         py = p->pos[np3 + 1];
         pz = p->pos[np3 + 2];
 
-        for (int i = 0; i < 3; i++) {
-            p->fcs_db[np3 + i] = 0.0;  // Initialize forces to zero
-            p->fcs_ib[np3 + i] = 0.0;  // Initialize forces to zero
-            p->fcs_np[np3 + i] = 0.0;  // Initialize non-polar forces to zero
-        }
-
         double r1, r2;
         double r_solv_p2 = pow(r_solv + w, 2);
         double r_solv_m2 = pow(r_solv - w, 2);
 
-        int idx_range = (int)floor((r_solv + w) / h) + 1;
+        int idx_range = (int)floor((r_solv + w) / h) + 2;
 
         idx_x = (int)floor(px / h);
         idx_y = (int)floor(py / h);
         idx_z = (int)floor(pz / h);
 
-        // int start_x = idx_x - idx_range;
-        // int end_x = idx_x + idx_range;
-        // start_x -= n_start;  // Adjust for local grid start
-        // end_x -= n_start;  // Adjust for local grid start
-        // if (start_x >= n_local || end_x < 0) continue;  // Skip if the particle is outside the local grid
-        // if (start_x < 0) start_x = 0;
-        // if (end_x >= n_local) end_x = n_local - 1;
-
-        // int start_y = idx_y - idx_range;
-        // int end_y = idx_y + idx_range;
-        // if (start_y < 0) start_y = 0;
-        // if (end_y >= n) end_y = n - 1;
-
-        // int start_z = idx_z - idx_range;
-        // int end_z = idx_z + idx_range;
-        // if (start_z < 0) start_z = 0;
-        // if (end_z >= n) end_z = n - 1;
-
         double dx, dy, dz;
         double dx2, dy2, dz2;
         double rx, ry, rz;  // Relative coordinates
+        double rx_app, ry_app, rz_app;
         double app1, app2;
 
         int i0, j0, k0, i1, i2, j1, j2, k1, k2;
@@ -460,14 +469,22 @@ double particles_compute_forces_pb(particles *p, grid *g) {
         double h_ratio;
 
         double d_eps_x, d_eps_y, d_eps_z, d_eps_norm, inv_grad;
-        double S = 0.0;
+
+        double eps_x_cen, eps_y_cen, eps_z_cen;
+        double eps_x_bwd, eps_y_bwd, eps_z_bwd;
 
         for (int di = -idx_range; di <= idx_range; di++) {
             i0 = idx_x + di;
             dx = px - i0 * h;  // Calculate the distance in x direction
             dx2 = dx * dx;
-            // TODO stuff for MPI
-            i0 = ((i0 + n) % n) * n2;  // Wrap around for periodic boundary conditions
+            i0 = ((i0 + n) % n);  // Wrap around for periodic boundary conditions
+            i0 -= n_start;  // Adjust for local grid start
+            if (i0 < 0 || i0 >= n_local) continue;  // Skip if the point is outside the local grid
+            // printf(
+            //     "Running np=%d gx=%d (loc %d  n_loc %d) on proc %d / %d\n",
+            //     np, i0+n_start, i0, n_local, mpi_proc_id, mpi_size
+            //     );
+            i0 *= n2;  // Convert to linear index
             i1 = i0 + n2;
             i2 = i0 - n2;
             for (int dj = -idx_range; dj <= idx_range; dj++) {
@@ -487,6 +504,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                     k2 = (k0 - 1 + n) % n;  // Wrap around for periodic boundary conditions
 
                     r2 = dx2 + dy2 + dz2;
+                    r1 = sqrt(r2) + 1E-12;
 
                     idx_cen   = i0 + j0 + k0;  // Calculate the index in the grid
                     idx_fwd_x = i1 + j0 + k0;
@@ -496,9 +514,16 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                     idx_bwd_y = i0 + j2 + k0;
                     idx_bwd_z = i0 + j0 + k2;
 
-                    d_eps_x = g->eps_x[idx_cen] - g->eps_x[idx_bwd_x];
-                    d_eps_y = g->eps_y[idx_cen] - g->eps_y[idx_bwd_y];
-                    d_eps_z = g->eps_z[idx_cen] - g->eps_z[idx_bwd_z];
+                    eps_x_cen = g->eps_x[idx_cen];
+                    eps_y_cen = g->eps_y[idx_cen];
+                    eps_z_cen = g->eps_z[idx_cen];
+                    eps_x_bwd = g->eps_x[idx_bwd_x];
+                    eps_y_bwd = g->eps_y[idx_bwd_y];
+                    eps_z_bwd = g->eps_z[idx_bwd_z];
+
+                    d_eps_x = eps_x_cen - eps_x_bwd;
+                    d_eps_y = eps_y_cen - eps_y_bwd;
+                    d_eps_z = eps_z_cen - eps_z_bwd;
 
                     d_eps_norm = sqrt(d_eps_x * d_eps_x + d_eps_y * d_eps_y + d_eps_z * d_eps_z) / h;
                     // S += d_eps_norm;
@@ -508,55 +533,51 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                     ry = dy / r1;
                     rz = dz / r1;
                     phi_center = g->phi_s[idx_cen];
+
                     // *************** CENTER***************
                     if (r2 > r_solv_p2) {
-                        // Outside the radius, skip this point
-                        // continue;  // Skip if outside the radius
+                        // Outside the radius, do nothing
                     } else if (r2 > r_solv_m2) {
                         // Inside the transition region, set dielectric constant to a fraction
-                        r1 = sqrt(r2);
                         app2 = r1 - r_solv + w;  // Calculate the distance in the transition region
-                        phi_center = g->phi_s[idx_cen];
-                        h_ratio = (
-                            (
-                                -(3 / (4 * w3)) * pow(app2, 2) +
-                                 (3 / (2 * w2)) * app2
-                            ) /
-                            (
-                                -(1 / (4 * w3)) * pow(app2, 3) +
-                                 (3 / (4 * w2)) * pow(app2, 2)
-                            ) 
-                        );
-
-                        // *********************** Dielectric boundary forces ***********************
-                        // X
-                        delta_phi = g->phi_s[idx_fwd_x] - phi_center;
-                        p->fcs_db[np3] -= h_ratio * (g->eps_x[idx_cen] - 1.0) * delta_phi * rx * phi_center;
-                        
-                        // Y
-                        delta_phi = g->phi_s[idx_fwd_y] - phi_center;
-                        p->fcs_db[np3 + 1] -= h_ratio * (g->eps_y[idx_cen] - 1.0) * delta_phi * ry * phi_center;
-
-                        // Z
-                        delta_phi = g->phi_s[idx_fwd_z] - phi_center;
-                        p->fcs_db[np3 + 2] -= h_ratio * (g->eps_z[idx_cen] - 1.0) * delta_phi * rz * phi_center;
+                        h_ratio = calc_h_ratio(app2, w2, w3);
 
                         // *********************** Ionic boundary forces ***********************
                         app2 = g->k2[idx_cen] * phi_center * phi_center * h_ratio;
-                        p->fcs_ib[np3    ] += app2 * rx;
-                        p->fcs_ib[np3 + 1] += app2 * ry;
-                        p->fcs_ib[np3 + 2] += app2 * rz;
-
-                        // *********************** Non-polar forces ***********************
-                        p->fcs_np[np3    ] += inv_grad * (g->eps_x[idx_cen] - 1.0) * d_eps_x * h_ratio * rx;
-                        p->fcs_np[np3 + 1] += inv_grad * (g->eps_y[idx_cen] - 1.0) * d_eps_y * h_ratio * ry;
-                        p->fcs_np[np3 + 2] += inv_grad * (g->eps_z[idx_cen] - 1.0) * d_eps_z * h_ratio * rz;
+                        fcs_ib[np3    ] += app2 * rx;
+                        fcs_ib[np3 + 1] += app2 * ry;
+                        fcs_ib[np3 + 2] += app2 * rz;
 
                     } else {
-                        // Inside the radius, set dielectric constant to zero
+                        // Inside the radius, do nothing
                     }
 
                     // *************** X - h/2 ***************
+                    app1 = dx + hd2;  // Adjust for half the grid spacing
+                    r2 = app1 * app1 + dy2 + dz2;
+                    if (r2 > r_solv_p2) {
+                        // Do nothihng
+                    } else if (r2 > r_solv_m2) {
+                        // Apply the transition region formula
+                        r1 = sqrt(r2);
+                        app2 = r1 - r_solv + w;
+                        h_ratio = calc_h_ratio(app2, w2, w3);
+
+                        rx_app = app1 / r1;  // Relative x coordinate
+                        app2 = (eps_x_bwd - 1.0) * h_ratio * rx_app;
+                        // *********************** Dielectric boundary forces ***********************
+                        delta_phi = g->phi_s[idx_bwd_x] - phi_center;
+                        fcs_db[np3] -= app2 * delta_phi * phi_center;
+
+                        // *********************** Non-polar forces ***********************
+                        fcs_np[np3    ] -= (eps_x_bwd - 1.0) * h_ratio * rx_app * inv_grad * d_eps_x;
+                        fcs_np[np3 + 1] -= (eps_y_bwd - 1.0) * h_ratio * ry     * inv_grad * d_eps_y;
+                        fcs_np[np3 + 2] -= (eps_z_bwd - 1.0) * h_ratio * rz     * inv_grad * d_eps_z;
+                    } else {
+                        // Inside the radius, do nothing
+                    }
+
+                    // *************** X + h/2 ***************
                     app1 = dx - hd2;  // Adjust for half the grid spacing
                     r2 = app1 * app1 + dy2 + dz2;
                     if (r2 > r_solv_p2) {
@@ -565,31 +586,48 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         // Apply the transition region formula
                         r1 = sqrt(r2);
                         app2 = r1 - r_solv + w;
-                        h_ratio = (
-                            (
-                                -(3 / (4 * w3)) * pow(app2, 2) +
-                                 (3 / (2 * w2)) * app2
-                            ) /
-                            (
-                                -(1 / (4 * w3)) * pow(app2, 3) +
-                                 (3 / (4 * w2)) * pow(app2, 2)
-                            ) 
-                        );
+                        h_ratio = calc_h_ratio(app2, w2, w3);
 
-                        rx = app1 / r1;  // Relative x coordinate
-                        app2 = (g->eps_x[idx_bwd_x] - 1.0) * h_ratio * rx;
+                        rx_app = app1 / r1;  // Relative x coordinate
+                        app2 = (eps_x_cen - 1.0) * h_ratio * rx_app;
                         // *********************** Dielectric boundary forces ***********************
-                        // X
-                        delta_phi = g->phi_s[idx_bwd_x] - phi_center;
-                        p->fcs_db[np3] -= app2 * delta_phi * phi_center;
+                        delta_phi = g->phi_s[idx_fwd_x] - phi_center;
+                        fcs_db[np3] -= app2 * delta_phi * phi_center;
 
                         // *********************** Non-polar forces ***********************
-                        p->fcs_np[np3] += app2 * inv_grad * d_eps_x;
+                        fcs_np[np3    ] += (eps_x_cen - 1.0) * h_ratio * rx_app * inv_grad * d_eps_x;
+                        fcs_np[np3 + 1] += (eps_y_cen - 1.0) * h_ratio * ry     * inv_grad * d_eps_y;
+                        fcs_np[np3 + 2] += (eps_z_cen - 1.0) * h_ratio * rz     * inv_grad * d_eps_z;
                     } else {
-                        // Inside the radius, set dielectric constant to zero
+                        // Inside the radius, do nothing
                     }
 
                     // *************** Y - h/2 ***************
+                    app1 = dy + hd2;  // Adjust for half the grid spacing
+                    r2 = dx2 + app1 * app1 + dz2;
+                    if (r2 > r_solv_p2) {
+                        // Do nothihng
+                    } else if (r2 > r_solv_m2) {
+                        // Apply the transition region formula
+                        r1 = sqrt(r2);
+                        app2 = r1 - r_solv + w;
+                        h_ratio = calc_h_ratio(app2, w2, w3);
+
+                        ry_app = app1 / r1;  // Relative y coordinate
+                        app2 = (eps_y_bwd - 1.0) * h_ratio * ry_app;
+                        // *********************** Dielectric boundary forces ***********************
+                        delta_phi = g->phi_s[idx_bwd_y] - phi_center;
+                        fcs_db[np3 + 1] -= app2 * delta_phi * phi_center;
+
+                        // *********************** Non-polar forces ***********************
+                        fcs_np[np3    ] -= (eps_x_bwd - 1.0) * h_ratio * rx     * inv_grad * d_eps_x;
+                        fcs_np[np3 + 1] -= (eps_y_bwd - 1.0) * h_ratio * ry_app * inv_grad * d_eps_y;
+                        fcs_np[np3 + 2] -= (eps_z_bwd - 1.0) * h_ratio * rz     * inv_grad * d_eps_z;
+                    } else {
+                        // Inside the radius, do nothing
+                    }
+
+                    // *************** Y + h/2 ***************
                     app1 = dy - hd2;  // Adjust for half the grid spacing
                     r2 = dx2 + app1 * app1 + dz2;
                     if (r2 > r_solv_p2) {
@@ -598,31 +636,49 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         // Apply the transition region formula
                         r1 = sqrt(r2);
                         app2 = r1 - r_solv + w;
-                        h_ratio = (
-                            (
-                                -(3 / (4 * w3)) * pow(app2, 2) +
-                                 (3 / (2 * w2)) * app2
-                            ) /
-                            (
-                                -(1 / (4 * w3)) * pow(app2, 3) +
-                                 (3 / (4 * w2)) * pow(app2, 2)
-                            ) 
-                        );
+                        h_ratio = calc_h_ratio(app2, w2, w3);
 
-                        ry = app1 / r1;  // Relative y coordinate
-                        app2 = (g->eps_y[idx_bwd_y] - 1.0) * h_ratio * ry;
+                        ry_app = app1 / r1;  // Relative y coordinate
+                        app2 = (eps_y_cen - 1.0) * h_ratio * ry_app;
                         // *********************** Dielectric boundary forces ***********************
-                        // Y
-                        delta_phi = g->phi_s[idx_bwd_y] - phi_center;
-                        p->fcs_db[np3 + 1] -= app2 * delta_phi * phi_center;
+                        delta_phi = g->phi_s[idx_fwd_y] - phi_center;
+                        fcs_db[np3 + 1] -= app2 * delta_phi * phi_center;
 
                         // *********************** Non-polar forces ***********************
-                        p->fcs_np[np3 + 1] += app2 * inv_grad * d_eps_y;
+                        // fcs_np[np3 + 1] += app2 * inv_grad * d_eps_y;
+                        fcs_np[np3    ] += (eps_x_cen - 1.0) * h_ratio * rx     * inv_grad * d_eps_x;
+                        fcs_np[np3 + 1] += (eps_y_cen - 1.0) * h_ratio * ry_app * inv_grad * d_eps_y;
+                        fcs_np[np3 + 2] += (eps_z_cen - 1.0) * h_ratio * rz     * inv_grad * d_eps_z;
                     } else {
-                        // Inside the radius, set dielectric constant to zero
+                        // Inside the radius, do nothing
                     }
 
                     // *************** Z - h/2 ***************
+                    app1 = dz + hd2;  // Adjust for half the grid spacing
+                    r2 = dx2 + dy2 + app1 * app1;
+                    if (r2 > r_solv_p2) {
+                        // Do nothihng
+                    } else if (r2 > r_solv_m2) {
+                        // Apply the transition region formula
+                        r1 = sqrt(r2);
+                        app2 = r1 - r_solv + w;
+                        h_ratio = calc_h_ratio(app2, w2, w3);
+
+                        rz_app = app1 / r1;  // Relative z coordinate
+                        app2 = (eps_z_bwd - 1.0) * h_ratio * rz_app;
+                        // *********************** Dielectric boundary forces ***********************
+                        delta_phi = g->phi_s[idx_bwd_z] - phi_center;
+                        fcs_db[np3 + 2] -= app2 * delta_phi * phi_center;
+
+                        // *********************** Non-polar forces ***********************
+                        fcs_np[np3    ] -= (eps_x_bwd - 1.0) * h_ratio * rx     * inv_grad * d_eps_x;
+                        fcs_np[np3 + 1] -= (eps_y_bwd - 1.0) * h_ratio * ry     * inv_grad * d_eps_y;
+                        fcs_np[np3 + 2] -= (eps_z_bwd - 1.0) * h_ratio * rz_app * inv_grad * d_eps_z;
+                    } else {
+                        // Inside the radius, do nothing
+                    }
+
+                    // *************** Z + h/2 ***************
                     app1 = dz - hd2;  // Adjust for half the grid spacing
                     r2 = dx2 + dy2 + app1 * app1;
                     if (r2 > r_solv_p2) {
@@ -631,70 +687,43 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         // Apply the transition region formula
                         r1 = sqrt(r2);
                         app2 = r1 - r_solv + w;
-                        h_ratio = (
-                            (
-                                -(3 / (4 * w3)) * pow(app2, 2) +
-                                 (3 / (2 * w2)) * app2
-                            ) /
-                            (
-                                -(1 / (4 * w3)) * pow(app2, 3) +
-                                 (3 / (4 * w2)) * pow(app2, 2)
-                            ) 
-                        );
+                        h_ratio = calc_h_ratio(app2, w2, w3);
 
-                        rz = app1 / r1;  // Relative z coordinate
-                        app2 = (g->eps_z[idx_bwd_z] - 1.0) * h_ratio * rz;
+                        rz_app = app1 / r1;  // Relative z coordinate
+                        app2 = (eps_z_cen - 1.0) * h_ratio * rz_app;
                         // *********************** Dielectric boundary forces ***********************
-                        // Z
-                        delta_phi = g->phi_s[idx_bwd_z] - phi_center;
-                        p->fcs_db[np3 + 2] -= app2 * delta_phi * phi_center;
+                        delta_phi = g->phi_s[idx_fwd_z] - phi_center;
+                        fcs_db[np3 + 2] -= app2 * delta_phi * phi_center;
 
                         // *********************** Non-polar forces ***********************
-                        p->fcs_np[np3 + 2] += app2 * inv_grad * d_eps_z;
+                        fcs_np[np3    ] += (eps_x_cen - 1.0) * h_ratio * rx     * inv_grad * d_eps_x;
+                        fcs_np[np3 + 1] += (eps_y_cen - 1.0) * h_ratio * ry     * inv_grad * d_eps_y;
+                        fcs_np[np3 + 2] += (eps_z_cen - 1.0) * h_ratio * rz_app * inv_grad * d_eps_z;
                     } else {
-                        // Inside the radius, set dielectric constant to zero
+                        // Inside the radius, do nothing
                     }
                 }
             }
         }
     }
 
-    dscal(p->fcs_db, h / (8.0 * M_PI), p->n_p * 3);
-    dscal(p->fcs_ib, h3 / (8.0 * M_PI), p->n_p * 3);
-    dscal(p->fcs_np, -p->gamma_np * h / (eps_s - 1.0), p->n_p * 3);
+    dscal(fcs_db, h / (8.0 * M_PI), size);
+    dscal(fcs_ib, h3 / (8.0 * M_PI), size);
+    dscal(fcs_np, -p->gamma_np * h / (eps_s - 1.0), size);
+
+    allreduce_sum(fcs_db, size);
+    allreduce_sum(fcs_ib, size);
+    allreduce_sum(fcs_np, size);
 
     return non_polar_energy;
 }
 
-// double particles_compute_forces_ionic_boundary(particles *p, grid *grid) {
-//     if (grid->w == 0.0) {
-//         // If the dielectric boundary is not set, we do not compute forces
-//         return 0.0;
-//     }
-//     if (p->fcs_ib != NULL) {
-//         return compute_forces_ionic_boundary(
-//             p->n, p->n_p, p->h, p->num_neighbors,
-//             grid->k2, grid->H_ratio, grid->H_mask, grid->r_hat,
-//             p->fcs_ib
-//         );
-//     }
-//     return 0.0;
-// }
-
-// double particles_compute_forces_nonpolar(particles *p, grid *grid) {
-//     if (p->fcs_np != NULL) {
-//         return compute_forces_nonpolar(
-//             // p->n, p->n_p, p->h, p->num_neighbors,
-//             // p->gamma_np, p->beta_np, p->probe_radius,
-//             // p->solv_radii, p->fcs_np
-//         );
-//     }
-//     return 0.0;
-// }
-
 void particles_compute_forces_tot(particles *p) {
     int size = p->n_p * 3;
-    vec_copy(p->fcs_elec, p->fcs_tot, size);
+    memset(p->fcs_tot, 0, size * sizeof(double));  // Initialize total forces to zero
+    if (p->fcs_elec != NULL) {
+        daxpy(p->fcs_elec, p->fcs_tot, 1.0, size);  // Add the electric forces
+    }
     if (p->fcs_noel != NULL) {
         daxpy(p->fcs_noel, p->fcs_tot, 1.0, size);
     }

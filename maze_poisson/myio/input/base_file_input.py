@@ -84,7 +84,7 @@ class GridSetting(BaseSettings):
         self.rescale_force = None
         self.eps_s = 80  # Relative permittivity of the solvent (water by default)
         self.I = None
-        self._w = None
+        self._w_au = None
         self._w_ang = None
         
     @property
@@ -128,14 +128,14 @@ class GridSetting(BaseSettings):
             self.h = self.L / self.N
 
     @property
-    def w(self):
-        return self._w
-    @w.setter
-    def w(self, value):
+    def w_au(self):
+        return self._w_au
+    @w_au.setter
+    def w_au(self, value):
         """Set the width of the transition region in atomic units."""
         if value <= 0:
             raise ValueError("Width must be positive.")
-        self._w = value
+        self._w_au = value
         self._w_ang = value * a0  # Convert to Angstroms if needed
     @property
     def w_ang(self):
@@ -146,7 +146,7 @@ class GridSetting(BaseSettings):
         if value <= 0:
             raise ValueError("Width must be positive.")
         self._w_ang = value
-        self._w = value / a0  # Convert to atomic units if needed
+        self._w_au = value / a0  # Convert to atomic units if needed
 
     @property
     def file(self):
@@ -176,7 +176,6 @@ class MDVariables(BaseSettings):
 
         # Poisson-Boltzmann specific
         self.poisson_boltzmann = False
-        self.non_polar = False
         self.gamma_np = 0.0
         self.beta_np = 0.0
         self.probe_radius = 1.4
