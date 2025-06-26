@@ -100,7 +100,7 @@ class ForcesPBoltzCSVOutputFile(CSVOutputFile):
         capi.get_fcs_ib(forces)
         df[['Fx_IB', 'Fy_IB', 'Fz_IB']] = forces
 
-        capi.get_fcs_noel(forces)
+        capi.get_fcs_np(forces)
         df[['Fx_NP', 'Fy_NP', 'Fz_NP']] = forces
 
         df['iter'] = iter

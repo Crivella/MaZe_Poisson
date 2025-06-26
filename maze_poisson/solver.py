@@ -148,7 +148,7 @@ class SolverMD(Logger):
                 8 * np.pi * cst.NA * cst.EC**2 * self.gset.I * 1e3
             ) / (
                 eps_s * cst.eps0 * cst.kB_si * self.mdv.T
-            ) * cst.BR ** 2
+            ) * cst.BR ** 2 * self.h ** 2
             self.logger.info("Initializing grid for Poisson-Boltzmann.")
             capi.solver_initialize_grid_pois_boltz(
                 self.gset.eps_s, self.gset.w_au, kbar2

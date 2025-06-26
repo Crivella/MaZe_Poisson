@@ -176,7 +176,8 @@ class MDVariables(BaseSettings):
 
         # Poisson-Boltzmann specific
         self.poisson_boltzmann = False
-        self.gamma_np = 0.0
+        self._gamma_np = 0.0
+        self._gamma_np_au = 0.0
         self.beta_np = 0.0
         self.probe_radius = 1.4
 
@@ -227,9 +228,27 @@ class MDVariables(BaseSettings):
         return self.probe_radius / a0
 
     @property
+    def gamma_np(self):
+        """Return the non-polarization gamma in internal units for the code (kcal/mol/A^2)."""
+        return self._gamma_np
+    @gamma_np.setter
+    def gamma_np(self, value):
+        """Set the non-polarization gamma in internal units for the code (kcal/mol/A^2)."""
+        if value < 0:
+            raise ValueError("Non-polarization gamma must be non-negative.")
+        self._gamma_np = value
+        self._gamma_np_au = value * 0.0065934  # Convert to atomic units (a.u.)
+    @property
     def gamma_np_au(self):
-        """Return the non-polarization gamma in internal units for the code (atomic units)."""
-        return self.gamma_np * 0.0065934 # from kcal/mol/A^2 to a.u.
+        """Return the non-polarization gamma in atomic units."""
+        return self._gamma_np_au
+    @gamma_np_au.setter
+    def gamma_np_au(self, value):
+        """Set the non-polarization gamma in atomic units."""
+        if value < 0:
+            raise ValueError("Non-polarization gamma must be non-negative.")
+        self._gamma_np_au = value
+        self._gamma_np = value / 0.0065934  # Convert from atomic units to kcal/mol/A^2
 
 def mpi_file_loader(func):
     @wraps(func)
