@@ -184,39 +184,6 @@ double compute_tf_forces(int n_p, double L, double *pos, double B, double *param
 }
 
 /*
-Rescale the forces on each particle so that the total force is zero.
-Remove from each force the average force on all particles.
-
-@param n_grid: the number of grid points in each dimension
-@param n_p: the number of particles
-@param forces: the forces on each particle to rescale (n_p, 3)
-*/
-void rescale_forces(int n_grid, int n_p, double *forces) {
-    double sum_x = 0.0, sum_y = 0.0, sum_z = 0.0;
-    double avg_x, avg_y, avg_z;
-
-    #pragma omp parallel for reduction(+:sum_x, sum_y, sum_z)
-    for (int i = 0; i < n_p; i++) {
-        int idx = i * 3;
-        sum_x += forces[idx];
-        sum_y += forces[idx + 1];
-        sum_z += forces[idx + 2];
-    }
-
-    avg_x = sum_x / n_p;
-    avg_y = sum_y / n_p;
-    avg_z = sum_z / n_p;
-
-    #pragma omp parallel for
-    for (int i = 0; i < n_p; i++) {
-        int idx = i * 3;
-        forces[idx] -= avg_x;
-        forces[idx + 1] -= avg_y;
-        forces[idx + 2] -= avg_z;
-    }
-}
-
-/*
 Compute the reaction force using the finite difference method.
 
 @param n_grid: the number of grid points in each dimension

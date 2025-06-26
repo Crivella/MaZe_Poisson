@@ -8,8 +8,6 @@ double compute_force_fd(
 );
 double compute_tf_forces(int n_p, double L, double *pos, double B, double *params, double r_cut, double *forces);
 
-void rescale_forces(int n_grid, int n_p, double *forces);
-
 double compute_forces_reaction_field(
     int n_grid, int n_p, double h, int num_neigh,
     double *phi_v, double *phi_s, long int *neighbors, long int *charges, double *pos,

@@ -171,7 +171,6 @@ struct particles {
     double *tf_params;  // Parameters for the TF potential (6 x n_p x n_p)
 
     // Poisson-Boltzmann specific
-    // int non_polar;
     int pb_enabled;  // Poisson-Boltzmann enabled
     double gamma_np;
     double beta_np;
