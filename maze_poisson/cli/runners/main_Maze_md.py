@@ -13,88 +13,6 @@ from ...loggers import logger
 from ...restart import generate_restart
 from ...verlet import (OVRVO_part1, OVRVO_part2, PrecondLinearConjGradPoisson, PrecondLinearConjGradPoisson_PB, VerletPB,
                        VerletPoisson, VerletSolutePart1, VerletSolutePart2)
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-
-def plot_H_field_with_regions(grid, H_field,
-                                       solute_color='indigo',
-                                       bulk_color='lightgray',
-                                       cmap_name='Purples',
-                                       solute_threshold=0.999,
-                                       bulk_threshold=0.001,
-                                       max_points_bulk=200_000):
-    """
-    Plot H field with:
-    - fixed color for solute
-    - grayed-out bulk
-    - gradient colormap for transition region
-
-    Parameters:
-        grid             : object with attribute `h`
-        H_field          : 3D numpy array in [0, 1]
-        solute_color     : matplotlib color for full solute (H ~ 1)
-        bulk_color       : color for solvent/bulk (H ~ 0)
-        cmap_name        : colormap for transition region (starts from solute_color)
-        solute_threshold : H > this → solute
-        bulk_threshold   : H < this → bulk
-        max_points_bulk  : cap on number of bulk points
-    """
-    N = H_field.shape[0]
-    h = grid.h
-    coords = np.linspace(0, (N - 1) * h, N)
-    X, Y, Z = np.meshgrid(coords, coords, coords, indexing='ij')
-
-    x = X.flatten()
-    y = Y.flatten()
-    z = Z.flatten()
-    H = H_field.flatten()
-
-    # Masks
-    mask_solute = H > solute_threshold
-    mask_bulk = H < bulk_threshold
-    mask_transition = (~mask_solute) & (~mask_bulk)
-
-    # Subsample bulk
-    if np.sum(mask_bulk) > max_points_bulk:
-        idx_bulk = np.random.choice(np.where(mask_bulk)[0], size=max_points_bulk, replace=False)
-    else:
-        idx_bulk = np.where(mask_bulk)[0]
-
-    # Plot
-    fig = plt.figure(figsize=(9, 7))
-    ax = fig.add_subplot(111, projection='3d')
-
-    # Bulk: gray + transparent
-    ax.scatter(x[idx_bulk], y[idx_bulk], z[idx_bulk],
-               color=bulk_color, alpha=0.03, s=1, label='bulk')
-
-    # Solute: fixed color
-    ax.scatter(x[mask_solute], y[mask_solute], z[mask_solute],
-               color=solute_color, alpha=1.0, s=10, label='solute')
-
-    # Transition: gradient colormap
-    from matplotlib.cm import get_cmap
-    from matplotlib.colors import Normalize
-
-    cmap = get_cmap(cmap_name)
-    norm = Normalize(vmin=bulk_threshold, vmax=solute_threshold)
-    H_trans = H[mask_transition]
-
-    sc = ax.scatter(x[mask_transition], y[mask_transition], z[mask_transition],
-                    c=H_trans, cmap=cmap, norm=norm, s=6, alpha=0.6, label='transition')
-
-    # Axes and colorbar
-    ax.set_xlabel('x (Å)')
-    ax.set_ylabel('y (Å)')
-    ax.set_zlabel('z (Å)')
-    ax.set_title('Solute Accessibility H')
-
-    cbar = fig.colorbar(sc, ax=ax, label='H value (transition only)')
-    # ax.legend()
-    plt.tight_layout()
-    plt.savefig("H_field_plot.pdf", format='pdf', bbox_inches='tight')
-    plt.show()
-
 
 def main(grid_setting, output_settings, md_variables):
     begin_time = time.time()
@@ -161,7 +79,8 @@ def main(grid_setting, output_settings, md_variables):
     logger.info('Total charge q = '+ str(q_tot))
 
     # set charges with the weight function
-    grid.SetCharges()
+    # grid.SetCharges(uniform=True)
+    grid.SetCharges(uniform=False)
     
     # update dielectric and screening vectors 
     # grid.UpdateEpsAndK2()
@@ -197,14 +116,16 @@ def main(grid_setting, output_settings, md_variables):
     elif md_variables.integrator == 'VV':
         grid.particles = VerletSolutePart1(grid, thermostat=thermostat)
     elif md_variables.integrator == 'manual':
-        # grid.particles.pos[0,:] += md_variables.delta
+        grid.particles.pos[0,:] += md_variables.delta
         grid.particles.pos[1,:] -= md_variables.delta
+        # grid.particles.pos[1,:] += md_variables.delta
 
     # compute 8 nearest neighbors for any particle
     grid.particles.NearestNeighbors()
 
     # set charges with the weight function
-    grid.SetCharges()
+    # grid.SetCharges(uniform=True)
+    grid.SetCharges(uniform=False)
     
     # update dielectric and screening vectors 
     # grid.UpdateEpsAndK2()
@@ -277,15 +198,17 @@ def main(grid_setting, output_settings, md_variables):
         elif md_variables.integrator == 'VV':
             grid.particles = VerletSolutePart1(grid, thermostat = thermostat)
         elif md_variables.integrator == 'manual':
-            # grid.particles.pos[0,:] += md_variables.delta
+            grid.particles.pos[0,:] += md_variables.delta
             grid.particles.pos[1,:] -= md_variables.delta
+            # grid.particles.pos[1,:] += md_variables.delta
 
         if elec:
             # compute 8 nearest neighbors for any particle
             grid.particles.NearestNeighbors()
         
             # set charges with the weight function
-            grid.SetCharges()
+            # grid.SetCharges(uniform=True)
+            grid.SetCharges(uniform=False)
             
             # apply Verlet algorithm
             start_Verlet = time.time()
