@@ -233,46 +233,53 @@ class Grid:
         self.potential_notelec = pe
     '''
 
-    # update charges with a weight function that spreads it on the grid
-    def SetCharges(self):
+    def SetCharges(self, uniform=False):
         L = self.L
         h = self.h
         self.q = np.zeros(self.shape, dtype=float)
-        
-        # for m in range(len(self.particles.charges)):
-        #     for i, j, k in self.particles.neighbors[m, :, :]:
-        #         diff = self.particles.pos[m] - np.array([i,j, k]) * h
-        #         self.q[i, j, k] += self.particles.charges[m] * g(diff[0], L, h) * g(diff[1], L, h) * g(diff[2], L, h)
 
-        # Same as above using broadcasting
-        diff = self.particles.pos[:, np.newaxis, :] - self.particles.neighbors * h
-        
-        # if Python 3.11 or newer uncomment below and comment lines 217-219
-        #self.q[*self.particles.neighbors.reshape(-1, 3).T] += (self.particles.charges[:, np.newaxis] * np.prod(g(diff, L, h), axis=2)).flatten()
-        
-        # Version that works for Python 3.8.15
-        indices = tuple(self.particles.neighbors.reshape(-1, 3).T)
-        
+        # Spargi le prime due particelle (0 e 1) normalmente
+        indices_normal = [0, 1]
+        pos_normal = self.particles.pos[indices_normal]
+        neighbors_normal = self.particles.neighbors[indices_normal]  # shape: (2, 8, 3)
+        charges_normal = self.particles.charges[indices_normal]      # shape: (2,)
+
+        # Calcola le differenze r_i - r_alpha
+        diff = pos_normal[:, np.newaxis, :] - neighbors_normal * h  # shape: (2, 8, 3)
+
+        # Appiattisci gli indici (shape: (3, 16)) per usarli su griglia
+        indices = tuple(neighbors_normal.reshape(-1, 3).T)
+
+        # Calcola i pesi g in base al tipo di interpolazione
         if self.grid_setting.cas == 'CIC':
-            updates = (self.particles.charges[:, np.newaxis] * np.prod(g(diff, L, h), axis=2)).flatten()
+            weights = np.prod(g(diff, L, h), axis=2)  # shape: (2, 8)
         elif self.grid_setting.cas == 'B-Spline':
-            updates = (self.particles.charges[:, np.newaxis] * np.prod(cubic_bspline(diff, L, h), axis=2)).flatten()
+            weights = np.prod(cubic_bspline(diff, L, h), axis=2)
         elif self.grid_setting.cas == 'Quadratic-B-Spline':
-            # w = quadratic_bspline(diff[0], L, h)
-            # print("Weights:", np.sum(np.prod(w, axis=1)))
-            updates = (self.particles.charges[:, np.newaxis] * np.prod(quadratic_bspline(diff, L, h), axis=2)).flatten()
+            weights = np.prod(quadratic_bspline(diff, L, h), axis=2)
         else:
             raise ValueError(f"Unknown grid setting: {self.grid_setting.cas}")
-        
-        self.q[indices] += updates
-  
-        q_tot_expected = np.sum(self.particles.charges)
-        q_tot = np.sum(self.q)
 
-        if q_tot + 1e-6 < q_tot_expected:
-            logger.error('Error: change initial position, charge is not preserved: q_tot ='+str(q_tot))
-            exit() # exits running otherwise it hangs the code
-                
+        updates = (charges_normal[:, np.newaxis] * weights).flatten()  # shape: (16,)
+
+        # Aggiorna la griglia in modo sicuro anche in presenza di indici duplicati
+        np.add.at(self.q, indices, updates)
+
+        # Se richiesto, distribuisci uniformemente la terza carica
+        if uniform:
+            q_uniform = self.particles.charges[2]
+            V = np.prod(self.q.shape)
+            self.q += q_uniform / V
+
+        # Verifica la conservazione della carica
+        q_tot_expected = np.sum(self.particles.charges)
+        q_tot_actual = np.sum(self.q)
+
+        if q_tot_actual + 1e-6 < q_tot_expected:
+            logger.error('Error: change initial position, charge is not preserved: q_tot = ' + str(q_tot_actual))
+            exit()
+    
+    
     # returns only kinetic energy and not electrostatic one
     def Energy(self, iter, print_energy, prev=False):
         # kinetic E
@@ -422,6 +429,8 @@ class Grid:
         # # plt.plot(np.arange(self.N) * self.h * a0, line_p, label='H_p', marker='.', linestyle='-')
         # plt.xlabel('x [Å]')
         # plt.axvline(pos[0,0] * a0, label='$x_1$', color='k', linestyle='-')
+        # print(radius[0] * a0, radius[1] * a0, w * a0)
+        # print()
         
         # plt.axvline(a0 * (pos[0,0] + radius[0] - w), color='r', label='$R_1$ - w')
         # plt.axvline(a0 * (pos[0,0] + radius[0] + w), color='orange', label='$R_1$ + w')

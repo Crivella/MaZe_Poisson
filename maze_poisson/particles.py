@@ -70,11 +70,12 @@ class Particles:
             self.neighbors = np.empty((self.N_p, 64, 3), dtype=int)
       
         # Compute pairwise TF parameters
-        charges_sum = self.charges[:, np.newaxis] + self.charges[np.newaxis, :]  # Shape: (N_p, N_p)
-        A = self.A = np.vectorize(lambda q: self.tf_params[q][0])(charges_sum)
-        C = self.C = np.vectorize(lambda q: self.tf_params[q][1])(charges_sum)
-        D = self.D = np.vectorize(lambda q: self.tf_params[q][2])(charges_sum)
-        sigma_TF = self.sigma_TF = np.vectorize(lambda q: self.tf_params[q][3])(charges_sum)
+        if md_variables.not_elec:
+            charges_sum = self.charges[:, np.newaxis] + self.charges[np.newaxis, :]  # Shape: (N_p, N_p)
+            A = self.A = np.vectorize(lambda q: self.tf_params[q][0])(charges_sum)
+            C = self.C = np.vectorize(lambda q: self.tf_params[q][1])(charges_sum)
+            D = self.D = np.vectorize(lambda q: self.tf_params[q][2])(charges_sum)
+            sigma_TF = self.sigma_TF = np.vectorize(lambda q: self.tf_params[q][3])(charges_sum)
 
             V_shift = A * np.exp(self.B * (sigma_TF - self.r_cutoff)) - C / self.r_cutoff**6 - D / self.r_cutoff**8
             alpha = self.alpha = A * self.B * np.exp(self.B * (sigma_TF - self.r_cutoff)) - 6 * C / self.r_cutoff**7 - 8 * D / self.r_cutoff**9
@@ -348,18 +349,33 @@ class Particles:
             E_x = (np.roll(delta_phi, -1, axis=0) - np.roll(delta_phi, 1, axis=0)) / (2 * h)
             E_y = (np.roll(delta_phi, -1, axis=1) - np.roll(delta_phi, 1, axis=1)) / (2 * h)
             E_z = (np.roll(delta_phi, -1, axis=2) - np.roll(delta_phi, 1, axis=2)) / (2 * h)
-
+            
             neighbors = self.neighbors  # shape: (n_particles, 8, 3)
-            q_neighbors = self.grid.q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]  # (n_particles, 8)
+            neigh_coords = neighbors * h  # (N_p, 8, 3)
 
+            # Compute r_alpha - r_i for all neighbors
+            # Shape: (N_p, 8, 3)
+            diffs = self.pos[:, None, :] - neigh_coords  # shape: (N_p, 8, 3)
+
+            # Calcola g e g_prime per ciascuna componente (shape: N_p, 8)
+            gx  = g(diffs[..., 0], L, h)
+            gy  = g(diffs[..., 1], L, h)
+            gz  = g(diffs[..., 2], L, h)
+
+            # Calcola q_neighbors come prodotto della carica con i g specifici
+            q_neighbors = self.charges[:, None] * gx * gy * gz  # shape: (N_p, 8)
+            # q_neighbors = self.grid.q[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]]  # (N_p, 8)
+
+            # Estrai i campi elettrici nei vicini
             E_neighbors = np.stack([
                 E_x[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
                 E_y[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
                 E_z[neighbors[:, :, 0], neighbors[:, :, 1], neighbors[:, :, 2]],
-            ], axis=-1)  # shape: (n_particles, 8, 3)
+            ], axis=-1)  # shape: (N_p, 8, 3)
 
-            self.forces_rf = -np.sum(q_neighbors[:, :, np.newaxis] * E_neighbors, axis=1)  # (n_particles, 3)
-            
+            # Calcola le forze
+            self.forces_rf = -np.sum(q_neighbors[:, :, None] * E_neighbors, axis=1)  # shape: (N_p, 3)
+  
             # print('FD version:')
             # print(f"RF:  ({self.forces_rf[0][0]}, {self.forces_rf[0][1]}, {self.forces_rf[0][2]})")
             # print(f"     ({self.forces_rf[1][0]}, {self.forces_rf[1][1]}, {self.forces_rf[1][2]})\n")
@@ -427,7 +443,7 @@ class Particles:
                                     term_fwd = dphi_fwd * der_eps
                                 
                                 contrib = phi_center * (term_bwd + term_fwd)     
-                                self.forces_db[a] -= contrib #* h / (8 * np.pi)
+                                self.forces_db[a] -= contrib 
             
             self.forces_db *= h / (8 * np.pi)
                                   
