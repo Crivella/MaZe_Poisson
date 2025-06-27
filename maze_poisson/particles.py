@@ -76,9 +76,9 @@ class Particles:
         D = self.D = np.vectorize(lambda q: self.tf_params[q][2])(charges_sum)
         sigma_TF = self.sigma_TF = np.vectorize(lambda q: self.tf_params[q][3])(charges_sum)
 
-        V_shift = A * np.exp(self.B * (sigma_TF - self.r_cutoff)) - C / self.r_cutoff**6 - D / self.r_cutoff**8
-        alpha = self.alpha = A * self.B * np.exp(self.B * (sigma_TF - self.r_cutoff)) - 6 * C / self.r_cutoff**7 - 8 * D / self.r_cutoff**9
-        self.beta = - V_shift - alpha * self.r_cutoff
+            V_shift = A * np.exp(self.B * (sigma_TF - self.r_cutoff)) - C / self.r_cutoff**6 - D / self.r_cutoff**8
+            alpha = self.alpha = A * self.B * np.exp(self.B * (sigma_TF - self.r_cutoff)) - 6 * C / self.r_cutoff**7 - 8 * D / self.r_cutoff**9
+            self.beta = - V_shift - alpha * self.r_cutoff
 
     def NearestNeighbors(self):
         N = self.grid.N
