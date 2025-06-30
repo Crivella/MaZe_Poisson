@@ -11,7 +11,7 @@ from ...constants import a0, t_au, density
 from ...grid import *
 from ...loggers import logger
 from ...restart import generate_restart
-from ...verlet import (OVRVO_part1, OVRVO_part2, PrecondLinearConjGradPoisson, PrecondLinearConjGradPoisson_PB, VerletPB,
+from ...verlet import (OVRVO_part1, OVRVO_part2, PrecondLinearConjGradPoisson, PrecondLinearConjGradPoisson_PB, PrecondLinearConjGradPoisson_PB_Jacobi, VerletPB,
                        VerletPoisson, VerletSolutePart1, VerletSolutePart2)
 # from ...miccg import MICPreconditionerPB
 
@@ -92,7 +92,7 @@ def main(grid_setting, output_settings, md_variables):
     if preconditioning == "Yes":
         grid.phi_prev, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol)
         if method == 'PB MaZe':
-            grid.phi_s_prev, _ = PrecondLinearConjGradPoisson_PB(- 4 * np.pi * grid.q / h, grid, tol=tol)
+            grid.phi_s_prev, _ = PrecondLinearConjGradPoisson_PB_Jacobi(- 4 * np.pi * grid.q / h, grid, tol=tol)
 
     if not_elec:
         grid.particles.ComputeForceNotElec()
@@ -136,7 +136,7 @@ def main(grid_setting, output_settings, md_variables):
     if preconditioning == "Yes":
         grid.phi, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol, x0=grid.phi_prev)
         if method == 'PB MaZe':
-            grid.phi_s, _ = PrecondLinearConjGradPoisson_PB(- 4 * np.pi * grid.q / h, grid, tol=tol, x0=grid.phi_s_prev)
+            grid.phi_s, _ = PrecondLinearConjGradPoisson_PB_Jacobi(- 4 * np.pi * grid.q / h, grid, tol=tol, x0=grid.phi_s_prev)
 
     if md_variables.integrator == 'OVRVO':
         grid.particles = OVRVO_part2(grid, thermostat = thermostat)
