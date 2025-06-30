@@ -197,7 +197,7 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
             i0 = idx_x + di;
             dx = px - i0 * h;  // Calculate the distance in x direction
             dx2 = dx * dx;
-            i0 = ((i0 + n) % n);  // Wrap around for periodic boundary conditions
+            i0 = (i0 + n) % n;  // Wrap around for periodic boundary conditions
             i0 -= n_start;  // Adjust for local grid start
             if (i0 < 0 || i0 >= n_local) continue;  // Skip if the point is outside the local grid
             i0 *= n2;  // Convert to linear index
@@ -217,7 +217,7 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
 
                     idx_cen = i0 + j0 + k0;  // Calculate the index in the grid
 
-                    if (r2 > r_solv_p2) {
+                    if (r2 >= r_solv_p2) {
                         // Outside the radius, skip this point
                         // continue;  // Skip if outside the radius
                     } else if (r2 > r_solv_m2) {
@@ -235,12 +235,12 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
 
                     // *************** X + h/2 ***************
                     app1 = dx - hd2;  // Adjust for half the grid spacing
-                    app2 = app1 * app1 + dy2 + dz2;
-                    if (app2 > r_solv_p2) {
+                    r2 = app1 * app1 + dy2 + dz2;
+                    if (r2 >= r_solv_p2) {
                         // Do nothihng
-                    } else if (app2 > r_solv_m2) {
+                    } else if (r2 > r_solv_m2) {
                         // Apply the transition region formula
-                        app2 = sqrt(app2) - r_solv + w;
+                        app2 = sqrt(r2) - r_solv + w;
                         eps_x[idx_cen] *= (
                             -(1 / (4 * w3)) * pow(app2, 3) +
                              (3 / (4 * w2)) * pow(app2, 2) 
@@ -253,12 +253,12 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
 
                     // *************** Y + h/2 ***************
                     app1 = dy - hd2;  // Adjust for half the grid spacing
-                    app2 = dx2 + app1 * app1 + dz2;
-                    if (app2 > r_solv_p2) {
+                    r2 = dx2 + app1 * app1 + dz2;
+                    if (r2 >= r_solv_p2) {
                         // Do nothihng
-                    } else if (app2 > r_solv_m2) {
+                    } else if (r2 > r_solv_m2) {
                         // Apply the transition region formula
-                        app2 = sqrt(app2) - r_solv + w;
+                        app2 = sqrt(r2) - r_solv + w;
                         eps_y[idx_cen] *= (
                             -(1 / (4 * w3)) * pow(app2, 3) +
                              (3 / (4 * w2)) * pow(app2, 2) 
@@ -271,12 +271,12 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
 
                     // *************** Z + h/2 ***************
                     app1 = dz - hd2;  // Adjust for half the grid spacing
-                    app2 = dx2 + dy2 + app1 * app1;
-                    if (app2 > r_solv_p2) {
+                    r2 = dx2 + dy2 + app1 * app1;
+                    if (r2 >= r_solv_p2) {
                         // Do nothihng
-                    } else if (app2 > r_solv_m2) {
+                    } else if (r2 > r_solv_m2) {
                         // Apply the transition region formula
-                        app2 = sqrt(app2) - r_solv + w;
+                        app2 = sqrt(r2) - r_solv + w;
                         eps_z[idx_cen] *= (
                             -(1 / (4 * w3)) * pow(app2, 3) +
                              (3 / (4 * w2)) * pow(app2, 2) 

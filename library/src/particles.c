@@ -368,11 +368,11 @@ double calc_h_ratio(double rad, double w2, double w3) {
     return (
         (
             -(3 / (4 * w3)) * pow(rad, 2) +
-                (3 / (2 * w2)) * rad
+             (3 / (2 * w2)) * rad
         ) /
         (
             -(1 / (4 * w3)) * pow(rad, 3) +
-                (3 / (4 * w2)) * pow(rad, 2)
+             (3 / (4 * w2)) * pow(rad, 2)
         ) 
     );
 }
@@ -502,12 +502,6 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                     k1 = (k0 + 1) % n;
                     k2 = (k0 - 1 + n) % n;  // Wrap around for periodic boundary conditions
 
-                    r2 = dx2 + dy2 + dz2;
-                    r1 = sqrt(r2) + 1E-12;
-                    rx = dx / r1;
-                    ry = dy / r1;
-                    rz = dz / r1;
-
                     idx_cen   = i0 + j0 + k0;  // Calculate the index in the grid
                     idx_fwd_x = i1 + j0 + k0;
                     idx_fwd_y = i0 + j1 + k0;
@@ -530,10 +524,11 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                     // S += d_eps_norm;
                     inv_grad = (d_eps_norm > 0.0) ? 1.0 / d_eps_norm : 0.0;
 
-
                     phi_center = g->phi_s[idx_cen];
+
+                    r2 = dx2 + dy2 + dz2;
                     // *************** CENTER***************
-                    if (r2 > r_solv_p2) {
+                    if (r2 >= r_solv_p2) {
                         // Outside the radius, do nothing
                     } else if (r2 > r_solv_m2) {
                         // Inside the transition region, set dielectric constant to a fraction
@@ -557,7 +552,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                     app1 = dx + hd2;  // Adjust for half the grid spacing
                     r2 = app1 * app1 + dy2 + dz2;
                     app2 = inv_grad * d_eps_x;
-                    if (r2 > r_solv_p2) {
+                    if (r2 >= r_solv_p2) {
                         // Do nothihng
                     } else if (r2 > r_solv_m2) {
                         // Apply the transition region formula
@@ -585,7 +580,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                     // *************** X + h/2 ***************
                     app1 = dx - hd2;  // Adjust for half the grid spacing
                     r2 = app1 * app1 + dy2 + dz2;
-                    if (r2 > r_solv_p2) {
+                    if (r2 >= r_solv_p2) {
                         // Do nothihng
                     } else if (r2 > r_solv_m2) {
                         // Apply the transition region formula
@@ -614,7 +609,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                     app1 = dy + hd2;  // Adjust for half the grid spacing
                     r2 = dx2 + app1 * app1 + dz2;
                     app2 = inv_grad * d_eps_y;
-                    if (r2 > r_solv_p2) {
+                    if (r2 >= r_solv_p2) {
                         // Do nothihng
                     } else if (r2 > r_solv_m2) {
                         // Apply the transition region formula
@@ -642,7 +637,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                     // *************** Y + h/2 ***************
                     app1 = dy - hd2;  // Adjust for half the grid spacing
                     r2 = dx2 + app1 * app1 + dz2;
-                    if (r2 > r_solv_p2) {
+                    if (r2 >= r_solv_p2) {
                         // Do nothihng
                     } else if (r2 > r_solv_m2) {
                         // Apply the transition region formula
@@ -671,7 +666,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                     app1 = dz + hd2;  // Adjust for half the grid spacing
                     r2 = dx2 + dy2 + app1 * app1;
                     app2 = inv_grad * d_eps_z;
-                    if (r2 > r_solv_p2) {
+                    if (r2 >= r_solv_p2) {
                         // Do nothihng
                     } else if (r2 > r_solv_m2) {
                         // Apply the transition region formula
@@ -699,7 +694,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                     // *************** Z + h/2 ***************
                     app1 = dz - hd2;  // Adjust for half the grid spacing
                     r2 = dx2 + dy2 + app1 * app1;
-                    if (r2 > r_solv_p2) {
+                    if (r2 >= r_solv_p2) {
                         // Do nothihng
                     } else if (r2 > r_solv_m2) {
                         // Apply the transition region formula
