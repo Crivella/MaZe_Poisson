@@ -404,7 +404,7 @@ def MatrixVectorProduct_PB(v, eps_x, eps_y, eps_z, k2):
     return res
 
 
-def PrecondLinearConjGradPoisson_PB(b, grid, x0 = None, tol=1e-10, print_iters=False, output_file=None):
+def PrecondLinearConjGradPoisson_PB_Jacobi(b, grid, x0 = None, tol=1e-10, print_iters=False, output_file=None):
     N_tot = b.size
     if x0 is None:
         x0 = np.zeros_like(b)
@@ -442,7 +442,44 @@ def PrecondLinearConjGradPoisson_PB(b, grid, x0 = None, tol=1e-10, print_iters=F
     return x, iter
 
 
+def PrecondLinearConjGradPoisson_PB(b, precond, grid, x0 = None, tol=1e-10, print_iters=False, output_file=None):
+    N_tot = b.size
+    if x0 is None:
+        x0 = np.zeros_like(b)
+    x = np.copy(x0)
+    r = MatrixVectorProduct_PB(x, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2 * grid.h**2) - b
+    v = precond.apply(r)  
+    p = -v
+    
+    r_new = np.ones_like(r)
+    iter = 0
+
+    while np.linalg.norm(r_new) > tol:
+        iter = iter + 1
+        if iter > N_tot:
+            raise ValueError('Conjugate gradient did not converge')
+        
+        if print_iters:
+            output_file.write(str(iter) + ',' + str(np.max(np.abs(r_new))) + ',' + str(np.linalg.norm(np.abs(r_new))) + "\n") #+ ',' + str(end_Matrix - start_Matrix) + "\n")
+        
+        Ap = MatrixVectorProduct_PB(p, grid.eps_x, grid.eps_y, grid.eps_z, grid.k2 * grid.h**2) # A @ d for row-by-column product
+        r_dot_v = np.sum(r * v)
+        alpha = r_dot_v / np.sum(p * Ap)
+        x = alpha * p + x
+        r_new = alpha * Ap + r
+        v_new = precond.apply(r_new)
+
+        beta = np.sum(r_new * v_new) / r_dot_v
+
+        p = beta * p - v_new
+        
+        r = r_new
+        v = v_new
+
+    return x, iter
+
 def VerletPB(grid, y, tol):
+# def VerletPB(grid, precond, y, tol):
     tol = grid.md_variables.tol
     h = grid.h
 
@@ -456,7 +493,8 @@ def VerletPB(grid, y, tol):
     sigma_p = grid.q + h / (4 * np.pi) * matrixmult  # M @ grid.phi for row-by-column product
 
     # apply LCG
-    y_new, iter_conv = PrecondLinearConjGradPoisson_PB(sigma_p, grid, x0=y, tol=tol, print_iters=grid.output_settings.print_iters, output_file=grid.output_files.file_output_iters) #riduce di 1/3 il numero di iterazioni necessarie a convergere
+    y_new, iter_conv = PrecondLinearConjGradPoisson_PB_Jacobi(sigma_p, grid, x0=y, tol=tol, print_iters=grid.output_settings.print_iters, output_file=grid.output_files.file_output_iters) #riduce di 1/3 il numero di iterazioni necessarie a convergere
+    # y_new, iter_conv = PrecondLinearConjGradPoisson_PB(sigma_p, precond, grid, x0=y, tol=tol, print_iters=grid.output_settings.print_iters, output_file=grid.output_files.file_output_iters) #riduce di 1/3 il numero di iterazioni necessarie a convergere
     
     # scale the field with the constrained 'force' term
     grid.phi_s -= y_new * (4 * np.pi) / h

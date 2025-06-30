@@ -13,6 +13,7 @@ from ...loggers import logger
 from ...restart import generate_restart
 from ...verlet import (OVRVO_part1, OVRVO_part2, PrecondLinearConjGradPoisson, PrecondLinearConjGradPoisson_PB, VerletPB,
                        VerletPoisson, VerletSolutePart1, VerletSolutePart2)
+# from ...miccg import MICPreconditionerPB
 
 def main(grid_setting, output_settings, md_variables):
     begin_time = time.time()
@@ -221,7 +222,9 @@ def main(grid_setting, output_settings, md_variables):
                 grid.UpdateEpsAndK2_transition()
                 end_update = time.time()
                 
+                # precond = MICPreconditionerPB(grid.eps_x, grid.eps_y, grid.eps_z, grid.k2)
                 start_VerletPB = time.time()
+                # grid, y_s, iter_conv_PB = VerletPB(grid, precond, y=y_s, tol=tol)
                 grid, y_s, iter_conv_PB = VerletPB(grid, y=y_s, tol=tol)
                 end_VerletPB = time.time()
 
