@@ -385,11 +385,12 @@ double particles_compute_forces_pb(particles *p, grid *g) {
     }
     // return 0.0;
 
-    // int size = get_size();
-    // if (size > 1) {
-    //     mpi_fprintf(stderr, "Poisson-Boltzmann forces are not supported in parallel yet.\n");
-    //     exit(1);
-    // }
+    int mpi_proc_id = get_rank();
+    int mpi_size = get_size();
+    if (mpi_size > 1) {
+        mpi_fprintf(stderr, "Poisson-Boltzmann forces are not supported in parallel yet.\n");
+        exit(1);
+    }
 
     int n = g->n;
     int n_local = g->n_local;
@@ -430,12 +431,10 @@ double particles_compute_forces_pb(particles *p, grid *g) {
     mpi_grid_exchange_bot_top(g->eps_y, n_local, n);
     mpi_grid_exchange_bot_top(g->eps_z, n_local, n);
 
-    int mpi_proc_id = get_rank();
-    int mpi_size = get_size();
 
-    // #pragma \
-    //     omp parallel for private(r_solv, px, py, pz, idx_x, idx_y, idx_z) \
-    //     reduction(+:non_polar_energy, fcs_db[:size], fcs_ib[:size], fcs_np[:size])
+    #pragma \
+        omp parallel for private(r_solv, px, py, pz, idx_x, idx_y, idx_z) \
+        reduction(+:non_polar_energy, fcs_db[:size], fcs_ib[:size], fcs_np[:size])
     for (int np = 0; np < p->n_p; np++) {
         int np3 = np * 3;
 
@@ -478,7 +477,13 @@ double particles_compute_forces_pb(particles *p, grid *g) {
             dx2 = dx * dx;
             i0 = ((i0 + n) % n);  // Wrap around for periodic boundary conditions
             i0 -= n_start;  // Adjust for local grid start
-            if (i0 < 0 || i0 >= n_local) continue;  // Skip if the point is outside the local grid
+            if (i0 < 0 || i0 >= n_local) { 
+                // printf(
+                //     "Skipping index %d (local %d, n_local %d) on proc %d / %d  np %d\n",
+                //     i0 + n_start, i0, n_local, mpi_proc_id, mpi_size, np
+                // );
+                continue;  // Skip if the point is outside the local grid
+            }
             // printf(
             //     "Running np=%d gx=%d (loc %d  n_loc %d) on proc %d / %d\n",
             //     np, i0+n_start, i0, n_local, mpi_proc_id, mpi_size

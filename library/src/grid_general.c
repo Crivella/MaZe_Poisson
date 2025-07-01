@@ -290,7 +290,7 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
             }
         }
     }
-    for (long int i = 0; i < g->size; i++) {
+    for (long int i = 0; i < size; i++) {
         eps_x[i] += 1.0;  // Update x dielectric constant
         eps_y[i] += 1.0;  // Update y dielectric constant
         eps_z[i] += 1.0;  // Update z dielectric constant
