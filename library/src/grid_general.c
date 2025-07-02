@@ -126,11 +126,6 @@ void grid_free(grid *grid) {
 
 void grid_update_eps_and_k2(grid *g, particles *p) {
     // Update the dielectric constant and screening factor based on the grid's transition regions
-    // int size = get_size();
-    // if (size > 1) {
-    //     mpi_fprintf(stderr, "Poisson-Boltzmann update_eps_and_k2 not supported in parallel yet.\n");
-    //     exit(1);
-    // }
     int n = g->n;
     int n_local = g->n_local;
     int n_start = g->n_start;
@@ -227,7 +222,6 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
                             -(1 / (4 * w3)) * pow(app2, 3) +
                              (3 / (4 * w2)) * pow(app2, 2) 
                         );
-                        // mpi_printf("Transition region (0): i=%d, j=%d, k=%d\n", i, j, k);
                     } else {
                         // Inside the radius, set dielectric constant to zero
                         k2[idx_cen] = 0.0;  // Set screening factor to zero
@@ -245,7 +239,6 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
                             -(1 / (4 * w3)) * pow(app2, 3) +
                              (3 / (4 * w2)) * pow(app2, 2) 
                         );
-                        // mpi_printf("Transition region (X): i=%d, j=%d, k=%d\n", i, j, k);
                     } else {
                         // Inside the radius, set dielectric constant to zero
                         eps_x[idx_cen] = 0.0;
@@ -263,7 +256,6 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
                             -(1 / (4 * w3)) * pow(app2, 3) +
                              (3 / (4 * w2)) * pow(app2, 2) 
                         );
-                        // mpi_printf("Transition region (Y): i=%d, j=%d, k=%d\n", i, j, k);
                     } else {
                         // Inside the radius, set dielectric constant to zero
                         eps_y[idx_cen] = 0.0;
@@ -281,7 +273,6 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
                             -(1 / (4 * w3)) * pow(app2, 3) +
                              (3 / (4 * w2)) * pow(app2, 2) 
                         );
-                        // mpi_printf("Transition region (Z): i=%d, j=%d, k=%d\n", i, j, k);
                     } else {
                         // Inside the radius, set dielectric constant to zero
                         eps_z[idx_cen] = 0.0;
@@ -294,16 +285,10 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
         eps_x[i] += 1.0;  // Update x dielectric constant
         eps_y[i] += 1.0;  // Update y dielectric constant
         eps_z[i] += 1.0;  // Update z dielectric constant
-        // mpi_printf("%.1f  ", g->eps_x[i]);
     }
-    // for (long int i = 0; i < grid->size; i++) {
-    //     grid->eps_x[i] = 1.0 + (eps_s - 1.0) * grid->H[0][i];  // Update x dielectric constant
-    //     grid->eps_y[i] = 1.0 + (eps_s - 1.0) * grid->H[1][i];  // Update y dielectric constant
-    //     grid->eps_z[i] = 1.0 + (eps_s - 1.0) * grid->H[2][i];  // Update z dielectric constant
-    //     grid->k2[i] = kbar2 * grid->H[5][i];  // Update screening factor
-    // }
 }    
 
+/*Important, when called for IO must be called by all procs*/
 double grid_get_pb_delta_energy_elec(grid *g){
     if (! g->pb_enabled) {
         // Poisson-Boltzmann is not enabled, return 0

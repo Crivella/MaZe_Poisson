@@ -83,6 +83,8 @@ class OutputFiles:
     files = ['performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force', 'forces_pb']
     files_restart = ['restart', 'restart_field']
 
+    with_mpi_bypass = ['energy']
+
     format_classes = {}
 
     last = -1
@@ -131,7 +133,7 @@ class OutputFiles:
                 for name in self.files:
                     file = getattr(self, name)
                     if file:
-                        file.write_data(itr, solver)
+                        file.write_data(itr, solver, mpi_bypass=(name in self.with_mpi_bypass))
                 if force or (self.out_flushstride and itr % self.out_flushstride == 0):
                     self.flush()
         if self.restart_step == itr:

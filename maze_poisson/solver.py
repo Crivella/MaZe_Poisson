@@ -2,6 +2,7 @@
 import atexit
 import logging
 import os
+import sys
 from typing import Dict
 
 import numpy as np
@@ -323,7 +324,7 @@ class SolverMD(Logger):
         """Update the charge grid based on the particles position with function g to spread them on the grid."""
         if capi.solver_update_charges() != 0:
             self.logger.error('Error: change initial position, charge is not preserved.')
-            exit()
+            sys.exit(1)
 
     @Clock('integrator')
     def integrator_part1(self):

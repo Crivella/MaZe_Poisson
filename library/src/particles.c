@@ -383,15 +383,6 @@ double particles_compute_forces_pb(particles *p, grid *g) {
         mpi_fprintf(stderr, "Poisson-Boltzmann forces are not enabled in the grid.\n");
         exit(1);
     }
-    // return 0.0;
-
-    int mpi_proc_id = get_rank();
-    int mpi_size = get_size();
-    if (mpi_size > 1) {
-        mpi_fprintf(stderr, "Poisson-Boltzmann forces are not supported in parallel yet.\n");
-        exit(1);
-    }
-
     int n = g->n;
     int n_local = g->n_local;
     int n_start = g->n_start;
@@ -430,7 +421,6 @@ double particles_compute_forces_pb(particles *p, grid *g) {
     mpi_grid_exchange_bot_top(g->eps_x, n_local, n);
     mpi_grid_exchange_bot_top(g->eps_y, n_local, n);
     mpi_grid_exchange_bot_top(g->eps_z, n_local, n);
-
 
     #pragma \
         omp parallel for private(r_solv, px, py, pz, idx_x, idx_y, idx_z) \
@@ -478,16 +468,8 @@ double particles_compute_forces_pb(particles *p, grid *g) {
             i0 = ((i0 + n) % n);  // Wrap around for periodic boundary conditions
             i0 -= n_start;  // Adjust for local grid start
             if (i0 < 0 || i0 >= n_local) { 
-                // printf(
-                //     "Skipping index %d (local %d, n_local %d) on proc %d / %d  np %d\n",
-                //     i0 + n_start, i0, n_local, mpi_proc_id, mpi_size, np
-                // );
                 continue;  // Skip if the point is outside the local grid
             }
-            // printf(
-            //     "Running np=%d gx=%d (loc %d  n_loc %d) on proc %d / %d\n",
-            //     np, i0+n_start, i0, n_local, mpi_proc_id, mpi_size
-            //     );
             i0 *= n2;  // Convert to linear index
             i1 = i0 + n2;
             i2 = i0 - n2;

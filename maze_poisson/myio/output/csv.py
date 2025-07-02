@@ -20,7 +20,7 @@ class CSVOutputFile(BaseOutputFile):
 
     def write_data(self, iter: int, solver = None, mode: str = 'a', mpi_bypass: bool = False):
         if not self.enabled:
-            # Needed when the get_data method needs to be called on all ranks to avoid MPI deadlock
+            # Needed when the get_data method needs to be called on all ranks to avoid MPI deadlock/desyncs
             if self._enabled and mpi_bypass:
                 self.get_data(iter, solver)
             return
@@ -47,7 +47,7 @@ class EnergyCSVOutputFile(CSVOutputFile):
     headers = ['iter', 'K', 'V_notelec', 'DeltaG_elec', 'DeltaG_nonpolar']
     def get_data(self, iter: int, solver):
         kin = capi.get_kinetic_energy()
-        deltaG_elec = capi.get_pb_delta_energy_elec()
+        deltaG_elec = capi.get_pb_delta_energy_elec()  # Needs mpi_bypass=True
 
         return pd.DataFrame({
             'iter': [iter],

@@ -131,6 +131,12 @@ void bcast_double(double *buffer, long int size, int root) {
     }
 }
 
+void barrier() {
+    if (global_mpi_data->size > 1) {
+        MPI_Barrier(global_mpi_data->comm);
+    }
+}
+
 void mpi_grid_collect_buffer(double *data, double *recv, int n) {
     int n_loc = global_mpi_data->n_loc;
     int n_loc_start;
@@ -189,6 +195,10 @@ void bcast_double(double *buffer, long int size, int root) {
 }
 
 void allreduce_sum(double *buffer, long int size) {
+    // Do nothing
+}
+
+void barrier() {
     // Do nothing
 }
 

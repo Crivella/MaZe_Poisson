@@ -96,6 +96,7 @@ int solver_update_charges() {
     if (fabs(q_tot - q_tot_loc) > 1e-6) {
         res = 1;
         printf("Charge conservation error: q_tot = %.6f, q_tot_loc = %.6f\n", q_tot, q_tot_loc);
+        exit(1);
     }
 
     q_tot = q_tot_loc;
