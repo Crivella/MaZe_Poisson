@@ -101,30 +101,17 @@ class SolverMD(Logger):
 
     def initialize_str_maps(self):
         """Initialize the string maps."""
-        n = capi.get_grid_type_num()
-        for i in range(n):
-            ptr = capi.get_grid_type_str(i)
-            method_grid_map[ptr.decode('utf-8').upper()] = i
-
-        n = capi.get_potential_type_num()
-        for i in range(n):
-            ptr = capi.get_potential_type_str(i)
-            potential_map[ptr.decode('utf-8').upper()] = i
-
-        n = capi.get_ca_scheme_type_num()
-        for i in range(n):
-            ptr = capi.get_ca_scheme_type_str(i)
-            ca_scheme_map[ptr.decode('utf-8').upper()] = i
-
-        n = capi.get_integrator_type_num()
-        for i in range(n):
-            ptr = capi.get_integrator_type_str(i)
-            integrator_map[ptr.decode('utf-8').upper()] = i
-
-        n = capi.get_precond_type_num()
-        for i in range(n):
-            ptr = capi.get_precond_type_str(i)
-            precond_map[ptr.decode('utf-8').upper()] = i
+        for _map, fname_num, fname_data in [
+            (method_grid_map, 'get_grid_type_num', 'get_grid_type_str'),
+            (potential_map, 'get_potential_type_num', 'get_potential_type_str'),
+            (ca_scheme_map, 'get_ca_scheme_type_num', 'get_ca_scheme_type_str'),
+            (integrator_map, 'get_integrator_type_num', 'get_integrator_type_str'),
+            (precond_map, 'get_precond_type_num', 'get_precond_type_str'),
+        ]:
+            n = getattr(capi, fname_num)()
+            for i in range(n):
+                ptr = getattr(capi, fname_data)(i)
+                _map[ptr.decode('utf-8').upper()] = i
 
     def initialize_grid(self):
         """Initialize the grid."""
