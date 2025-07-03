@@ -83,7 +83,7 @@ class OutputFiles:
     files = ['performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force', 'forces_pb']
     files_restart = ['restart', 'restart_field']
 
-    with_mpi_bypass = ['energy']
+    with_mpi_bypass = ['energy', 'restart_field']
 
     format_classes = {}
 
@@ -137,15 +137,11 @@ class OutputFiles:
                 if force or (self.out_flushstride and itr % self.out_flushstride == 0):
                     self.flush()
         if self.restart_step == itr:
-            # for name in self.files_restart:
-            #     file = getattr(self, name)
-            #     if file:
-            #         file.write_data(itr, solver, mode='w')
-            #         file.flush()
-            self.restart.write_data(itr, solver, mode='w')
-            self.restart_field.write_data(itr, solver, mode='w', mpi_bypass=True)
-            self.restart.flush()
-            self.restart_field.flush()
+            for name in self.files_restart:
+                file = getattr(self, name)
+                if file:
+                    file.write_data(itr, solver, mode='w', mpi_bypass=(name in self.with_mpi_bypass))
+                    file.flush()
 
     @classmethod
     def register_format(cls, name: str, classes: dict):

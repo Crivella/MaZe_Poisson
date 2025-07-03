@@ -136,6 +136,13 @@ capi.register_function(
     ],
 )
 
+# void get_radii(double *recv) {
+capi.register_function(
+    'get_radii', None, [
+        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+    ],
+)
+
 # void get_field(double *recv) {
 capi.register_function(
     'get_field', None, [

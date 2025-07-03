@@ -1,9 +1,7 @@
-from abc import ABC, abstractmethod
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from functools import wraps
 
 from ...constants import a0, kB, t_au
-from ..loggers import logger
 
 
 class BaseFileInput:
@@ -138,15 +136,3 @@ def mpi_file_loader(func):
         obj = func(*args, **kwargs)
         return obj
     return wrapper
-
-# def validate_all(*args):
-#     """Call validate on all objects and raise a ValueError if any fail."""
-#     msg = []
-#     for obj in args:
-#         name = obj.__class__.__name__
-#         try:
-#             obj.validate()
-#         except ValueError as e:
-#             msg.append(f"{name}: {str(e)}")
-#     if msg:
-#         raise ValueError('\n'.join(msg))

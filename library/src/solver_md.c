@@ -294,6 +294,14 @@ void get_masses(double *recv) {
     memcpy(recv, g_particles->mass, g_particles->n_p * sizeof(double));
 }
 
+void get_radii(double *recv) {
+    if (g_particles->solv_radii != NULL) {
+        memcpy(recv, g_particles->solv_radii, g_particles->n_p * sizeof(double));
+    } else {
+        memset(recv, 0, g_particles->n_p * sizeof(double));
+    }
+}
+
 void get_field(double *recv) {
     mpi_grid_collect_buffer(g_grid->phi_n, recv, g_grid->n);
 }
