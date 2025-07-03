@@ -336,15 +336,13 @@ class SolverMD(Logger):
             self.logger.info("Running MD loop initialization steps...")
             for i in ProgressBar(self.mdv.init_steps):
                 self.md_loop_iter()
-            if self.mdv.init_steps_thermostat:
-                n_steps = self.mdv.init_steps_thermostat
-                self.logger.info(
-                    f"Running additional {n_steps} steps or until temperature is reached."
-                )
-                for i in ProgressBar(n_steps):
-                    self.md_loop_iter()
-                    if self.md_check_thermostat(i + self.mdv.init_steps):
-                        break
+        if self.mdv.init_steps_thermostat:
+            n_steps = self.mdv.init_steps_thermostat
+            self.logger.info(f"Running additional {n_steps} steps or until temperature is reached.")
+            for i in ProgressBar(n_steps):
+                self.md_loop_iter()
+                if self.md_check_thermostat(i + self.mdv.init_steps):
+                    break
 
         if self.thermostat:
             self.logger.warning("Thermostat condition not met after initialization steps!!!")
