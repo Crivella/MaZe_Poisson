@@ -67,6 +67,9 @@ class SolverMD(Logger):
 
         self.energy_nonpolar = 0.0
 
+        if self.outset.print_restart:
+            outset.restart_step = outset.restart_step or mdv.N_steps
+
         self.ofiles = OutputFiles(self.outset)
         self.out_stride = outset.stride
         self.out_flushstride = outset.flushstride * outset.stride
@@ -387,6 +390,8 @@ class SolverMD(Logger):
         self.logger.info(f'  Elec: {self.mdv.elec}    NotElec: {self.mdv.not_elec}')
         self.logger.info(f'  Temperature: {self.mdv.T} K,  Thermostat: {self.mdv.thermostat},  Gamma: {self.mdv.gamma}')
         self.logger.info(f'  Velocity rescaling: {self.mdv.rescale}')
+        if self.outset.print_restart:
+            self.logger.info(f'  Restart step: {self.outset.restart_step}')
         if self.mdv.poisson_boltzmann:
             w_ang = self.gset.w_ang
             h_ang = self.gset.h * cst.a0

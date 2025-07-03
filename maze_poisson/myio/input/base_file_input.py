@@ -1,9 +1,7 @@
 from abc import ABC, abstractmethod
 from functools import wraps
 
-import numpy as np
-
-from ...constants import a0, density, kB, m_Cl, m_Na, t_au
+from ...constants import a0, kB, t_au
 from ..loggers import logger
 
 
@@ -59,9 +57,8 @@ class OutputSettings(BaseSettings):
         self.path = 'Outputs/'
         self.format = 'csv'
         self.stride = 50
-        self.flushstride = 0
+        self.flushstride = 5
         self.debug = False
-        self.generate_restart_file = False
         self.restart_step = None
 
 class GridSetting(BaseSettings):
