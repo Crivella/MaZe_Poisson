@@ -2,6 +2,7 @@ from dataclasses import asdict, dataclass
 from functools import wraps
 
 from ...constants import a0, kB, t_au
+from ...myio.loggers import logger
 
 
 class BaseFileInput:
@@ -20,7 +21,12 @@ class BaseFileInput:
     def from_dict(cls, dct):
         """Create an instance from a dictionary."""
         dct = cls.normalize_ang_to_au(dct)
-        return cls(**dct)
+        try:
+            new = cls(**dct)
+        except TypeError as e:
+            logger.error(f"Error creating {cls.__name__}: {e}")
+            exit(1)
+        return new
     
     @classmethod
     def normalize_args(cls, dct):

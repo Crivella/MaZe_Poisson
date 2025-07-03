@@ -1,6 +1,7 @@
 import atexit
 import json
 import os
+import time
 from abc import ABC, abstractmethod
 from io import StringIO
 
@@ -95,7 +96,20 @@ class OutputFiles:
         self.fmt = oset.format
 
         if not os.path.exists(self.base_path) and get_enabled_io():
-            os.makedirs(self.base_path, exist_ok=True)
+            try:
+                os.makedirs(self.base_path, exist_ok=True)
+            except:
+                pass
+
+        cnt = 0
+        while not os.path.exists(self.base_path):
+            cnt += 1
+            time.sleep(0.5)
+            if cnt > 10:
+                raise ValueError(f"Failed to create output directory {self.base_path} after 10 attempts")
+
+        if not os.path.isdir(self.base_path):
+            raise ValueError(f"Output path {self.base_path} is not a directory")
 
         self.out_stride = oset.stride
         self.out_flushstride = (oset.flushstride or 0) * oset.stride

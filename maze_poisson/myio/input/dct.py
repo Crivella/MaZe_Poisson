@@ -10,10 +10,6 @@ def initialize_from_dict(data: Dict) -> Tuple[GridSetting, OutputSettings, MDVar
         ('md_variables', MDVariables)
     ]
 
-    res = []
-
-    for key, cls in settings_map:
-        args = cls.normalize_args(data[key])
-        res.append(cls(**args))
+    res = [cls.from_dict(data[key]) for key, cls in settings_map]
 
     return tuple(res)
