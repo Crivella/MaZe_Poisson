@@ -213,36 +213,23 @@ class SolverMD(Logger):
 
     def initialize_md(self):
         """Initialize the first 2 steps for the MD and forces."""
-        # if capi.solver_initialize_md(self.mdv.preconditioning, self.mdv.rescale) != 0:
-        #     self.logger.error("Error initializing MD.")
-        #     exit()
         self.logger.info("Initializing MD (first 2 steps)...")
         ffile = self.gset.restart_field_file
         if ffile is None or self.mdv.invert_time:
             # STEP 0 Verlet
-            self.logger.debug("---- Udpating charges")
             self.update_charges()
-            self.logger.debug("---- Updating eps_k2")
             self.update_eps_k2()
             # if self.mdv.preconditioning:
-            self.logger.debug("---- Initializing field")
             self.initialize_field()
-            self.logger.debug("---- Computing forces")
             self.compute_forces()
 
             # STEP 1 Verlet
-            self.logger.debug("---- Integrator part 1")
             self.integrator_part1()
-            self.logger.debug("---- Updating charges")
             self.update_charges()
-            self.logger.debug("---- Updating eps_k2")
             self.update_eps_k2()
             # if self.mdv.preconditioning:
-            self.logger.debug("---- Initializing field")
             self.initialize_field()
-            self.logger.debug("---- Computing forces")
             self.compute_forces()
-            self.logger.debug("---- Integrator part 2")
             self.integrator_part2()
         elif ffile:
             df = pd.read_csv(ffile)
