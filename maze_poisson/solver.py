@@ -142,7 +142,7 @@ class SolverMD(Logger):
             ) * cst.BR ** 2 * self.h ** 2
             self.logger.info("Initializing grid for Poisson-Boltzmann.")
             capi.solver_initialize_grid_pois_boltz(
-                self.gset.eps_s, self.gset.w_au, kbar2
+                self.gset.eps_s, self.gset.w, kbar2
             )
 
     def initialize_particles(self):
@@ -153,14 +153,12 @@ class SolverMD(Logger):
             raise ValueError(f"Potential {potential} not recognized.")
         pot_id = potential_map[potential]
 
-        cas_str = self.gset.charge_assignment.upper()
+        cas_str = self.gset.cas.upper()
         if not cas_str in ca_scheme_map:
             raise ValueError(f"Charge assignment scheme {cas_str} not recognized.")
         ca_scheme_id = ca_scheme_map[cas_str]
 
-        if self.gset.input_file and self.gset.restart_file:
-            self.logger.warning("Both input and restart files provided. Using restart file.")
-        start_file = self.gset.restart_file or self.gset.input_file
+        start_file = self.gset.input_file
         kBT = self.mdv.kBT
 
         df = pd.read_csv(start_file)
@@ -194,7 +192,7 @@ class SolverMD(Logger):
         if self.mdv.poisson_boltzmann:
             if 'radius' not in df.columns:
                 raise ValueError("Probe radius must be provided in the input file for Poisson-Boltzmann.")
-            radius = np.ascontiguousarray(df['radius'].values, dtype=np.float64) / cst.a0 + self.mdv.probe_radius_au
+            radius = np.ascontiguousarray(df['radius'].values, dtype=np.float64) / cst.a0 + self.mdv.probe_radius
             self.logger.info("Initializing particles for Poisson-Boltzmann.")
             capi.solver_initialize_particles_pois_boltz(
                 self.mdv.gamma_np_au, self.mdv.beta_np, radius
@@ -383,7 +381,7 @@ class SolverMD(Logger):
         self.logger.info(f'  N = {self.N}, L [a.u.] = {self.L}, h [a.u.] = {self.h}')
         self.logger.info(f'  density = {density} g/cm^3')
         self.logger.info(f'  Solver: {self.mdv.method},  Preconditioner: {self.gset.precond}')
-        self.logger.info(f'  Charge assignment scheme: {self.gset.charge_assignment}')
+        self.logger.info(f'  Charge assignment scheme: {self.gset.cas}')
         # self.logger.info(f'  Preconditioning: {self.mdv.preconditioning}')
         self.logger.info(f'  Integrator: {self.mdv.integrator}, dt = {self.mdv.dt}')
         self.logger.info(f'  Potential: {self.mdv.potential}')
