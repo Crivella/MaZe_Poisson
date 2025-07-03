@@ -100,6 +100,7 @@ class MDVariables(BaseFileInput):
     dt_fs: float  # Timestep in femtoseconds
 
     init_steps: int = 0  # Initial steps before the main simulation
+    init_steps_thermostat: int = None  # Initial steps before the main simulation
     elec: bool = True # Whether to include electrostatic interactions
     not_elec: bool = True  # Whether to include non-electrostatic interactions
     potential: str = 'TF'  # Type of potential to use
@@ -118,6 +119,11 @@ class MDVariables(BaseFileInput):
     gamma_np: float = 0.0  # Non-polarization gamma in kcal/mol/A^2
     beta_np: float = 0.0  # offset in kcal/mol
     probe_radius: float = 1.4 / a0  # Probe radius in a.u.
+
+    def __post__init__(self):
+        """Post-initialization to set defaults."""
+        if self.dt_fs <= 0:
+            raise ValueError("dt_fs must be a positive value.")
 
     @property
     def kBT(self):

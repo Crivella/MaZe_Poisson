@@ -63,6 +63,8 @@ class SolverMD(Logger):
         self.N = gset.N
         self.N_p = gset.N_p
 
+        self.thermostat = mdv.thermostat
+
         self.n_iters = 0
 
         self.energy_nonpolar = 0.0
@@ -322,9 +324,11 @@ class SolverMD(Logger):
         self.compute_forces()
         self.integrator_part2()
 
-    def md_check_thermostat(self, iter: int):
+    def md_check_thermostat(self, iter: int) -> bool:
         if capi.solver_check_thermostat():
+            self.thermostat = False
             self.logger.info(f'End thermostating iteration {iter}')
+        return not self.thermostat
 
     def md_loop(self):
         """Run the molecular dynamics loop."""
@@ -332,6 +336,18 @@ class SolverMD(Logger):
             self.logger.info("Running MD loop initialization steps...")
             for i in ProgressBar(self.mdv.init_steps):
                 self.md_loop_iter()
+            if self.mdv.init_steps_thermostat:
+                n_steps = self.mdv.init_steps_thermostat
+                self.logger.info(
+                    f"Running additional {n_steps} steps or until temperature is reached."
+                )
+                for i in ProgressBar(n_steps):
+                    self.md_loop_iter()
+                    if self.md_check_thermostat(i + self.mdv.init_steps):
+                        break
+
+        if self.thermostat:
+            self.logger.warning("Thermostat condition not met after initialization steps!!!")
 
         temp = capi.get_temperature()
         self.logger.info(f"Temperature: {temp:.2f} K")
