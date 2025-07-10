@@ -72,6 +72,7 @@ class GridSetting(BaseFileInput):
     N_p: int
     L: float
     h: float = None
+    eps_s: float = 1.0  # Relative permittivity of the solvent (vacuum by default)
 
     input_file: str
 
@@ -82,7 +83,6 @@ class GridSetting(BaseFileInput):
     smoother: str = 'LCG'
 
     # Poisson-Boltzmann specific
-    eps_s: float = 80.0  # Relative permittivity of the solvent (water by default)
     I: float = None  # Ionic strength
     w: float = None  # Width of the transition region in Angstroms
             
