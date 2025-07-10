@@ -131,7 +131,7 @@ class SolverMD(Logger):
         grid_id = method_grid_map[method]
         precond_id = precond_map[precond]
         capi.solver_initialize_grid(
-            self.N, self.L, self.h, self.mdv.tol,
+            self.N, self.L, self.h, self.mdv.tol, self.gset.eps_s,
             grid_id, precond_id
         )
 
@@ -144,7 +144,7 @@ class SolverMD(Logger):
             ) * cst.BR ** 2 * self.h ** 2
             self.logger.info("Initializing grid for Poisson-Boltzmann.")
             capi.solver_initialize_grid_pois_boltz(
-                self.gset.eps_s, self.gset.w, kbar2
+                self.gset.w, kbar2
             )
 
     def initialize_particles(self):

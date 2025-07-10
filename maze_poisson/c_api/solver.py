@@ -9,10 +9,11 @@ capi.register_function(
     'solver_initialize', None, []
 )
 
-# void solverinitialize_grid(int n_grid, double L, double h, double tol, int grid_type, int precond_type) {
+# void solverinitialize_grid(int n_grid, double L, double h, double tol, double eps, int grid_type, int precond_type) {
 capi.register_function(
     'solver_initialize_grid', None, [
         ctypes.c_int,
+        ctypes.c_double,
         ctypes.c_double,
         ctypes.c_double,
         ctypes.c_double,
@@ -21,10 +22,9 @@ capi.register_function(
     ],
 )
 
-# void solver_initialize_grid_pois_boltz(double eps_s, double I, double w, double kbar2) {
+# void solver_initialize_grid_pois_boltz(double I, double w, double kbar2) {
 capi.register_function(
     'solver_initialize_grid_pois_boltz', None, [
-        ctypes.c_double,
         ctypes.c_double,
         ctypes.c_double,
     ],

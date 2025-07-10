@@ -169,9 +169,9 @@ capi.register_function(
     'get_kinetic_energy', ctypes.c_double, [],
 )
 
-# double get_pb_delta_energy_elec() {
+# double get_energy_elec() {
 capi.register_function(
-    'get_pb_delta_energy_elec', ctypes.c_double, [],
+    'get_energy_elec', ctypes.c_double, [],
 )
 
 # void get_momentum(double *recv) {

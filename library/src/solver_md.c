@@ -38,14 +38,14 @@ void solver_initialize() {
 }
 
 void solver_initialize_grid(
-    int n_grid, double L, double h, double tol, int grid_type, int precond_type
+    int n_grid, double L, double h, double tol, double eps, int grid_type, int precond_type
 ) {
-    g_grid = grid_init(n_grid, L, h, tol, grid_type, precond_type);
+    g_grid = grid_init(n_grid, L, h, tol, eps, grid_type, precond_type);
 }
 
-void solver_initialize_grid_pois_boltz(double eps_s, double w, double kbar2) {
+void solver_initialize_grid_pois_boltz(double w, double kbar2) {
     // Initialize the solvent potential and dielectric constant arrays
-    grid_pb_init(g_grid, eps_s, w, kbar2);
+    grid_pb_init(g_grid, w, kbar2);
 }
 
 void solver_initialize_particles(
@@ -335,8 +335,8 @@ double get_kinetic_energy() {
     return g_particles->get_kinetic_energy(g_particles);
 }
 
-double get_pb_delta_energy_elec() {
-    return grid_get_pb_delta_energy_elec(g_grid);
+double get_energy_elec() {
+    return grid_get_energy_elec(g_grid);
 }
 
 void get_momentum(double *recv) {

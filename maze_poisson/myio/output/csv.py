@@ -44,16 +44,16 @@ class CSVOutputFile(BaseOutputFile):
 
 class EnergyCSVOutputFile(CSVOutputFile):
     name = 'energy'
-    headers = ['iter', 'K', 'V_notelec', 'DeltaG_elec', 'DeltaG_nonpolar']
+    headers = ['iter', 'K', 'V_notelec', 'V_elec', 'DeltaG_nonpolar']
     def get_data(self, iter: int, solver):
         kin = capi.get_kinetic_energy()
-        deltaG_elec = capi.get_pb_delta_energy_elec()  # Needs mpi_bypass=True
+        deltaG_elec = capi.get_energy_elec()  # Needs mpi_bypass=True
 
         return pd.DataFrame({
             'iter': [iter],
             'K': [kin],
             'V_notelec': [solver.potential_notelec],
-            'DeltaG_elec': [deltaG_elec],
+            'V_elec': [deltaG_elec],
             'DeltaG_nonpolar': [solver.energy_nonpolar],
         })
 

@@ -34,7 +34,7 @@ typedef struct particles particles;
 typedef struct integrator integrator;
 
 // Struct function definitions
-grid * grid_init(int n, double L, double h, double tol, int type, int precond_type);
+grid * grid_init(int n, double L, double h, double tol, double eps, int type, int precond_type);
 particles * particles_init(int n, int n_p, double L, double h, int cas_type);
 integrator * integrator_init(int n_p, double dt, int type);
 
@@ -42,10 +42,10 @@ void grid_free(grid *grid);
 void particles_free(particles *p);
 void integrator_free(integrator *integrator);
 
-void grid_pb_init(grid *grid, double eps_s, double w, double kbar2);
+void grid_pb_init(grid *grid, double w, double kbar2);
 void grid_pb_free(grid *grid);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
-double grid_get_pb_delta_energy_elec(grid *grid);
+double grid_get_energy_elec(grid *grid);
 
 void lcg_grid_init(grid * grid);
 void lcg_grid_cleanup(grid * grid);
@@ -109,6 +109,7 @@ struct grid {
     int n;  // Number of grid points per dimension
     double L;  // Length of the grid
     double h;  // Grid spacing
+    double eps_s;  // Dielectric constant of the solvent
 
     long int size;  // Total number of grid points
     int n_local; // X - Number of grid points per dimension (MPI aware)
@@ -124,13 +125,10 @@ struct grid {
 
     // Poisson-Boltzmann specific
     int pb_enabled;  // Poisson-Boltzmann enabled
-    double eps_s;  // Dielectric constant of the solvent
     double w;  // Ionic boundary width
     double kbar2;  // Screening factor
-    double *y_s;  // Intermediate field constraint for solvent
+
     double *k2;  // Screening factor
-    double *phi_s_prev;  // Solvent potential
-    double *phi_s;  // Solvent potential
     double *eps_x;  // Dielectric constant
     double *eps_y;  // Dielectric constant
     double *eps_z;  // Dielectric constant

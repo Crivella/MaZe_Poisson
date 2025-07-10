@@ -182,35 +182,3 @@ double compute_tf_forces(int n_p, double L, double *pos, double B, double *param
 
     return potential_energy / 2;
 }
-
-/*
-Compute the reaction force using the finite difference method.
-
-@param n_grid: the number of grid points in each dimension
-@param n_p: the number of particles
-@param h: the grid spacing
-@param num_neigh: the number of neighbors for each particle
-@param phi_v: the potential field of size n_grid * n_grid * n_grid (elect pot in vacuum)
-@param phi_s: the potential field of size n_grid * n_grid * n_grid (elect pot in solvent)
-*/
-double compute_forces_reaction_field(
-    int n_grid, int n_p, double h, int num_neigh,
-    double *phi_v, double *phi_s, long int *neighbors, long int *charges, double *pos,
-    double *forces_rf, double (*g)(double, double, double)
-) {
-    int n_loc = get_n_loc();
-
-    double *delta_phi = mpi_grid_allocate(n_loc, n_grid);
-
-    long int n3 = n_loc * n_grid * n_grid;
-
-    vec_copy(phi_s, delta_phi, n3);
-    daxpy(phi_v, delta_phi, -1.0, n3);  // delta_phi = phi_s - phi_v
-
-    compute_force_fd(
-        n_grid, n_p, h, num_neigh,
-        delta_phi, neighbors, charges, pos, forces_rf, g
-    );
-
-    mpi_grid_free(delta_phi, n_grid);
-}

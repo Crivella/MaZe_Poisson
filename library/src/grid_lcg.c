@@ -101,28 +101,19 @@ void lcg_grid_init_field(grid *grid) {
 
     double const constant = -4 * M_PI / grid->h;
 
-    memcpy(grid->phi_p, grid->phi_n, grid->size * sizeof(double));
-
-    #pragma omp parallel for
-    for (i = 0; i < grid->size; i++) {
-        grid->y[i] = 0.0;
-        grid->phi_n[i] = constant * grid->q[i];
-    }
-    conj_grad(grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n);
+    memset(grid->y, 0, grid->size * sizeof(double));  // y = 0
+    memcpy(grid->phi_p, grid->phi_n, grid->size * sizeof(double));  // phi_prev = phi_n
+    // phi_n = consant * q
+    memcpy(grid->phi_n, grid->q, grid->size * sizeof(double));
+    dscal(grid->phi_n, constant, grid->size);
 
     if (grid->pb_enabled) {
-        memcpy(grid->phi_s_prev, grid->phi_s, grid->size * sizeof(double));
-
-        #pragma omp parallel for
-        for (i = 0; i < grid->size; i++) {
-            grid->y_s[i] = 0.0;
-            grid->phi_s[i] = constant * grid->q[i];
-        }
-
         conj_grad_pb(
-            grid->phi_s, grid->y_s, grid->phi_s, grid->tol, grid->n_local, grid->n,
+            grid->phi_n, grid->y, grid->phi_p, grid->tol, grid->n_local, grid->n,
             grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
         );
+    } else {
+        conj_grad(grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n);
     }
 }
 
@@ -149,21 +140,22 @@ int lcg_grid_update_field(grid *grid) {
             break;
     }
 
+    int res;
+
     if (grid->pb_enabled) {
-        double h2 = grid->h * grid->h;
-        // dscal(grid->k2, h2, grid->size);  // Conj grad expects k2 to be scaled by h^2
-        verlet_poisson_pb(
-            grid->tol, grid->h, grid->phi_s, grid->phi_s_prev, grid->q, grid->y_s,
+        res = verlet_poisson_pb(
+            grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
             grid->n_local, grid->n,
             grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
         );
-        // dscal(grid->k2, 1.0 / h2, grid->size);  // Restore k2 to original value for forces calculation after
+    } else {
+        res = verlet_poisson(
+            grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
+            grid->n_local, grid->n,
+            precond
+        );
     }
-    return verlet_poisson(
-        grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
-        grid->n_local, grid->n,
-        precond
-    );
+    return res;
 }   
 
 double lcg_grid_update_charges(grid *grid, particles *p) {

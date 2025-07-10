@@ -21,7 +21,7 @@ char *get_precond_type_str(int n) {
     return precond_type_str[n];
 }
 
-grid * grid_init(int n, double L, double h, double tol, int grid_type, int precond_type) {
+grid * grid_init(int n, double L, double h, double tol, double eps, int grid_type, int precond_type) {
     void   (*init_func)(grid *);
     switch (grid_type) {
         case GRID_TYPE_LCG:
@@ -40,6 +40,7 @@ grid * grid_init(int n, double L, double h, double tol, int grid_type, int preco
     new->n = n;
     new->L = L;
     new->h = h;
+    new->eps_s = eps;  // Dielectric constant of the solvent
 
     new->n_local = n;
     new->n_start = 0;
@@ -50,14 +51,12 @@ grid * grid_init(int n, double L, double h, double tol, int grid_type, int preco
     new->phi_n = NULL;
     new->ig2 = NULL;
 
+
     new->pb_enabled = 0;  // Poisson-Boltzmann not enabled by default
-    new->eps_s = 0.0;  // Dielectric constant of the solvent
     new->w = 0.0;  // Ionic boundary width
     new->kbar2 = 0.0;  // Screening factor
-    new->y_s = NULL;  // Intermediate field constraint for solvent
+
     new->k2 = NULL;  // Screening factor
-    new->phi_s_prev = NULL;  // Solvent potential
-    new->phi_s = NULL;  // Solvent potential
     new->eps_x = NULL;  // Dielectric constant in x direction
     new->eps_y = NULL;  // Dielectric constant in y direction
     new->eps_z = NULL;  // Dielectric constant in z direction
@@ -72,21 +71,16 @@ grid * grid_init(int n, double L, double h, double tol, int grid_type, int preco
     return new;
 }
 
-void grid_pb_init(grid *grid, double eps_s, double w, double kbar2) {
+void grid_pb_init(grid *grid, double w, double kbar2) {
     // Initialize the grid for Poisson-Boltzmann simulations
     grid->pb_enabled = 1;  // Enable Poisson-Boltzmann
-    grid->eps_s = eps_s;
     grid->w = w;
     grid->kbar2 = kbar2;
 
     // Initialize the solvent potential and dielectric constant arrays
     int n = grid->n;
     int n_local = grid->n_local;
-    grid->y_s = mpi_grid_allocate(n_local, n);
-    grid->phi_s_prev = mpi_grid_allocate(n_local, n);
-    grid->phi_s = mpi_grid_allocate(n_local, n);
 
-    // long int eps_size = grid->size * 3;
     grid->eps_x = mpi_grid_allocate(n_local, n);
     grid->eps_y = mpi_grid_allocate(n_local, n);
     grid->eps_z = mpi_grid_allocate(n_local, n);
@@ -95,10 +89,6 @@ void grid_pb_init(grid *grid, double eps_s, double w, double kbar2) {
 
 void grid_pb_free(grid *grid) {
     if (grid->pb_enabled) {
-        mpi_grid_free(grid->y_s, grid->n);
-        mpi_grid_free(grid->phi_s_prev, grid->n);
-        mpi_grid_free(grid->phi_s, grid->n);
-
         mpi_grid_free(grid->eps_x, grid->n);
         mpi_grid_free(grid->eps_y, grid->n);
         mpi_grid_free(grid->eps_z, grid->n);
@@ -289,21 +279,16 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
 }    
 
 /*Important, when called for IO must be called by all procs*/
-double grid_get_pb_delta_energy_elec(grid *g){
-    if (! g->pb_enabled) {
-        // Poisson-Boltzmann is not enabled, return 0
-        return 0.0;
-    }
+double grid_get_energy_elec(grid *g){
+    double energy = 0.0;
 
-    double delta_energy = 0.0;
-
-    #pragma omp parallel for reduction(+:delta_energy)
+    #pragma omp parallel for reduction(+:energy)
     for (long int i = 0; i < g->size; i++) {
         // Calculate the change in energy due to the Poisson-Boltzmann potential
-        delta_energy += 0.5 * (g->phi_s[i] - g->phi_n[i]);
+        energy += 0.5 * g->phi_n[i];
     }
 
-    allreduce_sum(&delta_energy, 1);
+    allreduce_sum(&energy, 1);
 
-    return delta_energy;
+    return energy;
 }
