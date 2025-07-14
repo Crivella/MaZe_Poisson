@@ -99,7 +99,12 @@ void lcg_grid_cleanup(grid * grid) {
 void lcg_grid_init_field(grid *grid) {
     long int i;
 
-    double const constant = -4 * M_PI / grid->h;
+    double constant = -4 * M_PI / grid->h;
+
+    if ( ! grid->pb_enabled) {
+        constant /= grid->eps_s;  // Scale by the dielectric constant if not using PB explicitly
+    }
+
 
     memset(grid->y, 0, grid->size * sizeof(double));  // y = 0
     memcpy(grid->phi_p, grid->phi_n, grid->size * sizeof(double));  // phi_prev = phi_n
@@ -149,8 +154,10 @@ int lcg_grid_update_field(grid *grid) {
             grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
         );
     } else {
+        // Using fact that h is only used in (4 * pi / h) factor so multiplying by eps means:
+        // sigma_p = M.phi + 4 * pi * rho / h  ->  sigma_p = M.phi + 4 * pi * rho / (h * eps)
         res = verlet_poisson(
-            grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
+            grid->tol, grid->h * grid->eps_s, grid->phi_n, grid->phi_p, grid->q, grid->y,
             grid->n_local, grid->n,
             precond
         );

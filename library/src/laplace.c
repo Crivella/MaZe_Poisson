@@ -260,7 +260,7 @@ EXTERN_C int verlet_poisson(
 
     // Compute the constraint with the provisional value of the field phi
     laplace_filter(phi, tmp, size1, size2);
-    daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho
+    daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
 
     // Apply LCG
     if (precond == NULL) {

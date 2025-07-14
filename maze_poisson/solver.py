@@ -381,6 +381,7 @@ class SolverMD(Logger):
         self.logger.info(f'  N_p = {self.N_p}, N_steps = {self.mdv.N_steps}, tol = {self.mdv.tol}')
         self.logger.info(f'  N = {self.N}, L [a.u.] = {self.L}, h [a.u.] = {self.h}')
         self.logger.info(f'  density = {density} g/cm^3')
+        self.logger.info(f'  Solvent dielectric constant: {self.gset.eps_s}')
         self.logger.info(f'  Solver: {self.mdv.method},  Preconditioner: {self.gset.precond}')
         self.logger.info(f'  Charge assignment scheme: {self.gset.cas}')
         # self.logger.info(f'  Preconditioning: {self.mdv.preconditioning}')
@@ -402,7 +403,6 @@ class SolverMD(Logger):
                     f'  Warning: transition region width ({w_ang:.2f} A) is smaller than grid spacing ({h_ang:.2f} A)'
                 )
             self.logger.info(f'  Ionic strength: {self.gset.I} M')
-            self.logger.info(f'  Solvent dielectric constant: {self.gset.eps_s}')
             self.logger.info(f'  Gamma NP: {self.mdv.gamma_np}')
             self.logger.info(f'  Beta NP: {self.mdv.beta_np}')
 
