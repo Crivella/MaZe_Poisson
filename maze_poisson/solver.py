@@ -62,6 +62,7 @@ class SolverMD(Logger):
         self.h = gset.h
         self.N = gset.N
         self.N_p = gset.N_p
+        self.N_typs = gset.N_typs
 
         self.thermostat = mdv.thermostat
 
@@ -149,6 +150,17 @@ class SolverMD(Logger):
 
     def initialize_particles(self):
         """Initialize the particles."""
+        self.logger.info(f"Reading particle definitions from file: {self.gset.particles_file}")
+        particles = pd.read_csv(self.gset.particles_file)
+        if len(particles) != self.gset.N_typs:
+            raise ValueError(
+                f"Number of particle types in file ({len(particles)}) does not match N_typs ({self.gset.N_typs})."
+            )
+        if len(set(particles['type'])) != self.gset.N_typs:
+            raise ValueError("Particle types in file must be unique.")
+        particles.set_index('type', inplace=True)
+        particles['enum'] = range(len(particles))
+
         self.logger.info(f"Initializing particles with potential: {self.mdv.potential}")
         potential = self.mdv.potential.upper()
         if not potential in potential_map:
@@ -164,10 +176,10 @@ class SolverMD(Logger):
         kBT = self.mdv.kBT
 
         df = pd.read_csv(start_file)
-        charges = np.ascontiguousarray(df['charge'].values, dtype=np.int64)
-        mass = np.ascontiguousarray(df['mass'].values * cst.conv_mass, dtype=np.float64)
+        types = np.ascontiguousarray(particles.loc[df['type'], 'enum'].values, dtype=np.int32)
         pos = np.ascontiguousarray(df[['x', 'y', 'z']].values / cst.a0, dtype=np.float64)
-
+        charges = np.ascontiguousarray(particles.loc[df['type'], 'charge'].values, dtype=np.float64)
+        mass = np.ascontiguousarray(particles.loc[df['type'], 'mass'].values, dtype=np.float64) * cst.conv_mass
         if not pos.size:
             raise ValueError(f"Empty or incorrect input file `{start_file}`.")
         if len(pos) != self.N_p:
@@ -186,15 +198,58 @@ class SolverMD(Logger):
                 scale = np.sqrt(kBT / mass[:, np.newaxis]),
                 size=(len(df), 3)
             )
+
+        if potential == 'TF':
+            if self.mdv.potential_params_file is None:
+                raise ValueError("Potential parameters file must be provided for TF potential.")
+            tf_params = pd.read_csv(self.mdv.potential_params_file)
+            expected = self.N_typs * (self.N_typs + 1) // 2
+            if len(tf_params) != expected:
+                raise ValueError(
+                    f"Potential parameters file must have {expected} unique pairs of types."
+                )
+            try:
+                particles.loc[tf_params['type1']]
+                particles.loc[tf_params['type2']]
+            except KeyError as e:
+                raise ValueError(f"Particle type not found in particles file: {e}")
+
+            tf_params.set_index(['type1', 'type2'], inplace=True)
+            if len(tf_params) != len(tf_params.index.unique()):
+                raise ValueError(
+                    "Potential parameters file must have unique pairs of types (type1, type2)."
+                )
+            tf_params_array = np.empty((self.N_typs, self.N_typs, 5), dtype=np.float64) * np.nan
+            for t1, t2 in tf_params.index:
+                t1_idx = particles.loc[t1, 'enum']
+                t2_idx = particles.loc[t2, 'enum']
+                if not np.isnan(tf_params_array[t1_idx, t2_idx, 0]):
+                    raise ValueError(f"Duplicate potential parameters for types {t1_idx} and {t2_idx}.")
+                if not np.isnan(tf_params_array[t2_idx, t1_idx, 0]):
+                    raise ValueError(f"Potential parameters for types {t1_idx} and {t2_idx} must be symmetric.")
+                tf_params_array[t1_idx, t2_idx] = tf_params.loc[(t1, t2), ['A', 'B', 'C', 'D', 'sigma']].values
+                tf_params_array[t2_idx, t1_idx] = tf_params_array[t1_idx, t2_idx]
+            if np.any(np.isnan(tf_params_array)):
+                raise ValueError("Potential parameters for some particle types are missing.")
+            tf_params_array[:, :, 0] *= cst.kJmol_to_hartree  # A  kJ/mol -> Hartree
+            tf_params_array[:, :, 1] *= cst.a0  # B  1/ang -> a.u.
+            tf_params_array[:, :, 2] *= cst.kJmol_to_hartree  / cst.a0**6  # C  kJ/mol*ang^6 -> Hartree*a.u.^6
+            tf_params_array[:, :, 3] *= cst.kJmol_to_hartree / cst.a0**8  # D  kJ/mol*ang^8 -> Hartree*a.u.^8
+            tf_params_array[:, :, 4] /= cst.a0  # sigma  ang -> a.u.
+            tf_params_array = np.ascontiguousarray(tf_params_array.flatten(), dtype=np.float64)
+
         capi.solver_initialize_particles(
-            self.N, self.L, self.h, self.N_p,
-            pot_id, ca_scheme_id, pos, vel, mass, charges
+            self.N, self.N_typs, self.L, self.h, self.N_p,
+            pot_id, ca_scheme_id,
+            types, pos, vel, mass, charges,
+            tf_params_array
         )
 
         if self.mdv.poisson_boltzmann:
-            if 'radius' not in df.columns:
+            if 'radius' not in particles.columns:
                 raise ValueError("Probe radius must be provided in the input file for Poisson-Boltzmann.")
-            radius = np.ascontiguousarray(df['radius'].values, dtype=np.float64) / cst.a0 + self.mdv.probe_radius
+            radius = np.ascontiguousarray(particles.loc[df['type'], 'radius'].values, dtype=np.float64)
+            radius = radius / cst.a0 + self.mdv.probe_radius
             self.logger.info("Initializing particles for Poisson-Boltzmann.")
             capi.solver_initialize_particles_pois_boltz(
                 self.mdv.gamma_np_au, self.mdv.beta_np, radius
@@ -219,19 +274,27 @@ class SolverMD(Logger):
         ffile = self.gset.restart_field_file
         if ffile is None or self.mdv.invert_time:
             # STEP 0 Verlet
+            # self.logger.debug("Running first step of MD loop (Verlet)...")
             self.update_charges()
+            # self.logger.debug("Updating k^2 grid for Poisson-Boltzmann...")
             self.update_eps_k2()
-            # if self.mdv.preconditioning:
+            # self.logger.debug("Initializing field...")
             self.initialize_field()
+            # self.logger.debug("Computing forces...")
             self.compute_forces()
 
             # STEP 1 Verlet
+            # self.logger.debug("Running second step of MD loop (Verlet)...")
             self.integrator_part1()
+            # self.logger.debug("Updating charges...")
             self.update_charges()
+            # self.logger.debug("Updating k^2 grid for Poisson-Boltzmann...")
             self.update_eps_k2()
-            # if self.mdv.preconditioning:
+            # self.logger.debug("Updating field...")
             self.initialize_field()
+            # self.logger.debug("Computing forces...")
             self.compute_forces()
+            # self.logger.debug("Running second part of integrator...")
             self.integrator_part2()
         elif ffile:
             df = pd.read_csv(ffile)
@@ -274,21 +337,25 @@ class SolverMD(Logger):
             self.compute_forces_notelec()
         if self.mdv.poisson_boltzmann:
             self.compute_forces_pb()
+        # self.logger.debug("Computing total forces...")
         capi.solver_compute_forces_tot()
 
     @Clock('forces_field')
     def compute_forces_field(self):
         """Compute the forces on the particles due to the electric field."""
+        # self.logger.debug("Computing forces due to electric field...")
         capi.solver_compute_forces_elec()
 
     @Clock('forces_notelec')
     def compute_forces_notelec(self):
         """Compute the forces on the particles due to non-electric interactions."""
+        # self.logger.debug("Computing forces due to non-electric interactions...")
         self.potential_notelec = capi.solver_compute_forces_noel()
 
     @Clock('forces_PBoltz')
     def compute_forces_pb(self):
         """Compute the forces on the particles due to Poisson-Boltzmann interactions."""
+        # self.logger.debug("Computing forces due to Poisson-Boltzmann interactions...")
         self.energy_nonpolar = capi.solver_compute_forces_pb()
 
     @Clock('file_output')

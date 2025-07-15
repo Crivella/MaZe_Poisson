@@ -31,21 +31,25 @@ capi.register_function(
 )
 
 # void solverinitialize_particles(
-#     int n, double L, double h, int n_p, int pot_type, int cas_type,
-#     double *pos, double *vel, double *mass, long int *charges
+#     int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
+#     int *types, double *pos, double *vel, double *mass, double *charges,
+#     double *params
 # ) {
 capi.register_function(
     'solver_initialize_particles', None, [
         ctypes.c_int,
+        ctypes.c_int,
         ctypes.c_double,
         ctypes.c_double,
         ctypes.c_int,
         ctypes.c_int,
         ctypes.c_int,
+        npct.ndpointer(dtype=np.int32, ndim=1, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
-        npct.ndpointer(dtype=np.int64, ndim=1, flags='C_CONTIGUOUS'),
+        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
     ],
 )
 

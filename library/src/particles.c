@@ -65,24 +65,27 @@ void particle_charges_init(particles *p, int cas_type) {
     }   
 }
 
-particles * particles_init(int n, int n_p, double L, double h, int cas_type) {
+particles * particles_init(int n, int n_p, int n_typ, double L, double h, int cas_type) {
     particles *p = (particles *)malloc(sizeof(particles));
     p->n = n;
     p->n_p = n_p;
+    p->n_typ = n_typ;
     p->L = L;
     p->h = h;
 
+    p->types = (int *)malloc(n_p * sizeof(int));
     p->pos = (double *)malloc(n_p * 3 * sizeof(double));
     p->vel = (double *)malloc(n_p * 3 * sizeof(double));
     p->fcs_elec = (double *)calloc(n_p * 3, sizeof(double));
     p->fcs_noel = (double *)calloc(n_p * 3, sizeof(double));
     p->fcs_tot = (double *)calloc(n_p * 3, sizeof(double));
     p->mass = (double *)malloc(n_p * sizeof(double));
-    p->charges = (long int *)malloc(n_p * sizeof(long int));
+    p->charges = (double *)malloc(n_p * sizeof(double));
 
     p->pb_enabled = 0;  // Poisson-Boltzmann not enabled by default
     p->fcs_db = NULL;
     p->fcs_ib = NULL;
+    p->fcs_np = NULL;
     p->solv_radii = NULL;
 
     // p->neighbors = (long int *)malloc(n_p * 24 * sizeof(long int));
@@ -135,6 +138,7 @@ void particles_pb_free(particles *p) {
 }
 
 void particles_free(particles *p) {
+    free(p->types);
     free(p->pos);
     free(p->vel);
     free(p->fcs_elec);
@@ -152,15 +156,15 @@ void particles_free(particles *p) {
     free(p);
 }
 
-void particles_init_potential(particles *p, int pot_type) {
+void particles_init_potential(particles *p, int pot_type, double *pot_params) {
     p->pot_type = pot_type;
     switch (pot_type) 
     {
     case PARTICLE_POTENTIAL_TYPE_TF:
-        p->init_potential_tf(p);
+        p->init_potential_tf(p, pot_params);
         break;
     case PARTICLE_POTENTIAL_TYPE_LD:
-        p->init_potential_ld(p);
+        p->init_potential_ld(p, pot_params);
         break;
     default:
         mpi_fprintf(stderr, "Invalid potential type %d\n", pot_type);
@@ -169,40 +173,13 @@ void particles_init_potential(particles *p, int pot_type) {
     }
 }
 
-// This really needs to be generalized
-#define A_ClCl 5.8145 * 0.001  // Hartree = 15.2661 kJ/mol
-#define C_ClCl 2.6607 / a0_6  // = 6985.6841 kj/mol * Ang^6
-#define D_ClCl 5.3443 / a0_8  // = 14,031.5897 kj/mol * Ang^8
-#define sigma_TF_ClCl 3.170 / a0  // 3.170 angs
+void particles_init_potential_tf(particles *p, double *pot_params) {
+    int typ1, typ2;
+    int n_p = p->n_p;
+    int n_typ = p->n_typ;
+    long int np2 = n_p * n_p;
 
-#define A_NaNa 9.6909 * 0.001  // Hartree = 25.4435 kJ/mol
-#define C_NaNa 0.0385 / a0_6  // = 101.1719 kj/mol * Ang^6
-#define D_NaNa 0.0183 / a0_8  // = 48.1771 kj/mol * Ang^8
-#define sigma_TF_NaNa 2.340 / a0  // 2.340 angs
-
-#define A_NaCl 7.7527 * 0.001  // Hartree = 20.3548 kJ/mol
-#define C_NaCl 0.2569 / a0_6  // = 674.4798 kj/mol * Ang^6
-#define D_NaCl 0.3188 / a0_8  // = 837.0777 kj/mol * Ang^8
-#define sigma_TF_NaCl 2.755 / a0  // 2.755 angs
-
-#define charge_min -2.0
-
-#define B 3.1546 * a0
-
-
-double tf_dict[5][4] = {
-    {A_ClCl, C_ClCl, D_ClCl, sigma_TF_ClCl},
-    {0.0, 0.0, 0.0, 0.0},
-    {A_NaCl, C_NaCl, D_NaCl, sigma_TF_NaCl},
-    {0.0, 0.0, 0.0, 0.0},
-    {A_NaNa, C_NaNa, D_NaNa, sigma_TF_NaNa}
-};
-
-void particles_init_potential_tf(particles *p) {
-    int np = p->n_p;
-    long int np2 = np * np;
-
-    p->tf_params = (double *)malloc(6 * np2 * sizeof(double));
+    p->tf_params = (double *)malloc(7 * np2 * sizeof(double));
 
     double r_cut = p->L / 2.0;
     p->r_cut = r_cut;
@@ -211,37 +188,42 @@ void particles_init_potential_tf(particles *p) {
     double r_cut_8 = r_cut_7 * r_cut;
     double r_cut_9 = r_cut_8 * r_cut;
 
-    long int in, inj;
-    long int charge_sum;
-    double A,C,D,sigma,v_shift,alpha,beta;
-    for (int i = 0; i < np; i++) {
-        in = i * np;
-        for (int j = 0; j < np; j++) {
+    long int in, inj, idx;
+    double A, B, C, D, sigma, v_shift, alpha, beta;
+    for (int i = 0; i < n_p; i++) {
+        in = i * n_p;
+        typ1 = p->types[i];
+        for (int j = 0; j < n_p; j++) {
             inj = in + j;
-            charge_sum =  p->charges[i] + p->charges[j] - charge_min;
+            typ2 = p->types[j];
 
-            A = tf_dict[charge_sum][0];
-            C = tf_dict[charge_sum][1];
-            D = tf_dict[charge_sum][2];
-            sigma = tf_dict[charge_sum][3];
+            idx = (typ1 * n_typ + typ2) * 5;  // Assuming pot_params is structured as [A, B, C, D, sigma] for each type pair
+
+            A = pot_params[idx + 0];
+            B = pot_params[idx + 1];
+            C = pot_params[idx + 2];
+            D = pot_params[idx + 3];
+            sigma = pot_params[idx + 4];
 
             v_shift = A * exp(B * (sigma - r_cut)) - C / r_cut_6 - D / r_cut_8;
             alpha = A * B * exp(B * (sigma - r_cut)) - 6 * C / r_cut_7 - 8 * D / r_cut_9;
             beta = - v_shift - alpha * r_cut;
 
-            p->tf_params[        inj] = A;
-            p->tf_params[  np2 + inj] = C;
-            p->tf_params[2*np2 + inj] = D;
-            p->tf_params[3*np2 + inj] = sigma;
-            p->tf_params[4*np2 + inj] = alpha;
-            p->tf_params[5*np2 + inj] = beta;
+            p->tf_params[0*np2 + inj] = A;
+            p->tf_params[1*np2 + inj] = B;
+            p->tf_params[2*np2 + inj] = C;
+            p->tf_params[3*np2 + inj] = D;
+            p->tf_params[4*np2 + inj] = sigma;
+            p->tf_params[5*np2 + inj] = alpha;
+            p->tf_params[6*np2 + inj] = beta;
         }
     }
 
     p->compute_forces_noel = particles_compute_forces_tf;
 }
 
-void particles_init_potential_ld(particles *p) {
+void particles_init_potential_ld(particles *p, double *pot_params) {
+    // Should also be generalized
     p->sigma = 3.00512 * 2 / a0;
     p->epsilon = 5.48 * 1e-4;
     p->r_cut = 2.5 * p->sigma;
@@ -348,7 +330,7 @@ double particles_compute_forces_field(particles *p, grid *grid) {
 }
 
 double particles_compute_forces_tf(particles *p) {
-    return compute_tf_forces(p->n_p, p->L, p->pos, B, p->tf_params, p->r_cut, p->fcs_noel);
+    return compute_tf_forces(p->n_p, p->L, p->pos, p->tf_params, p->r_cut, p->fcs_noel);
 }
 
 double particles_compute_forces_ld(particles *p) { 
@@ -776,25 +758,21 @@ void particles_get_momentum(particles *p, double *out) {
     out[2] = pz;
 }
 
-// This also needs to be generalized
 void particles_rescale_velocities(particles *p) {
-    long int min_charge = -1;
-    double init_vel[3][3] = {
-        {0.0, 0.0, 0.0},  // Cl
-        {0.0, 0.0, 0.0},  // 0
-        {0.0, 0.0, 0.0}   // Na
-    };
+    double *init_vel = (double *)calloc(p->n_typ * 3, sizeof(double));
 
     for (int i = 0; i < p->n_p; i++) {
         for (int j = 0; j < 3; j++) {
-            init_vel[p->charges[i] - min_charge][j] += p->vel[i * 3 + j];
+            init_vel[p->types[i] * 3 + j] += p->vel[i * 3 + j];
         }
     }
 
     for (int i = 0; i < p->n_p; i++) {
         for (int j = 0; j < 3; j++) {
-            p->vel[i * 3 + j] -= 2 * init_vel[p->charges[i] - min_charge][j] / p->n_p;
+            p->vel[i * 3 + j] -= 2 * init_vel[p->types[i] * 3 + j] / p->n_p;
         }
     }
+
+    free(init_vel);
 }
 

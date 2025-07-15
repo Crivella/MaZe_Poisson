@@ -49,17 +49,19 @@ void solver_initialize_grid_pois_boltz(double w, double kbar2) {
 }
 
 void solver_initialize_particles(
-    int n, double L, double h, int n_p, int pot_type, int cas_type,
-    double *pos, double *vel, double *mass, long int *charges
+    int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
+    int *types, double *pos, double *vel, double *mass, double *charges,
+    double *pot_params
 ) {
-    g_particles = particles_init(n, n_p, L, h, cas_type);
+    g_particles = particles_init(n, n_p, n_typ, L, h, cas_type);
 
+    memcpy(g_particles->types, types, n_p * sizeof(int));
     memcpy(g_particles->pos, pos, n_p * 3 * sizeof(double));
     memcpy(g_particles->vel, vel, n_p * 3 * sizeof(double));
     memcpy(g_particles->mass, mass, n_p * sizeof(double));
-    memcpy(g_particles->charges, charges, n_p * sizeof(long int));
+    memcpy(g_particles->charges, charges, n_p * sizeof(double));
     
-    g_particles->init_potential(g_particles, pot_type);
+    g_particles->init_potential(g_particles, pot_type, pot_params);
 }
 
 void solver_initialize_particles_pois_boltz(double gamma_np, double beta_np, double *solv_radii) {
@@ -286,8 +288,8 @@ void get_fcs_tot(double *recv) {
     memcpy(recv, g_particles->fcs_tot, g_particles->n_p * 3 * sizeof(double));
 }
 
-void get_charges(long int *recv) {
-    memcpy(recv, g_particles->charges, g_particles->n_p * sizeof(long int));
+void get_charges(double *recv) {
+    memcpy(recv, g_particles->charges, g_particles->n_p * sizeof(double));
 }
 
 void get_masses(double *recv) {

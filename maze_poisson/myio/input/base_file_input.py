@@ -74,6 +74,9 @@ class GridSetting(BaseFileInput):
     h: float = None
     eps_s: float = 1.0  # Relative permittivity of the solvent (vacuum by default)
 
+    N_typs: int
+
+    particles_file: str = 'species.csv'  # File containing particle definitions
     input_file: str
 
     restart_field_file: str = None
@@ -103,7 +106,10 @@ class MDVariables(BaseFileInput):
     init_steps_thermostat: int = None  # Initial steps before the main simulation
     elec: bool = True # Whether to include electrostatic interactions
     not_elec: bool = True  # Whether to include non-electrostatic interactions
+
     potential: str = 'TF'  # Type of potential to use
+    potential_params_file: str = None  # File containing potential parameters
+
     integrator: str = 'OVRVO'  # Integrator method
     method: str = 'FFT'  # Method for solving the Poisson equation
     tol: float = 1e-7  # Tolerance for convergence

@@ -122,10 +122,10 @@ capi.register_function(
     ],
 )
 
-# void get_charges(long int *recv) {
+# void get_charges(double *recv) {
 capi.register_function(
     'get_charges', None, [
-        npct.ndpointer(dtype=np.int64, ndim=1, flags='C_CONTIGUOUS'),
+        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
     ],
 )
 

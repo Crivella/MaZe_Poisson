@@ -131,7 +131,7 @@ class SolutesCSVOutputFile(CSVOutputFile):
         capi.get_fcs_elec(tmp)
         df[['fx_elec', 'fy_elec', 'fz_elec']] = tmp
 
-        tmp = np.empty(solver.N_p, dtype=np.int64)
+        tmp = np.empty(solver.N_p, dtype=np.float64)
         capi.get_charges(tmp)
         df['charge'] = tmp
 
@@ -161,10 +161,9 @@ class RestartCSVOutputFile(CSVOutputFile):
         capi.get_vel(tmp)
         df[['vx', 'vy', 'vz']] = tmp
 
-        tmp = np.empty(solver.N_p, dtype=np.int64)
+        tmp = np.empty(solver.N_p, dtype=np.float64)
         capi.get_charges(tmp)
         df['charge'] = tmp
-        tmp = np.empty(solver.N_p, dtype=np.float64)
         capi.get_masses(tmp)
         df['mass'] = tmp / conv_mass
         capi.get_radii(tmp)

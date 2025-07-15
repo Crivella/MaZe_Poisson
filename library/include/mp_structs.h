@@ -35,7 +35,7 @@ typedef struct integrator integrator;
 
 // Struct function definitions
 grid * grid_init(int n, double L, double h, double tol, double eps, int type, int precond_type);
-particles * particles_init(int n, int n_p, double L, double h, int cas_type);
+particles * particles_init(int n, int n_p, int n_typ, double L, double h, int cas_type);
 integrator * integrator_init(int n_p, double dt, int type);
 
 void grid_free(grid *grid);
@@ -62,9 +62,9 @@ double fft_grid_update_charges(grid *grid, particles *p);
 void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
 void particles_pb_free(particles *p);
 
-void particles_init_potential(particles *p, int pot_type);
-void particles_init_potential_tf(particles *p);
-void particles_init_potential_ld(particles *p);
+void particles_init_potential(particles *p, int pot_type, double *pot_params);
+void particles_init_potential_tf(particles *p, double *pot_params);
+void particles_init_potential_ld(particles *p, double *pot_params);
 void particles_update_nearest_neighbors_cic(particles *p);
 void particles_update_nearest_neighbors_spline(particles *p);
 
@@ -146,6 +146,7 @@ struct grid {
 struct particles {
     int n;  // Number of grid points per dimension
     int n_p;  // Number of particles
+    int n_typ;  // Number of particle types (charge, masses, ... definitions)
     double L;  // Length of the grid
     double h;  // Grid spacing
 
@@ -154,19 +155,20 @@ struct particles {
     int pot_type;  // Type of the potential
     int cas_type;  // Type of the charge assignment scheme
 
+    int *types;  // Particle types (n_p)
     double *pos;  // Particle positions (n_p x 3)
     double *vel;  // Particle velocities (n_p x 3)
     double *fcs_elec;  // Particle electric forces (n_p x 3)
     double *fcs_noel;  // Particle non-electric forces (n_p x 3)
     double *fcs_tot;  // Particle total forces (n_p x 3)
     double *mass;  // Particle masses (n_p)
-    long int *charges;  // Particle charges (n_p)
+    double *charges;  // Particle charges (n_p)
     long int *neighbors;  // Particle neighbors (n_p x 8 x 3)
 
     double r_cut;
     double sigma;
     double epsilon;
-    double *tf_params;  // Parameters for the TF potential (6 x n_p x n_p)
+    double *tf_params;  // Parameters for the TF potential (7 x n_p x n_p)
 
     // Poisson-Boltzmann specific
     int pb_enabled;  // Poisson-Boltzmann enabled
@@ -180,9 +182,9 @@ struct particles {
 
     void    (*free)( particles *);
 
-    void    (*init_potential)( particles *, int pot_type);
-    void    (*init_potential_tf)( particles *);
-    void    (*init_potential_ld)( particles *);
+    void    (*init_potential)( particles *, int, double *);
+    void    (*init_potential_tf)( particles *, double *);
+    void    (*init_potential_ld)( particles *, double *);
 
     void    (*update_nearest_neighbors)( particles *);
     double  (*charges_spread_func)( double, double, double);
