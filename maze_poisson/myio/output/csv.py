@@ -151,7 +151,7 @@ class PerformanceCSVOutputFile(CSVOutputFile):
 
 class RestartCSVOutputFile(CSVOutputFile):
     name = 'restart'
-    headers = ['charge', 'radius', 'mass', 'x', 'y', 'z', 'vx', 'vy', 'vz']
+    headers = ['type', 'x', 'y', 'z', 'vx', 'vy', 'vz']
     def get_data(self, iter: int, solver):
         df = pd.DataFrame()
 
@@ -161,13 +161,9 @@ class RestartCSVOutputFile(CSVOutputFile):
         capi.get_vel(tmp)
         df[['vx', 'vy', 'vz']] = tmp
 
-        tmp = np.empty(solver.N_p, dtype=np.float64)
-        capi.get_charges(tmp)
-        df['charge'] = tmp
-        capi.get_masses(tmp)
-        df['mass'] = tmp / conv_mass
-        capi.get_radii(tmp)
-        df['radius'] = np.round((tmp - solver.mdv.probe_radius) * a0, decimals=6)
+        tmp = np.empty(solver.N_p, dtype=np.int32)
+        capi.get_types(tmp)
+        df['type'] = tmp
 
         return df
 

@@ -129,6 +129,13 @@ capi.register_function(
     ],
 )
 
+# void get_types(int *recv) {
+capi.register_function(
+    'get_types', None, [
+        npct.ndpointer(dtype=np.int32, ndim=1, flags='C_CONTIGUOUS'),
+    ],
+)
+
 # void get_masses(double *recv) {
 capi.register_function(
     'get_masses', None, [

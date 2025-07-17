@@ -288,6 +288,10 @@ void get_fcs_tot(double *recv) {
     memcpy(recv, g_particles->fcs_tot, g_particles->n_p * 3 * sizeof(double));
 }
 
+void get_types(int *recv) {
+    memcpy(recv, g_particles->types, g_particles->n_p * sizeof(int));
+}
+
 void get_charges(double *recv) {
     memcpy(recv, g_particles->charges, g_particles->n_p * sizeof(double));
 }
