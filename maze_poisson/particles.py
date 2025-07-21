@@ -302,12 +302,12 @@ class Particles:
         ''' Compute electrostatic forces (DB and IB from Eq. (30) - (32)) from Im., RF from our approach'''
         h = self.grid.h
         L = self.grid.L
-        phi_v = self.grid.phi_prev if prev else self.grid.phi
+        # phi_v = self.grid.phi_prev if prev else self.grid.phi
         phi_s = self.grid.phi_s_prev if prev else self.grid.phi_s
         w = self.grid.w
    
         #### REACTION FIELD FORCE ####
-        delta_phi = phi_s - phi_v
+        # delta_phi = phi_s - phi_v
 
         if self.grid.md_variables.benoit:
             ### BENOIT'S VERSION ###
@@ -332,13 +332,20 @@ class Particles:
             ix = self.neighbors[:, :, 0]
             iy = self.neighbors[:, :, 1]
             iz = self.neighbors[:, :, 2]
-            delta_phi_values = delta_phi[ix, iy, iz]
-
+            # delta_phi_values = delta_phi[ix, iy, iz]
+            phi_values = phi_s[ix, iy, iz]  # (N_p, 8)
+            
             # Calcola la forza reaction field per ciascuna particella: (N_p, 3)
+            # self.forces_rf = -self.charges[:, None] * np.stack([
+            #     np.sum(delta_phi_values * gpx * gy * gz, axis=1),
+            #     np.sum(delta_phi_values * gx * gpy * gz, axis=1),
+            #     np.sum(delta_phi_values * gx * gy * gpz, axis=1)
+            # ], axis=1)  # shape: (N_p, 3)
+            
             self.forces_rf = -self.charges[:, None] * np.stack([
-                np.sum(delta_phi_values * gpx * gy * gz, axis=1),
-                np.sum(delta_phi_values * gx * gpy * gz, axis=1),
-                np.sum(delta_phi_values * gx * gy * gpz, axis=1)
+                np.sum(phi_values * gpx * gy * gz, axis=1),
+                np.sum(phi_values * gx * gpy * gz, axis=1),
+                np.sum(phi_values * gx * gy * gpz, axis=1)
             ], axis=1)  # shape: (N_p, 3)
             
             # print('\nBenoit version:')
@@ -346,9 +353,9 @@ class Particles:
             # print(f"     ({self.forces_rf[1][0]}, {self.forces_rf[1][1]}, {self.forces_rf[1][2]})\n")
         else:
             ### Electric field version ###
-            E_x = (np.roll(delta_phi, -1, axis=0) - np.roll(delta_phi, 1, axis=0)) / (2 * h)
-            E_y = (np.roll(delta_phi, -1, axis=1) - np.roll(delta_phi, 1, axis=1)) / (2 * h)
-            E_z = (np.roll(delta_phi, -1, axis=2) - np.roll(delta_phi, 1, axis=2)) / (2 * h)
+            E_x = (np.roll(phi_s, -1, axis=0) - np.roll(phi_s, 1, axis=0)) / (2 * h)
+            E_y = (np.roll(phi_s, -1, axis=1) - np.roll(phi_s, 1, axis=1)) / (2 * h)
+            E_z = (np.roll(phi_s, -1, axis=2) - np.roll(phi_s, 1, axis=2)) / (2 * h)
             
             neighbors = self.neighbors  # shape: (n_particles, 8, 3)
             neigh_coords = neighbors * h  # (N_p, 8, 3)

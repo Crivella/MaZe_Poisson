@@ -100,7 +100,7 @@ class GridSetting:
     @property
     def restart_file(self):
         if self._restart_file is None:
-            self._restart_file = 'restart_files/restart_N'+str(self.N)+'_step9999.csv'
+            self._restart_file = 'restart_files/restart'+str(self.N_p)+'.csv'
         return self._restart_file
 
 ###################################################################################
@@ -122,14 +122,14 @@ class MDVariables:
         self.elec = None # to move
         self.not_elec = None # to move
         self.potential = 'TF' # Tosi Fumi (TF) or Leonard Jones (LJ)
-        self.integrator = 'manual' # OVRVO or VV (Velocity Verlet) or manual (fixed displacement, useful for testing)
+        self.integrator = None # OVRVO or VV (Velocity Verlet) or manual (fixed displacement, useful for testing)
         self.gamma = 1e-3 # OVRVO parameter
         self.method = None
         self.non_polar = False
         self.gamma_np = None
         self.beta_np = None
         self.probe_radius = 1.4
-        self.delta = np.array([0.005, 0., 0.]) / a0
+        self.delta = np.array([0., 0.005, 0.]) / a0 #np.array([0.005, 0., 0.]) / a0
         self.benoit = False # to check Benoit's formula for the reaction field force
 
     @property

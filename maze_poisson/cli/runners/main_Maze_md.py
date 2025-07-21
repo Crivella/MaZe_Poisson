@@ -90,8 +90,9 @@ def main(grid_setting, output_settings, md_variables):
     
     # initialize the electrostatic field with CG                  
     if preconditioning == "Yes":
-        grid.phi_prev, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol)
-        if method == 'PB MaZe':
+        if method == 'Poisson MaZe':
+            grid.phi_prev, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol)
+        elif method == 'PB MaZe':
             grid.phi_s_prev, _ = PrecondLinearConjGradPoisson_PB_Jacobi(- 4 * np.pi * grid.q / h, grid, tol=tol)
 
     if not_elec:
@@ -117,7 +118,7 @@ def main(grid_setting, output_settings, md_variables):
     elif md_variables.integrator == 'VV':
         grid.particles = VerletSolutePart1(grid, thermostat=thermostat)
     elif md_variables.integrator == 'manual':
-        grid.particles.pos[0,:] += md_variables.delta
+        # grid.particles.pos[0,:] += md_variables.delta
         grid.particles.pos[1,:] -= md_variables.delta
         # grid.particles.pos[1,:] += md_variables.delta
 
@@ -134,8 +135,9 @@ def main(grid_setting, output_settings, md_variables):
         grid.UpdateEpsAndK2_transition()
 
     if preconditioning == "Yes":
-        grid.phi, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol, x0=grid.phi_prev)
-        if method == 'PB MaZe':
+        if method == 'Poisson MaZe':
+            grid.phi, _ = PrecondLinearConjGradPoisson(- 4 * np.pi * grid.q / h, tol=tol, x0=grid.phi_prev)
+        elif method == 'PB MaZe':
             grid.phi_s, _ = PrecondLinearConjGradPoisson_PB_Jacobi(- 4 * np.pi * grid.q / h, grid, tol=tol, x0=grid.phi_s_prev)
 
     if md_variables.integrator == 'OVRVO':
@@ -182,8 +184,9 @@ def main(grid_setting, output_settings, md_variables):
     # print('Number of initialization steps:', init_steps,'\n')
     logger.info('Number of initialization steps '+str(init_steps))
 
-    y = np.zeros_like(grid.q) 
-    if method == 'PB MaZe':
+    if method == 'Poisson MaZe':
+        y = np.zeros_like(grid.q) 
+    elif method == 'PB MaZe':
         y_s = np.zeros_like(grid.q)
 
     ######################################### Verlet ############################################
@@ -199,7 +202,7 @@ def main(grid_setting, output_settings, md_variables):
         elif md_variables.integrator == 'VV':
             grid.particles = VerletSolutePart1(grid, thermostat = thermostat)
         elif md_variables.integrator == 'manual':
-            grid.particles.pos[0,:] += md_variables.delta
+            # grid.particles.pos[0,:] += md_variables.delta
             grid.particles.pos[1,:] -= md_variables.delta
             # grid.particles.pos[1,:] += md_variables.delta
 
@@ -211,12 +214,13 @@ def main(grid_setting, output_settings, md_variables):
             # grid.SetCharges(uniform=True)
             grid.SetCharges(uniform=False)
             
-            # apply Verlet algorithm
-            start_Verlet = time.time()
-            grid, y, iter_conv = VerletPoisson(grid, y=y)
-            end_Verlet = time.time()
+            if method == 'Poisson MaZe':
+                # apply Verlet algorithm
+                start_Verlet = time.time()
+                grid, y, iter_conv = VerletPoisson(grid, y=y)
+                end_Verlet = time.time()
 
-            if method == 'PB MaZe':
+            elif method == 'PB MaZe':
                 start_update = time.time()
                 # grid.UpdateEpsAndK2()
                 grid.UpdateEpsAndK2_transition()
@@ -304,15 +308,16 @@ def main(grid_setting, output_settings, md_variables):
                 elif method == 'PB MaZe':
                     ofiles.file_output_performance.write(str(i - init_steps) + ',' + str(end_Verlet - start_Verlet) + ',' + str(iter_conv) + ',' + str(end_VerletPB - start_VerletPB) + ',' + str(iter_conv_PB) + ',' + str(end_update - start_update) + "\n")
             if output_settings.print_field and elec:
-                field_x_MaZe = np.array([grid.phi[l, j, k] for l in range(N)])
                 if method == 'Poisson MaZe':
+                    field_x_MaZe = np.array([grid.phi[l, j, k] for l in range(N)])
+                    
                     for n in range(N):
                         ofiles.file_output_field.write(str(i - init_steps) + ',' + str(X[n] * a0) + ',' + str(field_x_MaZe[n] * V) + '\n')
                 elif method == 'PB MaZe':
                     field_x_MaZe_s = np.array([grid.phi_s[l, j, k] for l in range(N)])
                 
                     for n in range(N):
-                        ofiles.file_output_field.write(str(i - init_steps) + ',' + str(X[n] * a0) + ',' + str(field_x_MaZe[n] * V) + ',' + str(field_x_MaZe_s[n] * V) + '\n')
+                        ofiles.file_output_field.write(str(i - init_steps) + ',' + str(X[n] * a0) + ',' + str(field_x_MaZe_s[n] * V) + ',' + str(field_x_MaZe_s[n] * V) + '\n')
 
     if output_settings.generate_restart_file:
         ofiles.file_output_solute.flush()

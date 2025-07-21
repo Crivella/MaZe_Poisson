@@ -92,9 +92,9 @@ def generate_output_files(grid, md_variables):
     
     if output_settings.print_components_force:
         os.makedirs(path, exist_ok=True)
-        output_force = os.path.join(path, 'force_N' + str(N) +'.csv')
+        output_force = os.path.join(path, 'forces_pb_N' + str(N) +'.csv')
         output_files.file_output_force = generate_output_file(output_force)
-        output_files.file_output_force.write("iter,particle,fx_RF,fy_RF,fz_RF,fx_DB,fy_DB,fz_DB,fx_IB,fy_IB,fz_IB,fx_NP,fy_NP,fz_NP\n")    
+        output_files.file_output_force.write("iter,particle,Fx_RF,Fy_RF,Fz_RF,Fx_DB,Fy_DB,Fz_DB,Fx_IB,Fy_IB,Fz_IB,Fx_NP,Fy_NP,Fz_NP\n")    
 
     if output_settings.print_tot_force:
         os.makedirs(path, exist_ok=True)
