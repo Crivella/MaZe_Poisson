@@ -7,12 +7,19 @@
 #include "laplace.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
+#include "multigrid.h"
 
-void prolong(double *in, double *out, int s1, int s2, int ts1, int ts2, int tns);
-void restriction(double *in, double *out, int s1, int s2, int n_start);
-void smooth(double *in, double *out, int s1, int s2, double tol);
 
-void precond_mg_apply(double *in, double *out, int s1, int s2, int n_start1) {
+/*
+Apply the multigrid method to solve the Poisson equation.  A.out = in
+
+@param in: input array (right-hand side of the equation)
+@param out: in/out array (starting guess/solution)
+@param s1: size of the first dimension (number of slices)
+@param s2: size of the second dimension (number of grid points per slice)
+@param n_start1: starting index for the first dimension (used for restriction)
+*/
+void multigrid_apply(double *in, double *out, int s1, int s2, int n_start1) {
     int n1 = s2;
     int n2 = n1 / 2;
     int n3 = n2 / 2;
@@ -47,34 +54,42 @@ void precond_mg_apply(double *in, double *out, int s1, int s2, int n_start1) {
 
     double *tmp2 = mpi_grid_allocate(n_loc2, n2);
 
-    #pragma omp parallel for
-    for (int i = 0; i < size1; i++) {
-        out[i] = 0;  // tmp1 = in
-    }
+    // #pragma omp parallel for
+    // for (int i = 0; i < size1; i++) {
+    //     out[i] = 0;  // tmp1 = in
+    // }
     smooth(in, out, n_loc1, n1, 5);  // out = smooth(in, out)  ~solve(A . out = in)
     laplace_filter(out, r1, n_loc1, n1);
-    #pragma omp parallel for
-    for (int i = 0; i < size1; i++) {
-        r1[i] = in[i] - r1[i];  // r1 = in - A . out
-    }
+    // #pragma omp parallel for
+    // for (long int i = 0; i < size1; i++) {
+    //     r1[i] = in[i] - r1[i];  // r1 = in - A . out
+    // }
+    // r1 = in - r1 = in - A . out
+    dscal(r1, -1.0, size1);
+    daxpy(out, r1, 1.0, size1);  // out = out + r1
     restriction(r1, r2, n_loc1, n1, n_start1);  // r2 = restriction(r1)
 
-    #pragma omp parallel for
-    for (int i = 0; i < size2; i++) {
-        e2[i] = 0;  // tmp2 = r2
-    }
+    // #pragma omp parallel for
+    // for (long int i = 0; i < size2; i++) {
+    //     e2[i] = 0;  // tmp2 = r2
+    // }
+    memset(e2, 0, size2 * sizeof(double));  // e2 = 0
     smooth(r2, e2, n_loc2, n2, 5);  // e2 = smooth(r2)  ~solve(A . e2 = r2)
     laplace_filter(e2, tmp2, n_loc2, n2);
-    #pragma omp parallel for
-    for (int i = 0; i < size2; i++) {
-        tmp2[i] = r2[i] - tmp2[i];  // tmp2 = r2 - A . e2
-    }
+    // #pragma omp parallel for
+    // for (long int i = 0; i < size2; i++) {
+    //     tmp2[i] = r2[i] - tmp2[i];  // tmp2 = r2 - A . e2
+    // }
+    // tmp2 = e2 - tmp2 = r2 - A . e2
+    dscal(tmp2, -1.0, size2);
+    daxpy(e2, tmp2, 1.0, size2);  // e2 = e2 + tmp2
     restriction(tmp2, r3, n_loc2, n2, n_start2);  // r3 = restriction(r2 - A . e2)
 
-    #pragma omp parallel for
-    for (int i = 0; i < size3; i++) {
-        e3[i] = 0;
-    }
+    // #pragma omp parallel for
+    // for (long int i = 0; i < size3; i++) {
+    //     e3[i] = 0;
+    // }
+    memset(e3, 0, size3 * sizeof(double));  // e3 = 0
     smooth(r3, e3, n_loc3, n3, 15);  // e3 = smooth(r3)  ~solve(A . e3 = r3)
 
     prolong(e3, r2, n_loc3, n3, n_loc2, n2, n_start2);
