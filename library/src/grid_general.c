@@ -5,7 +5,7 @@
 #include "mpi_base.h"
 #include "mp_structs.h"
 
-char grid_type_str[2][16] = {"LCG", "FFT"};
+char grid_type_str[GRID_TYPE_NUM][16] = {"LCG", "FFT", "MULTIGRID"};
 int get_grid_type_num() {
     return GRID_TYPE_NUM;
 }
@@ -29,6 +29,9 @@ grid * grid_init(int n, double L, double h, double tol, double eps, int grid_typ
             break;
         case GRID_TYPE_FFT:
             init_func = fft_grid_init;
+            break;
+        case GRID_TYPE_MGRID:
+            init_func = multigrid_grid_init;  // Assuming multigrid_init is defined elsewhere
             break;
         default:
             break;

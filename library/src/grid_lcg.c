@@ -9,6 +9,7 @@
 #include "laplace.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
+#include "multigrid.h"
 
 #ifdef __MPI
 void lcg_grid_init_mpi(grid *grid) {
@@ -133,7 +134,7 @@ int lcg_grid_update_field(grid *grid) {
             precond = precond_jacobi_apply;
             break;
         case PRECOND_TYPE_MG:
-            precond = precond_mg_apply;
+            precond = multigrid_apply;
             break;
         case PRECOND_TYPE_SSOR:
             precond = precond_ssor_apply;

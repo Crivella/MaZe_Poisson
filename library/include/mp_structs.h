@@ -1,9 +1,10 @@
 #ifndef __MP_STRUCTS_H
 #define __MP_STRUCTS_H
 
-#define GRID_TYPE_NUM 2
+#define GRID_TYPE_NUM 3
 #define GRID_TYPE_LCG 0
 #define GRID_TYPE_FFT 1
+#define GRID_TYPE_MGRID 2
 
 #define PARTICLE_POTENTIAL_TYPE_NUM 2
 #define PARTICLE_POTENTIAL_TYPE_TF 0
@@ -53,6 +54,12 @@ void lcg_grid_init_field(grid *grid);
 int lcg_grid_update_field(grid *grid);
 double lcg_grid_update_charges(grid *grid, particles *p);
 
+void multigrid_grid_init(grid * grid);
+void multigrid_grid_cleanup(grid * grid);
+void multigrid_grid_init_field(grid *grid);
+int multigrid_grid_update_field(grid *grid);
+double multigrid_grid_update_charges(grid *grid, particles *p);
+
 void fft_grid_init(grid * grid);
 void fft_grid_cleanup(grid * grid);
 void fft_grid_init_field(grid *grid);
@@ -94,7 +101,6 @@ void verlet_integrator_stop_thermostat(integrator *integrator);
 
 // Preconditioner function definitions
 void precond_jacobi_apply(double *in, double *out, int s1, int s2, int n_start);
-void precond_mg_apply(double *in, double *out, int s1, int s2, int n_start);
 void precond_ssor_apply(double *in, double *out, int s1, int s2, int n_start);
 void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_start);
 

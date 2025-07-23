@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include "constants.h"
+#include "multigrid.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
 #include "linalg.h"
@@ -268,6 +269,59 @@ EXTERN_C int verlet_poisson(
     } else {
         iter_conv = conj_grad_precond(tmp, y, y, tol, size1, size2, precond);  // Inplace y <- y0
     }
+
+    // Scale the field with the constrained 'force' term
+    #pragma omp parallel for
+    for (i = 0; i < n3; i++) {
+        phi[i] -= y[i];
+    }
+
+    // Free temporary arrays
+    free(tmp);
+
+    return iter_conv;
+}
+
+/*
+Apply Verlet algorithm to compute the updated value of the field phi, with Multigrid + SHAKE.
+The previous and current fields and the y array are updated in place.
+@param tol: tolerance
+@param h: the grid spacing
+@param phi: the potential field of size n_grid * n_grid * n_grid
+@param phi_prev: electrostatic field for step t - 1 Verlet
+@param q: the charge on a grid of size n_grid * n_grid * n_grid\
+@param y: copy of the 'q' given as input to the function
+@param n_grid: the number of grid points in each dimension
+
+@return the number of iterations for convergence of the LCG
+*/
+EXTERN_C int verlet_poisson_multigrid(
+    double tol, double h, double* phi, double* phi_prev, double* q, double* y,
+    int size1, int size2
+) {
+    int iter_conv = 0;
+
+    long int i;
+    long int n2 = size2 * size2;
+    long int n3 = size1 * n2;
+
+    double app;
+    double *tmp = (double*)malloc(n3 * sizeof(double));
+    
+    // Compute provisional update for the field phi
+    #pragma omp parallel for private(app)
+    for (i = 0; i < n3; i++) {
+        app = phi[i];
+        phi[i] = 2 * app - phi_prev[i];
+        phi_prev[i] = app;
+    }
+
+    // Compute the constraint with the provisional value of the field phi
+    laplace_filter(phi, tmp, size1, size2);
+    daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
+
+    // Apply Multigrid (out also act as the starting guess)
+    multigrid_apply(tmp, y, size1, size2, get_n_start());  // y = MG . tmp
 
     // Scale the field with the constrained 'force' term
     #pragma omp parallel for

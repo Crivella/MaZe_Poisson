@@ -57,14 +57,15 @@ add_library(maze_poisson MODULE
 
     src/grid_general.c
     src/grid_lcg.c
+    src/grid_multigrid.c
     src/grid_fft.c
     
     src/integrator_general.c
     src/integrator_ovrvo.c
     src/integrator_verlet.c
 
+    src/multigrid.c
     src/precond_jacobi.c
-    src/precond_mg.c
     src/precond_ssor.c
     src/precond_blockjacobi.c
 

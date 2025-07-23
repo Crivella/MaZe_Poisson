@@ -59,14 +59,14 @@ void multigrid_apply(double *in, double *out, int s1, int s2, int n_start1) {
     //     out[i] = 0;  // tmp1 = in
     // }
     smooth(in, out, n_loc1, n1, 5);  // out = smooth(in, out)  ~solve(A . out = in)
+    // r1  =  in - A . out
     laplace_filter(out, r1, n_loc1, n1);
     // #pragma omp parallel for
     // for (long int i = 0; i < size1; i++) {
     //     r1[i] = in[i] - r1[i];  // r1 = in - A . out
     // }
-    // r1 = in - r1 = in - A . out
     dscal(r1, -1.0, size1);
-    daxpy(out, r1, 1.0, size1);  // out = out + r1
+    daxpy(in, r1, 1.0, size1);  // r1 = in + r1
     restriction(r1, r2, n_loc1, n1, n_start1);  // r2 = restriction(r1)
 
     // #pragma omp parallel for
@@ -75,12 +75,12 @@ void multigrid_apply(double *in, double *out, int s1, int s2, int n_start1) {
     // }
     memset(e2, 0, size2 * sizeof(double));  // e2 = 0
     smooth(r2, e2, n_loc2, n2, 5);  // e2 = smooth(r2)  ~solve(A . e2 = r2)
+    // tmp2  =  r2 - A . e2
     laplace_filter(e2, tmp2, n_loc2, n2);
     // #pragma omp parallel for
     // for (long int i = 0; i < size2; i++) {
     //     tmp2[i] = r2[i] - tmp2[i];  // tmp2 = r2 - A . e2
     // }
-    // tmp2 = e2 - tmp2 = r2 - A . e2
     dscal(tmp2, -1.0, size2);
     daxpy(e2, tmp2, 1.0, size2);  // e2 = e2 + tmp2
     restriction(tmp2, r3, n_loc2, n2, n_start2);  // r3 = restriction(r2 - A . e2)
