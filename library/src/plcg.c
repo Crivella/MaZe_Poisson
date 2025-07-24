@@ -44,16 +44,12 @@ int conj_grad(double *b, double *x0, double *x, double tol, int size1, int size2
     daxpy(b, r, -1.0, n3);  // r = A . x - b
     if (x != x0)
     {
-        #pragma omp parallel for
-        for (i = 0; i < n3; i++) {
-            x[i] = x0[i];
-        }
+        vec_copy(x0, x, n3);  // Inplace copy
     }
 
-    #pragma omp parallel for
-    for (i = 0; i < n3; i++) {
-        p[i] = r[i] / 6.0;  // p = -v = -(P^-1 . r) = - ( -r / 6.0 ) = r / 6.0
-    }
+    // p = -v = -(P^-1 . r) = - ( -r / 6.0 ) = r / 6.0
+    vec_copy(r, p, n3);  // p = r
+    dscal(p, 1.0 / 6.0, n3);  // p = r / 6.0
 
     // Since v = P^-1 . r = -r / 6.0 we do not need to ever compute v
     // We can also remove 2 dot products per iteration by computing
@@ -77,10 +73,8 @@ int conj_grad(double *b, double *x0, double *x, double tol, int size1, int size2
         beta = rn_dot_vn / r_dot_v;  // beta = <r_new, v_new> / <r, v>
         r_dot_v = rn_dot_vn;  // <r, v> = <r_new, v_new>
 
-        #pragma omp parallel for
-        for (i = 0; i < n3; i++) {
-            p[i] = beta * p[i] + r[i] / 6.0;  // p = -v + beta * p
-        }        
+        dscal(p, beta, n3);  // p = beta * p
+        daxpy(r, p, 1.0 / 6.0, n3);  // p = p - v = p + r / 6.0
 
         iter++;
     }
@@ -118,7 +112,6 @@ int conj_grad_precond(
 
     double *r = (double *)malloc(n3 * sizeof(double));
     double *Ap = (double *)malloc(n3 * sizeof(double));
-    // double *v = (double *)malloc(n3 * sizeof(double));
     double *v = mpi_grid_allocate(size1, size2);
     double *p = mpi_grid_allocate(size1, size2);
     double alpha, beta, r_dot_v, rn_dot_rn, rn_dot_vn;
@@ -128,17 +121,12 @@ int conj_grad_precond(
     daxpy(b, r, -1.0, n3);  // r = A . x - b
     if (x != x0)
     {
-        #pragma omp parallel for
-        for (i = 0; i < n3; i++) {
-            x[i] = x0[i];
-        }
+        vec_copy(x0, x, n3);  // Inplace copy
     }
 
     apply(r, v, size1, size2, get_n_start());  // v = P^-1 . r
-    #pragma omp parallel for
-    for (i = 0; i < n3; i++) {
-        p[i] = -v[i];
-    }
+    vec_copy(v, p, n3);  // p = v
+    dscal(p, -1.0, n3);  // p = -v = - (P^-1 . r)
     r_dot_v = ddot(r, v, n3);  // <r, v>
 
     while(iter < limit) {
@@ -159,16 +147,13 @@ int conj_grad_precond(
         beta = rn_dot_vn / r_dot_v;  // beta = <r_new, v_new> / <r, v>
         r_dot_v = rn_dot_vn;  // <r, v> = <r_new, v_new>
 
-        #pragma omp parallel for
-        for (i = 0; i < n3; i++) {
-            p[i] = beta * p[i] - v[i];  // p = -v + beta * p
-        }        
+        dscal(p, beta, n3);  // p = beta * p
+        daxpy(v, p, -1.0, n3);  // p = p - v
 
         iter++;
     }
 
     free(r);
-    // free(v);
     free(Ap);
     mpi_grid_free(v, size2);
     mpi_grid_free(p, size2);
@@ -202,16 +187,12 @@ EXTERN_C int conj_grad_pb(
     daxpy(b, r, -1.0, n3);  // r = A . x - b
     if (x != x0)
     {
-        #pragma omp parallel for
-        for (i = 0; i < n3; i++) {
-            x[i] = x0[i];
-        }
+        vec_copy(x0, x, n3);  // Inplace copy
     }
 
-    #pragma omp parallel for
-    for (i = 0; i < n3; i++) {
-        p[i] = r[i] / 6.0;  // p = -v = -(P^-1 . r) = - ( -r / 6.0 ) = r / 6.0
-    }
+    // p = -v = -(P^-1 . r) = - ( -r / 6.0 ) = r / 6.0
+    vec_copy(r, p, n3);  // p = r
+    dscal(p, 1.0 / 6.0, n3);  // p = r / 6.0
 
     // Since v = P^-1 . r = -r / 6.0 we do not need to ever compute v
     // We can also remove 2 dot products per iteration by computing
@@ -238,10 +219,8 @@ EXTERN_C int conj_grad_pb(
         beta = rn_dot_vn / r_dot_v;  // beta = <r_new, v_new> / <r, v>
         r_dot_v = rn_dot_vn;  // <r, v> = <r_new, v_new>
 
-        #pragma omp parallel for
-        for (i = 0; i < n3; i++) {
-            p[i] = beta * p[i] + r[i] / 6.0;  // p = -v + beta * p
-        }        
+        dscal(p, beta, n3);  // p = beta * p
+        daxpy(r, p, 1.0 / 6.0, n3);  // p = p - v = p + r / 6.0     
 
         iter++;
     }

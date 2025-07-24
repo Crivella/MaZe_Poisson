@@ -160,10 +160,7 @@ EXTERN_C int verlet_poisson_pb(
     );  // Inplace y <- y0
 
     // Scale the field with the constrained 'force' term
-    #pragma omp parallel for
-    for (i = 0; i < n3; i++) {
-        phi[i] -= y[i];
-    }
+    daxpy(y, phi, -1.0, n3);  // phi = phi - y
 
     // Free temporary arrays
     free(tmp);
