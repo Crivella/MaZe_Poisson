@@ -403,24 +403,28 @@ class SolverMD(Logger):
             self.logger.info("Running MD loop initialization steps...")
             for i in ProgressBar(self.mdv.init_steps):
                 self.md_loop_iter()
-        if self.mdv.init_steps_thermostat:
-            n_steps = self.mdv.init_steps_thermostat
-            self.logger.info(f"Running additional {n_steps} steps or until temperature is reached.")
-            for i in ProgressBar(n_steps):
-                self.md_loop_iter()
-                if self.md_check_thermostat(i + self.mdv.init_steps):
-                    break
+        
+        # if self.mdv.init_steps_thermostat:
+        #     n_steps = self.mdv.init_steps_thermostat
+        #     self.logger.info(f"Running additional {n_steps} steps or until temperature is reached.")
+        #     for i in ProgressBar(n_steps):
+        #         self.md_loop_iter()
+        #         # if self.md_check_thermostat(i + self.mdv.init_steps):
+                    # break
 
-        if self.thermostat:
-            self.logger.warning("Thermostat condition not met after initialization steps!!!")
+        # if self.thermostat:
+        #     self.logger.warning("Thermostat condition not met after initialization steps!!!")
 
         temp = capi.get_temperature()
         self.logger.info(f"Temperature: {temp:.2f} K")
 
         self.logger.info("Running MD loop...")
+        if self.thermostat:
+            self.logger.info("Thermostat ON in production run")
+
         for i in ProgressBar(self.mdv.N_steps):
             self.md_loop_iter()
-            self.md_check_thermostat(i)
+            # self.md_check_thermostat(i)
             self.md_loop_output(i)
 
     def run(self):
@@ -446,7 +450,7 @@ class SolverMD(Logger):
         from .constants import density
         self.logger.info(f'Running a MD simulation with:')
         self.logger.info(f'  N_p = {self.N_p}, N_steps = {self.mdv.N_steps}, tol = {self.mdv.tol}')
-        self.logger.info(f'  N = {self.N}, L [a.u.] = {self.L}, h [a.u.] = {self.h}')
+        self.logger.info(f'  N = {self.N}, L [A] = {self.L / cst.a0}, h [A] = {self.h / cst.a0}')
         self.logger.info(f'  density = {density} g/cm^3')
         self.logger.info(f'  Solvent dielectric constant: {self.gset.eps_s}')
         self.logger.info(f'  Solver: {self.mdv.method},  Preconditioner: {self.gset.precond}')
