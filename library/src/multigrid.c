@@ -9,6 +9,7 @@
 #include "mpi_base.h"
 #include "multigrid.h"
 
+#define OMEGA 0.66
 
 /*
 Apply the multigrid method to solve the Poisson equation.  A.out = in
@@ -19,7 +20,10 @@ Apply the multigrid method to solve the Poisson equation.  A.out = in
 @param s2: size of the second dimension (number of grid points per slice)
 @param n_start1: starting index for the first dimension (used for restriction)
 */
-void multigrid_apply(double *in, double *out, int s1, int s2, int n_start1) {
+void multigrid_apply(
+    double *in, double *out, int s1, int s2, int n_start1,
+    int sm1, int sm2, int sm3, int sm4
+) {
     int n1 = s2;
     int n2 = n1 / 2;
     int n3 = n2 / 2;
@@ -54,49 +58,34 @@ void multigrid_apply(double *in, double *out, int s1, int s2, int n_start1) {
 
     double *tmp2 = mpi_grid_allocate(n_loc2, n2);
 
-    // #pragma omp parallel for
-    // for (int i = 0; i < size1; i++) {
-    //     out[i] = 0;  // tmp1 = in
-    // }
-    smooth(in, out, n_loc1, n1, 5);  // out = smooth(in, out)  ~solve(A . out = in)
+    memset(out, 0, size1 * sizeof(double));  // out = 0
+    memset(e2, 0, size2 * sizeof(double));  // e2 = 0
+    memset(e3, 0, size3 * sizeof(double));  // e3 = 0
+
+    smooth(in, out, n_loc1, n1, sm1);  // out = smooth(in, out)  ~solve(A . out = in)
     // r1  =  in - A . out
     laplace_filter(out, r1, n_loc1, n1);
-    // #pragma omp parallel for
-    // for (long int i = 0; i < size1; i++) {
-    //     r1[i] = in[i] - r1[i];  // r1 = in - A . out
-    // }
     dscal(r1, -1.0, size1);
     daxpy(in, r1, 1.0, size1);  // r1 = in + r1
     restriction(r1, r2, n_loc1, n1, n_start1);  // r2 = restriction(r1)
 
-    // #pragma omp parallel for
-    // for (long int i = 0; i < size2; i++) {
-    //     e2[i] = 0;  // tmp2 = r2
-    // }
-    memset(e2, 0, size2 * sizeof(double));  // e2 = 0
-    smooth(r2, e2, n_loc2, n2, 5);  // e2 = smooth(r2)  ~solve(A . e2 = r2)
+    smooth(r2, e2, n_loc2, n2, sm2);  // e2 = smooth(r2)  ~solve(A . e2 = r2)
     // tmp2  =  r2 - A . e2
     laplace_filter(e2, tmp2, n_loc2, n2);
-    // #pragma omp parallel for
-    // for (long int i = 0; i < size2; i++) {
-    //     tmp2[i] = r2[i] - tmp2[i];  // tmp2 = r2 - A . e2
-    // }
     dscal(tmp2, -1.0, size2);
     daxpy(e2, tmp2, 1.0, size2);  // e2 = e2 + tmp2
     restriction(tmp2, r3, n_loc2, n2, n_start2);  // r3 = restriction(r2 - A . e2)
 
-    // #pragma omp parallel for
-    // for (long int i = 0; i < size3; i++) {
-    //     e3[i] = 0;
-    // }
-    memset(e3, 0, size3 * sizeof(double));  // e3 = 0
-    smooth(r3, e3, n_loc3, n3, 15);  // e3 = smooth(r3)  ~solve(A . e3 = r3)
 
+    smooth(r3, e3, n_loc3, n3, sm3);  // e3 = smooth(r3)  ~solve(A . e3 = r3)
     prolong(e3, r2, n_loc3, n3, n_loc2, n2, n_start2);
     daxpy(r2, e2, 1.0, size2);  // e2 = e2 + prolong(r3)
+
+    smooth(r2, e2, n_loc2, n2, sm4);  // e2 = smooth(r2, e2)  ~solve(A . e2 = r2)
     prolong(e2, r1, n_loc2, n2, n_loc1, n1, n_start1);
     daxpy(r1, out, 1.0, size1);  // out = out + prolong(e2)
-    smooth(in, out, n_loc1, n1, 5);  // out = smooth(in, out)  ~solve(A . out = in)
+
+    smooth(in, out, n_loc1, n1, sm4);  // out = smooth(in, out)  ~solve(A . out = in)
 
     mpi_grid_free(r1, n1);
     mpi_grid_free(r2, n2);
@@ -195,32 +184,35 @@ void restriction(double *in, double *out, int s1, int s2, int n_start) {
 void smooth_jacobi(double *in, double *out, int s1, int s2, double tol) {
     long int n3 = s1 * s2 * s2;
 
-    double omega = 0.66 / -6.0;
+    double omega = OMEGA / -6.0;
 
     double *tmp = (double *)malloc(n3 * sizeof(double));
 
     for (int iter=0; iter < tol; iter++) { 
         laplace_filter(out, tmp, s1, s2);  // res += A . out
 
-        #pragma omp parallel for
-        for (long int i = 0; i < n3; i++) {
-            out[i] += omega * (in[i] - tmp[i]);  // out += omega * (in - res)
-        }
+        // #pragma omp parallel for
+        // for (long int i = 0; i < n3; i++) {
+        //     out[i] += omega * (in[i] - tmp[i]);  // out += omega * (in - res)
+        // }
+        
+        daxpy(tmp, out, -omega, n3);
+        daxpy(in, out, omega, n3);  // out = in + omega * (in - res)
     }
 
     free(tmp);
 }
 
-void smooth_lcg(double *in, double *out, int s1, int s2, double tol) {
-    conj_grad(in, out, out, 1E-1, s1, s2);  // out = ~solve(A . out = in)
-}
+// void smooth_lcg(double *in, double *out, int s1, int s2, double tol) {
+//     conj_grad(in, out, out, 1E-1, s1, s2);  // out = ~solve(A . out = in)
+// }
 
-void smooth_diag(double *in, double *out, int s1, int s2, double tol) {
-    long int n3 = s1 * s2 * s2;
-    for (int i = 0; i < n3; i++) {
-        out[i] = in[i] / -6.0;
-    }
-}
+// void smooth_diag(double *in, double *out, int s1, int s2, double tol) {
+//     long int n3 = s1 * s2 * s2;
+//     for (int i = 0; i < n3; i++) {
+//         out[i] = in[i] / -6.0;
+//     }
+// }
 
 void smooth(double *in, double *out, int s1, int s2, double tol) {
     // smooth_lcg(in, out, s1, s2, tol);

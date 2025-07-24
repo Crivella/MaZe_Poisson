@@ -134,7 +134,7 @@ int lcg_grid_update_field(grid *grid) {
             precond = precond_jacobi_apply;
             break;
         case PRECOND_TYPE_MG:
-            precond = multigrid_apply;
+            precond = precond_mg_apply;
             break;
         case PRECOND_TYPE_SSOR:
             precond = precond_ssor_apply;

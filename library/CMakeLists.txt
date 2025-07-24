@@ -45,13 +45,18 @@ set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g")
 # Create the shared library
 add_library(maze_poisson MODULE
     src/linalg.c
-    src/laplace.c
-    src/forces.c
-    src/charges.c
-    src/fftw_wrap.c
     
     src/omp_base.c
     src/mpi_base.c
+
+    src/laplace.c
+    src/plcg.c
+    src/verlet.c
+    src/multigrid.c
+    src/fftw_wrap.c
+
+    src/forces.c
+    src/charges.c
 
     src/particles.c
 
@@ -64,8 +69,8 @@ add_library(maze_poisson MODULE
     src/integrator_ovrvo.c
     src/integrator_verlet.c
 
-    src/multigrid.c
     src/precond_jacobi.c
+    src/precond_mg.c
     src/precond_ssor.c
     src/precond_blockjacobi.c
 

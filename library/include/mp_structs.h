@@ -101,6 +101,7 @@ void verlet_integrator_stop_thermostat(integrator *integrator);
 
 // Preconditioner function definitions
 void precond_jacobi_apply(double *in, double *out, int s1, int s2, int n_start);
+void precond_mg_apply(double *in, double *out, int s1, int s2, int n_start);
 void precond_ssor_apply(double *in, double *out, int s1, int s2, int n_start);
 void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_start);
 
