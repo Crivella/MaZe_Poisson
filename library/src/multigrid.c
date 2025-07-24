@@ -11,6 +11,67 @@
 
 #define OMEGA 0.66
 
+
+int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int depth) {
+    int res;
+    int s1_nxt, s2_nxt, n_start_nxt;
+    long int size = s1 * s2 * s2;
+
+    s1_nxt = (s1 + 1 - (n_start % 2)) / 2;
+    s2_nxt = s2 / 2;
+    n_start_nxt = (n_start + 1) / 2;
+
+    if (s1_nxt < fmax(4, get_size())) {
+        if (depth == 0) {
+            mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
+            mpi_fprintf(stderr, "Multigrid: requires atleast one level of recursion (s1 >= %d)\n", fmax(4, get_size()));
+            mpi_fprintf(stderr, "Increase the size of the grid or reduce the number of MPI processes.\n");
+            mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
+            exit(1);
+        }
+        // Base case: no more levels to go down
+        // smooth(in, out, s1, s2, sm);  // out = smooth(in, out)  ~solve(A . out = in)
+        return depth;
+    }
+
+    long int size_nxt = s1_nxt * s2_nxt * s2_nxt;
+
+    double *r = mpi_grid_allocate(s1, s2);
+    double *rhs = mpi_grid_allocate(s1_nxt, s2_nxt);
+    double *eps = mpi_grid_allocate(s1_nxt, s2_nxt);
+
+    memset(eps, 0, size_nxt * sizeof(double));  // eps = 0
+
+    smooth(in, out, s1, s2, sm);  // out = smooth(in, out)  ~solve(A . out = in)
+    // r  =  in - A . out
+    laplace_filter(out, r, s1, s2);
+    dscal(r, -1.0, size);
+    daxpy(in, r, 1.0, size);
+
+    restriction(r, rhs, s1, s2, n_start);  // rhs = restriction(r)
+    smooth(rhs, eps, s1_nxt, s2_nxt, 2 * sm);  // eps = smooth(rhs)  ~solve(A . eps = rhs)
+    res = v_cycle(rhs, eps, s1_nxt, s2_nxt, n_start_nxt, 2 * sm, depth + 1);  // eps = v_cycle(rhs)
+
+    prolong(eps, r, s1_nxt, s2_nxt, s1, s2, n_start);  // r = prolong(eps)
+    daxpy(r, out, 1.0, size);  // out = out + r
+
+    smooth(in, out, s1, s2, sm);  // out = smooth(in, out)  ~solve(A . out = in)
+
+    mpi_grid_free(r, s2);
+    mpi_grid_free(rhs, s2_nxt);
+    mpi_grid_free(eps, s2_nxt);
+
+    return res;  // Return the number of levels processed
+}
+
+int multigrid_apply(
+    double *in, double *out, int s1, int s2, int n_start1,
+    int sm1, int sm2, int sm3, int sm4
+) {
+    memset(out, 0, s1 * s2 * s2 * sizeof(double));  // Initialize out to zero
+    return v_cycle(in, out, s1, s2, n_start1, sm1, 0);  // Apply the recursive V-cycle multigrid method
+}
+
 /*
 Apply the multigrid method to solve the Poisson equation  A.out = in
 using a 3-level V-cycle multigrid method.
@@ -21,7 +82,7 @@ using a 3-level V-cycle multigrid method.
 @param s2: size of the second dimension (number of grid points per slice)
 @param n_start1: starting index for the first dimension (used for restriction)
 */
-void multigrid_apply(
+void multigrid_apply_(
     double *in, double *out, int s1, int s2, int n_start1,
     int sm1, int sm2, int sm3, int sm4
 ) {
@@ -35,7 +96,7 @@ void multigrid_apply(
     int n_start2 = (n_start1 + 1) / 2;
 
     int n_loc3 = (n_loc2 + 1 - (n_start2 % 2)) / 2;
-    int n_start3 = (n_start2 + 1) / 2;
+    // int n_start3 = (n_start2 + 1) / 2;
 
     if (n_loc3 == 0) {
         mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
@@ -59,7 +120,7 @@ void multigrid_apply(
 
     double *tmp2 = mpi_grid_allocate(n_loc2, n2);
 
-    memset(out, 0, size1 * sizeof(double));  // out = 0
+    // memset(out, 0, size1 * sizeof(double));  // out = 0
     memset(e2, 0, size2 * sizeof(double));  // e2 = 0
     memset(e3, 0, size3 * sizeof(double));  // e3 = 0
 
@@ -67,7 +128,7 @@ void multigrid_apply(
     // r1  =  in - A . out
     laplace_filter(out, r1, n_loc1, n1);
     dscal(r1, -1.0, size1);
-    daxpy(in, r1, 1.0, size1);  // r1 = in + r1
+    daxpy(in, r1, 1.0, size1);
     restriction(r1, r2, n_loc1, n1, n_start1);  // r2 = restriction(r1)
 
     smooth(r2, e2, n_loc2, n2, sm2);  // e2 = smooth(r2)  ~solve(A . e2 = r2)
@@ -80,9 +141,9 @@ void multigrid_apply(
 
     smooth(r3, e3, n_loc3, n3, sm3);  // e3 = smooth(r3)  ~solve(A . e3 = r3)
     prolong(e3, r2, n_loc3, n3, n_loc2, n2, n_start2);
-    daxpy(r2, e2, 1.0, size2);  // e2 = e2 + prolong(r3)
+    daxpy(r2, e2, 1.0, size2);  // e2 = e2 + prolong(e3)
 
-    // smooth(r2, e2, n_loc2, n2, sm4);  // e2 = smooth(r2, e2)  ~solve(A . e2 = r2)
+    smooth(r2, e2, n_loc2, n2, sm2);  // e2 = smooth(r2, e2)  ~solve(A . e2 = r2)
     prolong(e2, r1, n_loc2, n2, n_loc1, n1, n_start1);
     daxpy(r1, out, 1.0, size1);  // out = out + prolong(e2)
 
@@ -93,6 +154,84 @@ void multigrid_apply(
     mpi_grid_free(r3, n3);
     mpi_grid_free(e2, n2);
     mpi_grid_free(e3, n3);
+    mpi_grid_free(tmp2, n2);
+}
+
+/*
+Apply the multigrid method to solve the Poisson equation  A.out = in
+using a 3-level V-cycle multigrid method.
+
+@param in: input array (right-hand side of the equation)
+@param out: in/out array (starting guess/solution)
+@param s1: size of the first dimension (number of slices)
+@param s2: size of the second dimension (number of grid points per slice)
+@param n_start1: starting index for the first dimension (used for restriction)
+*/
+void multigrid_apply__(
+    double *in, double *out, int s1, int s2, int n_start1,
+    int sm1, int sm2, int sm3, int sm4
+) {
+    int n1 = s2;
+    int n2 = n1 / 2;
+
+    int n_loc1 = s1;
+
+    int n_loc2 = (n_loc1 + 1 - (n_start1 % 2)) / 2;
+    int n_start2 = (n_start1 + 1) / 2;
+
+
+    if (n_loc2 == 0) {
+        mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
+        mpi_fprintf(stderr, "Warning: after restriction some processors have no local grid points!\n");
+        mpi_fprintf(stderr, "This case is not yet implemented, please use MULTIGRID with atleast 4 slices\n");
+        mpi_fprintf(stderr, "per processor (N_grid / num_mpi_procs >= 4) \n");
+        mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
+        exit(1);
+    }
+
+    long int size1 = n_loc1 * n1 * n1;
+    long int size2 = n_loc2 * n2 * n2;
+
+    double *r1 = mpi_grid_allocate(n_loc1, n1);
+    double *r2 = mpi_grid_allocate(n_loc2, n2);
+
+    double *e2 = mpi_grid_allocate(n_loc2, n2);
+
+    double *tmp2 = mpi_grid_allocate(n_loc2, n2);
+
+    // memset(out, 0, size1 * sizeof(double));  // out = 0
+    memset(e2, 0, size2 * sizeof(double));  // e2 = 0
+
+    smooth(in, out, n_loc1, n1, sm1);  // out = smooth(in, out)  ~solve(A . out = in)
+    // r1  =  in - A . out
+    laplace_filter(out, r1, n_loc1, n1);
+    dscal(r1, -1.0, size1);
+    daxpy(in, r1, 1.0, size1);
+    restriction(r1, r2, n_loc1, n1, n_start1);  // r2 = restriction(r1)
+
+    // smooth(r2, e2, n_loc2, n2, sm2);  // e2 = smooth(r2)  ~solve(A . e2 = r2)
+    // // tmp2  =  r2 - A . e2
+    // laplace_filter(e2, tmp2, n_loc2, n2);
+    // dscal(tmp2, -1.0, size2);
+    // daxpy(r2, tmp2, 1.0, size2);
+    // restriction(tmp2, r3, n_loc2, n2, n_start2);  // r3 = restriction(r2 - A . e2)
+
+
+    // smooth(r3, e3, n_loc3, n3, sm3);  // e3 = smooth(r3)  ~solve(A . e3 = r3)
+    // prolong(e3, r2, n_loc3, n3, n_loc2, n2, n_start2);
+    // daxpy(r2, e2, 1.0, size2);  // e2 = e2 + prolong(e3)
+
+    smooth(r2, e2, n_loc2, n2, sm2);  // e2 = smooth(r2, e2)  ~solve(A . e2 = r2)
+    prolong(e2, r1, n_loc2, n2, n_loc1, n1, n_start1);
+    daxpy(r1, out, 1.0, size1);  // out = out + prolong(e2)
+
+    smooth(in, out, n_loc1, n1, sm4);  // out = smooth(in, out)  ~solve(A . out = in)
+
+    mpi_grid_free(r1, n1);
+    mpi_grid_free(r2, n2);
+    // mpi_grid_free(r3, n3);
+    mpi_grid_free(e2, n2);
+    // mpi_grid_free(e3, n3);
     mpi_grid_free(tmp2, n2);
 }
 

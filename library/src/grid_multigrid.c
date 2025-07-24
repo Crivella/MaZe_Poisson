@@ -68,6 +68,9 @@ void multigrid_grid_init(grid * grid) {
     grid->phi_p = mpi_grid_allocate(n_loc, n);
     grid->phi_n = mpi_grid_allocate(n_loc, n);
 
+    memset(grid->phi_p, 0, size * sizeof(double));  // phi_p = 0
+    memset(grid->phi_n, 0, size * sizeof(double));  // phi_n = 0
+
     grid->init_field = multigrid_grid_init_field;
     grid->update_field = multigrid_grid_update_field;
     grid->update_charges = multigrid_grid_update_charges;
@@ -92,9 +95,9 @@ void multigrid_grid_init_field(grid *grid) {
     }
 
     memset(grid->y, 0, grid->size * sizeof(double));  // y = 0
-    memcpy(grid->phi_p, grid->phi_n, grid->size * sizeof(double));  // phi_prev = phi_n
+    vec_copy(grid->phi_n, grid->phi_p, grid->size);  // phi_prev = phi_n
     // phi_n = consant * q
-    memcpy(tmp, grid->q, grid->size * sizeof(double));
+    vec_copy(grid->q, tmp, grid->size);
     dscal(tmp, constant, grid->size);
 
 
