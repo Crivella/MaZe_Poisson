@@ -74,7 +74,7 @@ void multigrid_apply(
     // tmp2  =  r2 - A . e2
     laplace_filter(e2, tmp2, n_loc2, n2);
     dscal(tmp2, -1.0, size2);
-    daxpy(e2, tmp2, 1.0, size2);  // e2 = e2 + tmp2
+    daxpy(r2, tmp2, 1.0, size2);
     restriction(tmp2, r3, n_loc2, n2, n_start2);  // r3 = restriction(r2 - A . e2)
 
 
@@ -82,7 +82,7 @@ void multigrid_apply(
     prolong(e3, r2, n_loc3, n3, n_loc2, n2, n_start2);
     daxpy(r2, e2, 1.0, size2);  // e2 = e2 + prolong(r3)
 
-    smooth(r2, e2, n_loc2, n2, sm4);  // e2 = smooth(r2, e2)  ~solve(A . e2 = r2)
+    // smooth(r2, e2, n_loc2, n2, sm4);  // e2 = smooth(r2, e2)  ~solve(A . e2 = r2)
     prolong(e2, r1, n_loc2, n2, n_loc1, n1, n_start1);
     daxpy(r1, out, 1.0, size1);  // out = out + prolong(e2)
 
