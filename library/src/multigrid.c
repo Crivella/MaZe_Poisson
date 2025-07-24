@@ -136,9 +136,9 @@ void prolong(double *in, double *out, int s1, int s2, int target_s1, int target_
 
     // In case of odd number of slices, we need to wrap around the top slice from the proc below
     // as the 1st bottom slice of the current proc
-    mpi_grid_exchange_bot_top(out, target_s1, target_s2);
+    mpi_grid_exchange_bot_top(out, target_s1, target_s2);  // Called outside the if to avoid deadlock
     if (d) {
-        memcpy(out, out - target_n2, target_n2 * sizeof(double));
+        vec_copy(out - target_n2, out, target_n2);
     }
 }
 
