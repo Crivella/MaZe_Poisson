@@ -12,7 +12,8 @@
 #define OMEGA 0.66
 
 /*
-Apply the multigrid method to solve the Poisson equation.  A.out = in
+Apply the multigrid method to solve the Poisson equation  A.out = in
+using a 3-level V-cycle multigrid method.
 
 @param in: input array (right-hand side of the equation)
 @param out: in/out array (starting guess/solution)
@@ -39,7 +40,7 @@ void multigrid_apply(
     if (n_loc3 == 0) {
         mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
         mpi_fprintf(stderr, "Warning: after restriction some processors have no local grid points!\n");
-        mpi_fprintf(stderr, "This case is not yet implemented, please use MG preconditioner with atleast 4 slices\n");
+        mpi_fprintf(stderr, "This case is not yet implemented, please use MULTIGRID with atleast 4 slices\n");
         mpi_fprintf(stderr, "per processor (N_grid / num_mpi_procs >= 4) \n");
         mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
         exit(1);
@@ -181,6 +182,16 @@ void restriction(double *in, double *out, int s1, int s2, int n_start) {
     }
 }
 
+/*
+Apply the Jacobi smoothing method to solve the Poisson equation.
+Gives an approximate solution to the equation A.out = in based
+
+@param in: input array (right-hand side of the equation)
+@param out: in/out array (starting guess/solution)
+@param s1: size of the first dimension (number of slices)
+@param s2: size of the second dimension (number of grid points per slice)
+@param tol: number of iterations to perform
+*/
 void smooth_jacobi(double *in, double *out, int s1, int s2, double tol) {
     long int n3 = s1 * s2 * s2;
 
@@ -189,15 +200,10 @@ void smooth_jacobi(double *in, double *out, int s1, int s2, double tol) {
     double *tmp = (double *)malloc(n3 * sizeof(double));
 
     for (int iter=0; iter < tol; iter++) { 
-        laplace_filter(out, tmp, s1, s2);  // res += A . out
-
-        // #pragma omp parallel for
-        // for (long int i = 0; i < n3; i++) {
-        //     out[i] += omega * (in[i] - tmp[i]);  // out += omega * (in - res)
-        // }
-        
+        // out = out + omega * (in - A. out)
+        laplace_filter(out, tmp, s1, s2);  // res = A . out
         daxpy(tmp, out, -omega, n3);
-        daxpy(in, out, omega, n3);  // out = in + omega * (in - res)
+        daxpy(in, out, omega, n3);
     }
 
     free(tmp);
