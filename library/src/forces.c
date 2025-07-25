@@ -196,56 +196,76 @@ Compute the particle-particle forces using the tabulated Tosi-Fumi potential
 @param forces: the output forces on each particle (n_p, 3)
 */
 double compute_sc_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces) {
-    int ip, jp;
+    int i, j, k, ip, jp;
+    double nu, d, B_nu, alpha, beta;
+    double potential_energy = 0.0;
 
-    // Parametri globali: [nu, d, B_nu]
-    double nu = params[0];
-    double d = params[1];
-    double B_nu = params[2];
-    double alpha = params[3];
-    double beta = params[4];
+    double *forces_private = (double *)calloc(n_p * 3, sizeof(double));
+    double *forces_thread = NULL;
     double r_diff[3];
     double r_mag, f_mag, V_mag;
-    double potential_energy = 0.0;
     double d_over_r, d_over_r_pow;
 
+    nu    = params[0];
+    d     = params[1];
+    B_nu  = params[2];
+    alpha = params[3];
+    beta  = params[4];
 
-    #pragma omp parallel for private(ip, jp, r_diff, r_mag, f_mag, V_mag, d_over_r, d_over_r_pow) reduction(+:potential_energy)
-    for (int i = 0; i < n_p; i++) {
-        ip = 3 * i;
-        forces[ip] = 0.0;
-        forces[ip + 1] = 0.0;
-        forces[ip + 2] = 0.0;
+    #pragma omp parallel private(i, j, k, ip, jp, r_diff, r_mag, f_mag, V_mag, d_over_r, d_over_r_pow, forces_thread) reduction(+:potential_energy)
+    {
+        // Alloca buffer locale per ogni thread
+        forces_thread = (double *)calloc(n_p * 3, sizeof(double));
 
-        for (int j = 0; j < n_p; j++) {
-            if (i == j) continue;
-            jp = 3 * j;
+        #pragma omp for
+        for (i = 0; i < n_p; i++) {
+            ip = 3 * i;
+            for (k = 0; k < 3; k++) forces_thread[ip + k] = 0.0;
 
-            r_mag = 0.0;
-            for (int k = 0; k < 3; k++) {
-                r_diff[k] = pos[ip + k] - pos[jp + k];
-                r_diff[k] -= L * round(r_diff[k] / L);
-                r_mag += r_diff[k] * r_diff[k];
+            for (j = 0; j < n_p; j++) {
+                if (i == j) continue;
+                jp = 3 * j;
+
+                r_mag = 0.0;
+                for (k = 0; k < 3; k++) {
+                    r_diff[k] = pos[ip + k] - pos[jp + k];
+                    r_diff[k] -= L * round(r_diff[k] / L);
+                    r_mag += r_diff[k] * r_diff[k];
+                }
+
+                r_mag = sqrt(r_mag);
+                if (r_mag > r_cut) continue;
+
+                d_over_r = d / r_mag;
+                d_over_r_pow = pow(d_over_r, nu);
+                V_mag = B_nu * d_over_r_pow + alpha * r_mag + beta;
+                f_mag = -B_nu * nu * d_over_r_pow / r_mag - alpha;
+
+                for (k = 0; k < 3; k++) {
+                    double f_k = f_mag * r_diff[k] / r_mag;
+                    forces_thread[ip + k] += f_k;
+                }
+
+                potential_energy += V_mag;
             }
-
-            r_mag = sqrt(r_mag);
-            if (r_mag > r_cut) continue;
-
-            d_over_r = d / r_mag;
-            d_over_r_pow = pow(d_over_r, nu); // (d/r)^nu
-
-            V_mag = B_nu * d_over_r_pow + alpha * r_mag + beta;
-            f_mag = -B_nu * nu * d_over_r_pow / (r_mag) - alpha; // forza radiale
-
-            for (int k = 0; k < 3; k++) {
-                double f_k = f_mag * r_diff[k] / r_mag;
-                forces[ip + k] += f_k;
-            }
-
-            potential_energy += V_mag;
         }
+
+        // Riduci local forces_thread dentro forces_private
+        #pragma omp critical
+        {
+            for (i = 0; i < 3 * n_p; i++) {
+                forces_private[i] += forces_thread[i];
+            }
+        }
+
+        free(forces_thread);
     }
 
-    return potential_energy / 2.0;  // dividi per 2 per evitare doppio conteggio
-}
+    // Copia finale su forces
+    for (i = 0; i < 3 * n_p; i++) {
+        forces[i] = forces_private[i];
+    }
 
+    free(forces_private);
+    return potential_energy / 2.0;
+}
