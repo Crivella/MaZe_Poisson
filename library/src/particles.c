@@ -14,7 +14,7 @@
 #define NUM_NEIGH_SPLINE 64
 
 // Potential types
-char potential_type_str[2][16] = {"TF", "LD"};
+char potential_type_str[3][16] = {"TF", "LD", "SC"};
 
 int get_potential_type_num() {
     return PARTICLE_POTENTIAL_TYPE_NUM;
@@ -92,11 +92,13 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
     particle_charges_init(p, cas_type);
 
     p->tf_params = NULL;
+    p->sc_params = NULL;
 
     p->free = particles_free;
     p->init_potential = particles_init_potential;
     p->init_potential_tf = particles_init_potential_tf;
     p->init_potential_ld = particles_init_potential_ld;
+    p->init_potential_sc = particles_init_potential_sc;
     
     p->compute_forces_field = particles_compute_forces_field;
     p->compute_forces_noel = NULL;
@@ -150,6 +152,9 @@ void particles_free(particles *p) {
     if (p->tf_params != NULL) {
         free(p->tf_params);
     }
+    if (p->sc_params != NULL) {
+        free(p->sc_params);
+    }
 
     particles_pb_free(p);
 
@@ -165,6 +170,9 @@ void particles_init_potential(particles *p, int pot_type, double *pot_params) {
         break;
     case PARTICLE_POTENTIAL_TYPE_LD:
         p->init_potential_ld(p, pot_params);
+        break;
+    case PARTICLE_POTENTIAL_TYPE_SC:
+        p->init_potential_sc(p, pot_params);
         break;
     default:
         mpi_fprintf(stderr, "Invalid potential type %d\n", pot_type);
@@ -229,6 +237,30 @@ void particles_init_potential_ld(particles *p, double *pot_params) {
     p->r_cut = 2.5 * p->sigma;
 
     p->compute_forces_noel = particles_compute_forces_ld;
+}
+
+void particles_init_potential_sc(particles *p, double *pot_params) {
+    double alpha, beta;
+    double nu, d, B_nu, r_cut;
+    double d_over_r_cut, d_over_r_cut_pow;
+    p->sc_params = (double *)malloc(5 * sizeof(double));
+
+    nu = pot_params[0];
+    d = pot_params[1];
+    B_nu = pot_params[2];
+    d_over_r_cut = d / r_cut;
+    d_over_r_cut_pow = pow(d_over_r_cut, nu - 1);
+    
+    alpha = - B_nu * nu * d * d_over_r_cut_pow;
+    beta = - B_nu * d_over_r_cut_pow * d_over_r_cut - alpha * r_cut;
+
+    p->sc_params[0] = pot_params[0];
+    p->sc_params[1] = pot_params[1];
+    p->sc_params[2] = pot_params[2];
+    p->sc_params[4] = alpha;
+    p->sc_params[5] = beta;
+    p->compute_forces_noel = particles_compute_forces_sc;
+
 }
 
 void particles_update_nearest_neighbors_cic(particles *p) {
@@ -333,8 +365,12 @@ double particles_compute_forces_tf(particles *p) {
     return compute_tf_forces(p->n_p, p->L, p->pos, p->tf_params, p->r_cut, p->fcs_noel);
 }
 
+double particles_compute_forces_sc(particles *p) {
+    return compute_sc_forces(p->n_p, p->L, p->pos, p->sc_params, p->r_cut, p->fcs_noel);
+}
+
 double particles_compute_forces_ld(particles *p) { 
-    return 0.0;
+    return 0.0; 
 }
 
 double calc_h_ratio(double rad, double w2, double w3) {

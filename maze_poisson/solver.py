@@ -31,6 +31,7 @@ integrator_map: Dict[str, int] = {
 potential_map: Dict[str, int] = {
     # 'TF': 0,
     # 'LD': 1,
+    # 'SC': 2,
 }
 
 ca_scheme_map: Dict[str, int] = {
@@ -164,6 +165,7 @@ class SolverMD(Logger):
         self.logger.info(f"Initializing particles with potential: {self.mdv.potential}")
         potential = self.mdv.potential.upper()
         if not potential in potential_map:
+            print(potential_map, potential)
             raise ValueError(f"Potential {potential} not recognized.")
         pot_id = potential_map[potential]
 
@@ -238,12 +240,48 @@ class SolverMD(Logger):
             tf_params_array[:, :, 4] /= cst.a0  # sigma  ang -> a.u.
             tf_params_array = np.ascontiguousarray(tf_params_array.flatten(), dtype=np.float64)
 
-        capi.solver_initialize_particles(
-            self.N, self.N_typs, self.L, self.h, self.N_p,
-            pot_id, ca_scheme_id,
-            types, pos, vel, mass, charges,
-            tf_params_array
-        )
+        elif potential == 'SC':
+            self.logger.info("Using SC potential with shared parameters (nu, d, B).")
+
+            if self.mdv.potential_params_file is None:
+                raise ValueError("Potential parameters file must be provided for SC potential.")
+
+            sc_params = pd.read_csv(self.mdv.potential_params_file)
+
+            required_columns = {'nu', 'd'}
+            if not required_columns.issubset(sc_params.columns):
+                raise ValueError(f"Potential parameters file must contain columns: {required_columns}")
+
+            if len(sc_params) != 1:
+                raise ValueError("Potential parameters file for SC must contain exactly one row.")
+
+            nu = sc_params['nu'].iloc[0]
+            d = sc_params['d'].iloc[0]
+            if nu <= 0 or d <= 0:
+                raise ValueError("Parameters 'nu' and 'd' must be strictly positive.")
+
+            Am = 1.74
+            Nc = 6
+            d_au = d / cst.a0  # convert d from Angstrom to Bohr
+            B_au = Am / (Nc * nu * d_au)  # au
+            
+            # Salva come vettore (es. per uso diretto nei kernel)
+            sc_params_array = np.array([nu, d_au, B_au], dtype=np.float64)
+
+        if potential == 'TF':
+            capi.solver_initialize_particles(
+                self.N, self.N_typs, self.L, self.h, self.N_p,
+                pot_id, ca_scheme_id,
+                types, pos, vel, mass, charges,
+                tf_params_array
+            )
+        elif potential == 'SC':
+            capi.solver_initialize_particles(
+                self.N, self.N_typs, self.L, self.h, self.N_p,
+                pot_id, ca_scheme_id,
+                types, pos, vel, mass, charges,
+                sc_params_array
+            )
 
         if self.mdv.poisson_boltzmann:
             if 'radius' not in particles.columns:

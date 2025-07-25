@@ -5,9 +5,10 @@
 #define GRID_TYPE_LCG 0
 #define GRID_TYPE_FFT 1
 
-#define PARTICLE_POTENTIAL_TYPE_NUM 2
+#define PARTICLE_POTENTIAL_TYPE_NUM 3
 #define PARTICLE_POTENTIAL_TYPE_TF 0
 #define PARTICLE_POTENTIAL_TYPE_LD 1
+#define PARTICLE_POTENTIAL_TYPE_SC 2
 
 #define CHARGE_ASS_SCHEME_TYPE_NUM 3
 #define CHARGE_ASS_SCHEME_TYPE_CIC 0
@@ -65,11 +66,13 @@ void particles_pb_free(particles *p);
 void particles_init_potential(particles *p, int pot_type, double *pot_params);
 void particles_init_potential_tf(particles *p, double *pot_params);
 void particles_init_potential_ld(particles *p, double *pot_params);
+void particles_init_potential_sc(particles *p, double *pot_params);
 void particles_update_nearest_neighbors_cic(particles *p);
 void particles_update_nearest_neighbors_spline(particles *p);
 
 double particles_compute_forces_field(particles *p, grid *grid);
 double particles_compute_forces_tf(particles *p);
+double particles_compute_forces_sc(particles *p);
 double particles_compute_forces_ld(particles *p);
 double particles_compute_forces_rf(particles *p, grid *grid);
 double particles_compute_forces_pb(particles *p, grid *grid);
@@ -169,6 +172,7 @@ struct particles {
     double sigma;
     double epsilon;
     double *tf_params;  // Parameters for the TF potential (7 x n_p x n_p)
+    double *sc_params;  // Parameters for the SC potential (3)
 
     // Poisson-Boltzmann specific
     int pb_enabled;  // Poisson-Boltzmann enabled
@@ -185,6 +189,7 @@ struct particles {
     void    (*init_potential)( particles *, int, double *);
     void    (*init_potential_tf)( particles *, double *);
     void    (*init_potential_ld)( particles *, double *);
+    void    (*init_potential_sc)( particles *, double *);
 
     void    (*update_nearest_neighbors)( particles *);
     double  (*charges_spread_func)( double, double, double);

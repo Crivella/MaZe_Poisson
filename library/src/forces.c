@@ -183,3 +183,69 @@ double compute_tf_forces(int n_p, double L, double *pos, double *params, double 
 
     return potential_energy / 2;
 }
+
+
+/*
+Compute the particle-particle forces using the tabulated Tosi-Fumi potential
+
+@param n_p: the number of particles
+@param L: the size of the box
+@param pos: the positions of the particles (n_p, 3)
+@param params: the parameters of the potential [nu, d, B] (3)
+@param r_cut: the cutoff radius
+@param forces: the output forces on each particle (n_p, 3)
+*/
+double compute_sc_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces) {
+    int ip, jp;
+
+    // Parametri globali: [nu, d, B_nu]
+    double nu = params[0];
+    double d = params[1];
+    double B_nu = params[2];
+    double alpha = params[3];
+    double beta = params[4];
+    double r_diff[3];
+    double r_mag, f_mag, V_mag;
+    double potential_energy = 0.0;
+    double d_over_r, d_over_r_pow;
+
+
+    #pragma omp parallel for private(ip, jp, r_diff, r_mag, f_mag, V_mag, d_over_r, d_over_r_pow) reduction(+:potential_energy)
+    for (int i = 0; i < n_p; i++) {
+        ip = 3 * i;
+        forces[ip] = 0.0;
+        forces[ip + 1] = 0.0;
+        forces[ip + 2] = 0.0;
+
+        for (int j = 0; j < n_p; j++) {
+            if (i == j) continue;
+            jp = 3 * j;
+
+            r_mag = 0.0;
+            for (int k = 0; k < 3; k++) {
+                r_diff[k] = pos[ip + k] - pos[jp + k];
+                r_diff[k] -= L * round(r_diff[k] / L);
+                r_mag += r_diff[k] * r_diff[k];
+            }
+
+            r_mag = sqrt(r_mag);
+            if (r_mag > r_cut) continue;
+
+            d_over_r = d / r_mag;
+            d_over_r_pow = pow(d_over_r, nu); // (d/r)^nu
+
+            V_mag = B_nu * d_over_r_pow + alpha * r_mag + beta;
+            f_mag = -B_nu * nu * d_over_r_pow / (r_mag) - alpha; // forza radiale
+
+            for (int k = 0; k < 3; k++) {
+                double f_k = f_mag * r_diff[k] / r_mag;
+                forces[ip + k] += f_k;
+            }
+
+            potential_energy += V_mag;
+        }
+    }
+
+    return potential_energy / 2.0;  // dividi per 2 per evitare doppio conteggio
+}
+
