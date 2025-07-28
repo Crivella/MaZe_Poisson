@@ -103,7 +103,7 @@ class MDVariables(BaseFileInput):
     dt_fs: float  # Timestep in femtoseconds
 
     init_steps: int = 0  # Initial steps before the main simulation
-    init_steps_thermostat: int = None  # Initial steps before the main simulation
+    # init_steps_thermostat: int = None  # Initial steps before the main simulation
     elec: bool = True # Whether to include electrostatic interactions
     not_elec: bool = True  # Whether to include non-electrostatic interactions
 

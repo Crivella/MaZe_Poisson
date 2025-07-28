@@ -81,7 +81,6 @@ double particles_compute_forces_field(particles *p, grid *grid);
 double particles_compute_forces_tf(particles *p);
 double particles_compute_forces_sc(particles *p);
 double particles_compute_forces_ld(particles *p);
-double particles_compute_forces_rf(particles *p, grid *grid);
 double particles_compute_forces_pb(particles *p, grid *grid);
 void particles_compute_forces_tot(particles *p);
 
@@ -179,7 +178,7 @@ struct particles {
     double sigma;
     double epsilon;
     double *tf_params;  // Parameters for the TF potential (7 x n_p x n_p)
-    double *sc_params;  // Parameters for the SC potential (3)
+    double *sc_params;  // Parameters for the SC potential (5)
 
     // Poisson-Boltzmann specific
     int pb_enabled;  // Poisson-Boltzmann enabled
@@ -194,9 +193,6 @@ struct particles {
     void    (*free)( particles *);
 
     void    (*init_potential)( particles *, int, double *);
-    void    (*init_potential_tf)( particles *, double *);
-    void    (*init_potential_ld)( particles *, double *);
-    void    (*init_potential_sc)( particles *, double *);
 
     void    (*update_nearest_neighbors)( particles *);
     double  (*charges_spread_func)( double, double, double);

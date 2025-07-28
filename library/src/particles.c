@@ -14,7 +14,7 @@
 #define NUM_NEIGH_SPLINE 64
 
 // Potential types
-char potential_type_str[3][16] = {"TF", "LD", "SC"};
+char potential_type_str[PARTICLE_POTENTIAL_TYPE_NUM][16] = {"TF", "LD", "SC"};
 
 int get_potential_type_num() {
     return PARTICLE_POTENTIAL_TYPE_NUM;
@@ -25,7 +25,7 @@ char *get_potential_type_str(int n) {
 }
 
 // Charge assignment scheme types
-char ca_scheme_type_str[3][16] = {"CIC", "SPL_QUADR", "SPL_CUBIC"};
+char ca_scheme_type_str[CHARGE_ASS_SCHEME_TYPE_NUM][16] = {"CIC", "SPL_QUADR", "SPL_CUBIC"};
 
 int get_ca_scheme_type_num() {
     return CHARGE_ASS_SCHEME_TYPE_NUM;
@@ -96,9 +96,6 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
 
     p->free = particles_free;
     p->init_potential = particles_init_potential;
-    p->init_potential_tf = particles_init_potential_tf;
-    p->init_potential_ld = particles_init_potential_ld;
-    p->init_potential_sc = particles_init_potential_sc;
     
     p->compute_forces_field = particles_compute_forces_field;
     p->compute_forces_noel = NULL;
@@ -166,13 +163,13 @@ void particles_init_potential(particles *p, int pot_type, double *pot_params) {
     switch (pot_type) 
     {
     case PARTICLE_POTENTIAL_TYPE_TF:
-        p->init_potential_tf(p, pot_params);
+        particles_init_potential_tf(p, pot_params);
         break;
     case PARTICLE_POTENTIAL_TYPE_LD:
-        p->init_potential_ld(p, pot_params);
+        particles_init_potential_ld(p, pot_params);
         break;
     case PARTICLE_POTENTIAL_TYPE_SC:
-        p->init_potential_sc(p, pot_params);
+        particles_init_potential_sc(p, pot_params);
         break;
     default:
         mpi_fprintf(stderr, "Invalid potential type %d\n", pot_type);
@@ -243,6 +240,7 @@ void particles_init_potential_sc(particles *p, double *pot_params) {
     double alpha, beta;
     double nu, d, B_nu, r_cut;
     double d_over_r_cut, d_over_r_cut_pow;
+
     p->sc_params = (double *)malloc(5 * sizeof(double));
 
     nu = pot_params[0];
@@ -257,8 +255,8 @@ void particles_init_potential_sc(particles *p, double *pot_params) {
     p->sc_params[0] = pot_params[0];
     p->sc_params[1] = pot_params[1];
     p->sc_params[2] = pot_params[2];
-    p->sc_params[4] = alpha;
-    p->sc_params[5] = beta;
+    p->sc_params[3] = alpha;
+    p->sc_params[4] = beta;
     p->compute_forces_noel = particles_compute_forces_sc;
 
 }

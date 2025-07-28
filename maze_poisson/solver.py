@@ -149,6 +149,78 @@ class SolverMD(Logger):
                 self.gset.w, kbar2
             )
 
+    def get_tosi_fumi_params(self, particles) -> np.ndarray:
+        """Get the Tosi-Fumi parameters for the particles."""
+        if self.mdv.potential_params_file is None:
+            raise ValueError("Potential parameters file must be provided for TF potential.")
+        tf_params = pd.read_csv(self.mdv.potential_params_file)
+        expected = self.N_typs * (self.N_typs + 1) // 2
+        if len(tf_params) != expected:
+            raise ValueError(
+                f"Potential parameters file must have {expected} unique pairs of types."
+            )
+        try:
+            particles.loc[tf_params['type1']]
+            particles.loc[tf_params['type2']]
+        except KeyError as e:
+            raise ValueError(f"Particle type not found in particles file: {e}")
+
+        tf_params.set_index(['type1', 'type2'], inplace=True)
+        if len(tf_params) != len(tf_params.index.unique()):
+            raise ValueError(
+                "Potential parameters file must have unique pairs of types (type1, type2)."
+            )
+        tf_params_array = np.empty((self.N_typs, self.N_typs, 5), dtype=np.float64) * np.nan
+        for t1, t2 in tf_params.index:
+            t1_idx = particles.loc[t1, 'enum']
+            t2_idx = particles.loc[t2, 'enum']
+            if not np.isnan(tf_params_array[t1_idx, t2_idx, 0]):
+                raise ValueError(f"Duplicate potential parameters for types {t1_idx} and {t2_idx}.")
+            if not np.isnan(tf_params_array[t2_idx, t1_idx, 0]):
+                raise ValueError(f"Potential parameters for types {t1_idx} and {t2_idx} must be symmetric.")
+            tf_params_array[t1_idx, t2_idx] = tf_params.loc[(t1, t2), ['A', 'B', 'C', 'D', 'sigma']].values
+            tf_params_array[t2_idx, t1_idx] = tf_params_array[t1_idx, t2_idx]
+        if np.any(np.isnan(tf_params_array)):
+            raise ValueError("Potential parameters for some particle types are missing.")
+        tf_params_array[:, :, 0] *= cst.kJmol_to_hartree  # A  kJ/mol -> Hartree
+        tf_params_array[:, :, 1] *= cst.a0  # B  1/ang -> a.u.
+        tf_params_array[:, :, 2] *= cst.kJmol_to_hartree  / cst.a0**6  # C  kJ/mol*ang^6 -> Hartree*a.u.^6
+        tf_params_array[:, :, 3] *= cst.kJmol_to_hartree / cst.a0**8  # D  kJ/mol*ang^8 -> Hartree*a.u.^8
+        tf_params_array[:, :, 4] /= cst.a0  # sigma  ang -> a.u.
+        tf_params_array = np.ascontiguousarray(tf_params_array.flatten(), dtype=np.float64)
+
+        return tf_params_array
+
+    def get_sc_params(self) -> np.ndarray:
+        """Get the shared parameters for the SC potential."""
+        self.logger.info("Using SC potential with shared parameters (nu, d, B).")
+        if self.mdv.potential_params_file is None:
+            raise ValueError("Potential parameters file must be provided for SC potential.")
+
+        sc_params = pd.read_csv(self.mdv.potential_params_file)
+
+        required_columns = {'nu', 'd'}
+        if not required_columns.issubset(sc_params.columns):
+            raise ValueError(f"Potential parameters file must contain columns: {required_columns}")
+
+        if len(sc_params) != 1:
+            raise ValueError("Potential parameters file for SC must contain exactly one row.")
+
+        nu = sc_params['nu'].iloc[0]
+        d = sc_params['d'].iloc[0]
+        if nu <= 0 or d <= 0:
+            raise ValueError("Parameters 'nu' and 'd' must be strictly positive.")
+
+        Am = 1.74
+        Nc = 6
+        d_au = d / cst.a0  # convert d from Angstrom to Bohr
+        B_au = Am / (Nc * nu * d_au)  # au
+        
+        # Salva come vettore (es. per uso diretto nei kernel)
+        sc_params_array = np.array([nu, d_au, B_au], dtype=np.float64)
+
+        return sc_params_array
+
     def initialize_particles(self):
         """Initialize the particles."""
         self.logger.info(f"Reading particle definitions from file: {self.gset.particles_file}")
@@ -202,86 +274,18 @@ class SolverMD(Logger):
             )
 
         if potential == 'TF':
-            if self.mdv.potential_params_file is None:
-                raise ValueError("Potential parameters file must be provided for TF potential.")
-            tf_params = pd.read_csv(self.mdv.potential_params_file)
-            expected = self.N_typs * (self.N_typs + 1) // 2
-            if len(tf_params) != expected:
-                raise ValueError(
-                    f"Potential parameters file must have {expected} unique pairs of types."
-                )
-            try:
-                particles.loc[tf_params['type1']]
-                particles.loc[tf_params['type2']]
-            except KeyError as e:
-                raise ValueError(f"Particle type not found in particles file: {e}")
-
-            tf_params.set_index(['type1', 'type2'], inplace=True)
-            if len(tf_params) != len(tf_params.index.unique()):
-                raise ValueError(
-                    "Potential parameters file must have unique pairs of types (type1, type2)."
-                )
-            tf_params_array = np.empty((self.N_typs, self.N_typs, 5), dtype=np.float64) * np.nan
-            for t1, t2 in tf_params.index:
-                t1_idx = particles.loc[t1, 'enum']
-                t2_idx = particles.loc[t2, 'enum']
-                if not np.isnan(tf_params_array[t1_idx, t2_idx, 0]):
-                    raise ValueError(f"Duplicate potential parameters for types {t1_idx} and {t2_idx}.")
-                if not np.isnan(tf_params_array[t2_idx, t1_idx, 0]):
-                    raise ValueError(f"Potential parameters for types {t1_idx} and {t2_idx} must be symmetric.")
-                tf_params_array[t1_idx, t2_idx] = tf_params.loc[(t1, t2), ['A', 'B', 'C', 'D', 'sigma']].values
-                tf_params_array[t2_idx, t1_idx] = tf_params_array[t1_idx, t2_idx]
-            if np.any(np.isnan(tf_params_array)):
-                raise ValueError("Potential parameters for some particle types are missing.")
-            tf_params_array[:, :, 0] *= cst.kJmol_to_hartree  # A  kJ/mol -> Hartree
-            tf_params_array[:, :, 1] *= cst.a0  # B  1/ang -> a.u.
-            tf_params_array[:, :, 2] *= cst.kJmol_to_hartree  / cst.a0**6  # C  kJ/mol*ang^6 -> Hartree*a.u.^6
-            tf_params_array[:, :, 3] *= cst.kJmol_to_hartree / cst.a0**8  # D  kJ/mol*ang^8 -> Hartree*a.u.^8
-            tf_params_array[:, :, 4] /= cst.a0  # sigma  ang -> a.u.
-            tf_params_array = np.ascontiguousarray(tf_params_array.flatten(), dtype=np.float64)
-
+            pot_params = self.get_tosi_fumi_params(particles)
         elif potential == 'SC':
-            self.logger.info("Using SC potential with shared parameters (nu, d, B).")
+            pot_params = self.get_sc_params()
 
-            if self.mdv.potential_params_file is None:
-                raise ValueError("Potential parameters file must be provided for SC potential.")
+        print(f"Using potential parameters: {pot_params}")
 
-            sc_params = pd.read_csv(self.mdv.potential_params_file)
-
-            required_columns = {'nu', 'd'}
-            if not required_columns.issubset(sc_params.columns):
-                raise ValueError(f"Potential parameters file must contain columns: {required_columns}")
-
-            if len(sc_params) != 1:
-                raise ValueError("Potential parameters file for SC must contain exactly one row.")
-
-            nu = sc_params['nu'].iloc[0]
-            d = sc_params['d'].iloc[0]
-            if nu <= 0 or d <= 0:
-                raise ValueError("Parameters 'nu' and 'd' must be strictly positive.")
-
-            Am = 1.74
-            Nc = 6
-            d_au = d / cst.a0  # convert d from Angstrom to Bohr
-            B_au = Am / (Nc * nu * d_au)  # au
-            
-            # Salva come vettore (es. per uso diretto nei kernel)
-            sc_params_array = np.array([nu, d_au, B_au], dtype=np.float64)
-
-        if potential == 'TF':
-            capi.solver_initialize_particles(
-                self.N, self.N_typs, self.L, self.h, self.N_p,
-                pot_id, ca_scheme_id,
-                types, pos, vel, mass, charges,
-                tf_params_array
-            )
-        elif potential == 'SC':
-            capi.solver_initialize_particles(
-                self.N, self.N_typs, self.L, self.h, self.N_p,
-                pot_id, ca_scheme_id,
-                types, pos, vel, mass, charges,
-                sc_params_array
-            )
+        capi.solver_initialize_particles(
+            self.N, self.N_typs, self.L, self.h, self.N_p,
+            pot_id, ca_scheme_id,
+            types, pos, vel, mass, charges,
+            pot_params
+        )
 
         if self.mdv.poisson_boltzmann:
             if 'radius' not in particles.columns:
@@ -429,12 +433,6 @@ class SolverMD(Logger):
         self.compute_forces()
         self.integrator_part2()
 
-    def md_check_thermostat(self, iter: int) -> bool:
-        if capi.solver_check_thermostat():
-            self.thermostat = False
-            self.logger.info(f'End thermostating iteration {iter}')
-        return not self.thermostat
-
     def md_loop(self):
         """Run the molecular dynamics loop."""
         if self.mdv.init_steps:
@@ -442,17 +440,6 @@ class SolverMD(Logger):
             for i in ProgressBar(self.mdv.init_steps):
                 self.md_loop_iter()
         
-        # if self.mdv.init_steps_thermostat:
-        #     n_steps = self.mdv.init_steps_thermostat
-        #     self.logger.info(f"Running additional {n_steps} steps or until temperature is reached.")
-        #     for i in ProgressBar(n_steps):
-        #         self.md_loop_iter()
-        #         # if self.md_check_thermostat(i + self.mdv.init_steps):
-                    # break
-
-        # if self.thermostat:
-        #     self.logger.warning("Thermostat condition not met after initialization steps!!!")
-
         temp = capi.get_temperature()
         self.logger.info(f"Temperature: {temp:.2f} K")
 
@@ -462,7 +449,6 @@ class SolverMD(Logger):
 
         for i in ProgressBar(self.mdv.N_steps):
             self.md_loop_iter()
-            # self.md_check_thermostat(i)
             self.md_loop_output(i)
 
     def run(self):
