@@ -31,6 +31,7 @@ integrator_map: Dict[str, int] = {
 potential_map: Dict[str, int] = {
     # 'TF': 0,
     # 'LD': 1,
+    # 'SC': 2,
 }
 
 ca_scheme_map: Dict[str, int] = {
@@ -164,6 +165,7 @@ class SolverMD(Logger):
         self.logger.info(f"Initializing particles with potential: {self.mdv.potential}")
         potential = self.mdv.potential.upper()
         if not potential in potential_map:
+            print(potential_map, potential)
             raise ValueError(f"Potential {potential} not recognized.")
         pot_id = potential_map[potential]
 
@@ -238,12 +240,48 @@ class SolverMD(Logger):
             tf_params_array[:, :, 4] /= cst.a0  # sigma  ang -> a.u.
             tf_params_array = np.ascontiguousarray(tf_params_array.flatten(), dtype=np.float64)
 
-        capi.solver_initialize_particles(
-            self.N, self.N_typs, self.L, self.h, self.N_p,
-            pot_id, ca_scheme_id,
-            types, pos, vel, mass, charges,
-            tf_params_array
-        )
+        elif potential == 'SC':
+            self.logger.info("Using SC potential with shared parameters (nu, d, B).")
+
+            if self.mdv.potential_params_file is None:
+                raise ValueError("Potential parameters file must be provided for SC potential.")
+
+            sc_params = pd.read_csv(self.mdv.potential_params_file)
+
+            required_columns = {'nu', 'd'}
+            if not required_columns.issubset(sc_params.columns):
+                raise ValueError(f"Potential parameters file must contain columns: {required_columns}")
+
+            if len(sc_params) != 1:
+                raise ValueError("Potential parameters file for SC must contain exactly one row.")
+
+            nu = sc_params['nu'].iloc[0]
+            d = sc_params['d'].iloc[0]
+            if nu <= 0 or d <= 0:
+                raise ValueError("Parameters 'nu' and 'd' must be strictly positive.")
+
+            Am = 1.74
+            Nc = 6
+            d_au = d / cst.a0  # convert d from Angstrom to Bohr
+            B_au = Am / (Nc * nu * d_au)  # au
+            
+            # Salva come vettore (es. per uso diretto nei kernel)
+            sc_params_array = np.array([nu, d_au, B_au], dtype=np.float64)
+
+        if potential == 'TF':
+            capi.solver_initialize_particles(
+                self.N, self.N_typs, self.L, self.h, self.N_p,
+                pot_id, ca_scheme_id,
+                types, pos, vel, mass, charges,
+                tf_params_array
+            )
+        elif potential == 'SC':
+            capi.solver_initialize_particles(
+                self.N, self.N_typs, self.L, self.h, self.N_p,
+                pot_id, ca_scheme_id,
+                types, pos, vel, mass, charges,
+                sc_params_array
+            )
 
         if self.mdv.poisson_boltzmann:
             if 'radius' not in particles.columns:
@@ -403,24 +441,28 @@ class SolverMD(Logger):
             self.logger.info("Running MD loop initialization steps...")
             for i in ProgressBar(self.mdv.init_steps):
                 self.md_loop_iter()
-        if self.mdv.init_steps_thermostat:
-            n_steps = self.mdv.init_steps_thermostat
-            self.logger.info(f"Running additional {n_steps} steps or until temperature is reached.")
-            for i in ProgressBar(n_steps):
-                self.md_loop_iter()
-                if self.md_check_thermostat(i + self.mdv.init_steps):
-                    break
+        
+        # if self.mdv.init_steps_thermostat:
+        #     n_steps = self.mdv.init_steps_thermostat
+        #     self.logger.info(f"Running additional {n_steps} steps or until temperature is reached.")
+        #     for i in ProgressBar(n_steps):
+        #         self.md_loop_iter()
+        #         # if self.md_check_thermostat(i + self.mdv.init_steps):
+                    # break
 
-        if self.thermostat:
-            self.logger.warning("Thermostat condition not met after initialization steps!!!")
+        # if self.thermostat:
+        #     self.logger.warning("Thermostat condition not met after initialization steps!!!")
 
         temp = capi.get_temperature()
         self.logger.info(f"Temperature: {temp:.2f} K")
 
         self.logger.info("Running MD loop...")
+        if self.thermostat:
+            self.logger.info("Thermostat ON in production run")
+
         for i in ProgressBar(self.mdv.N_steps):
             self.md_loop_iter()
-            self.md_check_thermostat(i)
+            # self.md_check_thermostat(i)
             self.md_loop_output(i)
 
     def run(self):
@@ -446,7 +488,7 @@ class SolverMD(Logger):
         from .constants import density
         self.logger.info(f'Running a MD simulation with:')
         self.logger.info(f'  N_p = {self.N_p}, N_steps = {self.mdv.N_steps}, tol = {self.mdv.tol}')
-        self.logger.info(f'  N = {self.N}, L [a.u.] = {self.L}, h [a.u.] = {self.h}')
+        self.logger.info(f'  N = {self.N}, L [A] = {self.L / cst.a0}, h [A] = {self.h / cst.a0}')
         self.logger.info(f'  density = {density} g/cm^3')
         self.logger.info(f'  Solvent dielectric constant: {self.gset.eps_s}')
         self.logger.info(f'  Solver: {self.mdv.method},  Preconditioner: {self.gset.precond}')

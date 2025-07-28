@@ -7,5 +7,6 @@ double compute_force_fd(
     double (*g)(double, double, double)
 );
 double compute_tf_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces);
+double compute_sc_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces);
 
 #endif
