@@ -237,8 +237,8 @@ class SolverMD(Logger):
         self.logger.info(f"Initializing particles with potential: {self.mdv.potential}")
         potential = self.mdv.potential.upper()
         if not potential in potential_map:
-            print(potential_map, potential)
-            raise ValueError(f"Potential {potential} not recognized.")
+            # print(potential_map, potential)
+            raise ValueError(f"Potential {potential} not recognized among {','.join(potential_map.keys())}.")
         pot_id = potential_map[potential]
 
         cas_str = self.gset.cas.upper()
@@ -278,7 +278,7 @@ class SolverMD(Logger):
         elif potential == 'SC':
             pot_params = self.get_sc_params()
 
-        print(f"Using potential parameters: {pot_params}")
+        # print(f"Using potential parameters: {pot_params}")
 
         capi.solver_initialize_particles(
             self.N, self.N_typs, self.L, self.h, self.N_p,
