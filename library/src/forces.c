@@ -209,6 +209,7 @@ double compute_sc_forces(int n_p, double L, double *pos, double *params, double 
     double r_diff[3];
     double r_mag, f_mag, V_mag;
     double d_over_r_pow;
+    double f_k;
 
     nu    = params[0];
     d     = params[1];
@@ -225,7 +226,7 @@ double compute_sc_forces(int n_p, double L, double *pos, double *params, double 
         ip = 3 * i;
         // for (k = 0; k < 3; k++) forces_thread[ip + k] = 0.0;
 
-        for (j = 0; j < n_p; j++) {
+        for (j = i + 1; j < n_p; j++) {
             if (i == j) {
                 continue;
             }
@@ -246,16 +247,21 @@ double compute_sc_forces(int n_p, double L, double *pos, double *params, double 
 
             d_over_r_pow = pow(d / r_mag, nu);
             V_mag = B_nu * d_over_r_pow + alpha * r_mag + beta;
-            f_mag = -B_nu * nu * d_over_r_pow / r_mag - alpha;
+            f_mag = B_nu * nu * d_over_r_pow / r_mag - alpha;
 
             for (k = 0; k < 3; k++) {
-                double f_k = f_mag * r_diff[k] / r_mag;
+                f_k = f_mag * r_diff[k] / r_mag;
                 forces[ip + k] += f_k;
+                forces[jp + k] -= f_k;
             }
 
             potential_energy += V_mag;
+            // mpi_printf("alpha = %lf, beta = %lf, r_mag - %lf, V = %lf\n", alpha, beta, r_mag, V_mag);
         }
     }
-
-    return potential_energy / 2.0;
+    // mpi_printf("forces_1 = [%lf, %lf, %lf]\n", forces[0], forces[1], forces[2]);
+    // mpi_printf("forces_2 = [%lf, %lf, %lf]\n", forces[3], forces[4], forces[5]);
+    // return potential_energy / 2.0;
+    // mpi_printf("V = %lf\n", potential_energy);
+    return potential_energy;
 }

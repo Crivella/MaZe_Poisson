@@ -246,19 +246,22 @@ void particles_init_potential_sc(particles *p, double *pot_params) {
     nu = pot_params[0];
     d = pot_params[1];
     B_nu = pot_params[2];
+
+    p->r_cut = 0.5 * p->L;
+    r_cut = p->r_cut;
+
     d_over_r_cut = d / r_cut;
-    d_over_r_cut_pow = pow(d_over_r_cut, nu - 1);
-    
-    alpha = - B_nu * nu * d * d_over_r_cut_pow;
-    beta = - B_nu * d_over_r_cut_pow * d_over_r_cut - alpha * r_cut;
+    d_over_r_cut_pow = pow(d_over_r_cut, nu);
+
+    alpha = B_nu * nu * d_over_r_cut_pow / r_cut; 
+    beta = - B_nu * d_over_r_cut_pow - alpha * r_cut;
 
     p->sc_params[0] = pot_params[0];
     p->sc_params[1] = pot_params[1];
     p->sc_params[2] = pot_params[2];
     p->sc_params[3] = alpha;
     p->sc_params[4] = beta;
-    p->compute_forces_noel = particles_compute_forces_sc;
-
+    p->compute_forces_noel = particles_compute_forces_sc;  
 }
 
 void particles_update_nearest_neighbors_cic(particles *p) {
