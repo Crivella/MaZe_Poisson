@@ -30,7 +30,6 @@ dependencies = [
     "scipy",
     # "matplotlib",
     "pandas",
-    "tqdm",
     "pyyaml",
     "click",
 ]
@@ -44,6 +43,7 @@ fancy = [
 ]
 plotting = [
     "matplotlib",
+    "Pillow",
     "PyQt5",
 ]
 tests = [
