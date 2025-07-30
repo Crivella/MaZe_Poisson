@@ -4,9 +4,11 @@ grid_setting:
   # N: 50
   N: 100
   N_p: 250 # at N_p=2, rescale=False
+  N_typs: 2
   L: 39.00697077
   # restart_file: "forward_lcg/restart.csv"
-  restart_file: "forward_fft/restart.csv"
+  input_file: "forward_fft/restart.csv"
+  # restart_file: "forward_fft/restart.csv"
   # restart_file: "restart_files/restart_N100_Np250_iter3999.csv"
 
 md_variables:
@@ -25,6 +27,11 @@ md_variables:
   # method: FFT
   # integrator: OVRVO
   integrator: VERLET
+  
+  potential: "TF"
+  # potential: "SC"
+  potential_params_file: "tosi_fumi.csv"
+  # potential_params_file: "input_files_pb2/sc_pot.csv"
 
 output_settings: 
   path: 'backward_lcg/'
