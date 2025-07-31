@@ -261,7 +261,7 @@ void particles_init_potential_sc(particles *p, double *pot_params) {
     p->sc_params[2] = pot_params[2];
     p->sc_params[3] = alpha;
     p->sc_params[4] = beta;
-    p->compute_forces_noel = particles_compute_forces_sc;  
+    p->compute_forces_noel = particles_compute_forces_sc;
 }
 
 void particles_update_nearest_neighbors_cic(particles *p) {
