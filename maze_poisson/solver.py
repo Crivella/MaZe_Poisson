@@ -87,6 +87,9 @@ class SolverMD(Logger):
 
         self.save_input()
 
+        self.types_str_to_num = {}
+        self.types_num_to_str = {}
+
     @Clock('initialize')
     def initialize(self):
         """Initialize the solver."""
@@ -231,8 +234,12 @@ class SolverMD(Logger):
             )
         if len(set(particles['type'])) != self.gset.N_typs:
             raise ValueError("Particle types in file must be unique.")
+        for idx, part in enumerate(particles['type']):
+            self.types_str_to_num[part] = idx
+            self.types_num_to_str[idx] = part
         particles.set_index('type', inplace=True)
         particles['enum'] = range(len(particles))
+
 
         self.logger.info(f"Initializing particles with potential: {self.mdv.potential}")
         potential = self.mdv.potential.upper()

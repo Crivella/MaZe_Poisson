@@ -165,7 +165,7 @@ class RestartCSVOutputFile(CSVOutputFile):
 
         tmp = np.empty(solver.N_p, dtype=np.int32)
         capi.get_types(tmp)
-        df['type'] = tmp
+        df['type'] = [solver.types_num_to_str[t] for t in tmp]
 
         return df
 
