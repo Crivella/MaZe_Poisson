@@ -93,7 +93,7 @@ if(MP_MTUNE)
     target_compile_options(maze_poisson PRIVATE -mtune=native)
 endif()
 
-if (MP_AVX)
+if (MP_AVX AND NOT APPLE)
     target_compile_options(maze_poisson PRIVATE -mavx2)
 endif()
 

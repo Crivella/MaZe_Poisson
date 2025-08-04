@@ -18,3 +18,19 @@ cmake --build build  # Build the library
 cmake --install build  # Install the library
 
 ```
+
+if from macOS:
+
+```bash
+
+cd library
+
+rm -rf build
+
+cmake -S . -B build \
+  -DCMAKE_INSTALL_PREFIX=../maze_poisson \
+  -DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm/bin/clang
+
+cmake --build build -j8
+cmake --install build
+```

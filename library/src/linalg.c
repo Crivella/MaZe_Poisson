@@ -1,5 +1,5 @@
 #include <math.h>
-
+#include <stdlib.h>
 #include "mpi_base.h"
 
 #ifdef __cplusplus
