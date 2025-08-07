@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "laplace.h"
+#include "plcg.h"
 #include "constants.h"
 #include "mp_structs.h"
 #include "mpi_base.h"

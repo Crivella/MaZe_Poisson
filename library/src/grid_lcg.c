@@ -6,7 +6,7 @@
 #include "linalg.h"
 #include "constants.h"
 #include "charges.h"
-#include "laplace.h"
+#include "verlet.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
 #include "multigrid.h"

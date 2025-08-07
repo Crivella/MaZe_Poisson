@@ -4,10 +4,9 @@
 #include <math.h>
 
 #include "linalg.h"
-#include "laplace.h"
+#include "verlet.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
-#include "multigrid.h"
 
 #define OMEGA 0.66
 

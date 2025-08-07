@@ -2,10 +2,8 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "laplace.h"
+#include "verlet.h"
 #include "constants.h"
-#include "multigrid.h"
-#include "mp_structs.h"
 #include "mpi_base.h"
 #include "linalg.h"
 
