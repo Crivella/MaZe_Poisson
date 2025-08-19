@@ -88,7 +88,7 @@ EXTERN_C int verlet_poisson_multigrid(
 ) {
     int iter_conv = 0;
 
-    long int i;
+    long int i, limit;
     long int n2 = size2 * size2;
     long int n3 = size1 * n2;
 
@@ -96,7 +96,6 @@ EXTERN_C int verlet_poisson_multigrid(
     double *tmp = (double*)malloc(n3 * sizeof(double));
 
     double *tmp2 = mpi_grid_allocate(size1, size2);
-
     // Compute provisional update for the field phi
     #pragma omp parallel for private(app)
     for (i = 0; i < n3; i++) {
@@ -110,36 +109,50 @@ EXTERN_C int verlet_poisson_multigrid(
     daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
 
     // Apply Multigrid (out also act as the starting guess)
-    multigrid_apply(
-        tmp, y, size1, size2, get_n_start(),
-        MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
-    );
-    // app = tol + 1.0;  // Initialize app to a value greater than tol
+    // multigrid_apply(
+    //     tmp, y, size1, size2, get_n_start(),
+    //     MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
+    // );
+    app = tol + 1.0;  // Initialize app to a value greater than tol
+    
     // while (app > tol) {
-    //     multigrid_apply(
-    //         tmp, y, size1, size2, get_n_start(),
-    //         MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
-    //     );
-    //     // Compute the residual
-    //     laplace_filter(y, tmp2, size1, size2);  // tmp2 = A . y
-    //     daxpy(tmp2, tmp, -1.0, n3);  // tmp2 = A . y - sigma_p
-    //     app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
+    limit = 1000;
 
-    //     iter_conv++;
-    //     if (iter_conv > 1000) {
-    //         iter_conv = -1;  // Indicate that the multigrid did not converge
-    //         fprintf(stderr, "Warning: Multigrid did not converge after 1000 iterations.\n");
-    //         break;
-    //     }
-    // }
+    while(iter_conv < limit) { 
+        multigrid_apply(
+            tmp, y, size1, size2, get_n_start(),
+            MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
+        );
+        // Compute the residual
+        laplace_filter(y, tmp2, size1, size2);  // tmp2 = A . y
+        daxpy(tmp2, tmp, -1.0, n3);  // tmp2 = A . y - sigma_p
+        
+        // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
+        app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
+        
+        // if (iter_conv > 1000) {
+        if (app <= tol){
+            // printf("iter = %d - res = %lf\n", iter_conv, app);
+            break;
+        }
+        
+        daxpy(y, phi, -1.0, n3);  // phi = phi - y
+        iter_conv++;
+        
+        // printf("iter = %d - res = %lf\n", iter_conv, app);
+    }
+
+    if (iter_conv >= limit) {
+        iter_conv = -1;  // Indicate that the multigrid did not converge
+        fprintf(stderr, "Warning: Multigrid did not converge after 1000 iterations.\n");    
+    }
 
     // Scale the field with the constrained 'force' term
-    daxpy(y, phi, -1.0, n3);  // phi = phi - y
+    // daxpy(y, phi, -1.0, n3);  // phi = phi - y
 
     // Free temporary arrays
     free(tmp);
     mpi_grid_free(tmp2, size2);
-
     return iter_conv;
 }
 

@@ -104,8 +104,12 @@ void multigrid_grid_init_field(grid *grid) {
         fprintf(stderr, "Multigrid Poisson-Boltzmann not implemented yet.\n");
         exit(1);
     } else {
+        // multigrid_apply(
+        //     tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start,
+        //     MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
+        // );
         multigrid_apply(
-            tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start,
+            tmp, grid->phi_p, grid->n_local, grid->n, grid->n_start,
             MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
         );
     }
