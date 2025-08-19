@@ -64,7 +64,10 @@ int conj_grad(double *b, double *x0, double *x, double tol, int size1, int size2
         daxpy(Ap, r, alpha, n3);  // r_new = r + alpha * Ap
 
         rn_dot_rn = ddot(r, r, n3);  // <r_new, r_new>
-        if (sqrt(rn_dot_rn) <= tol) {
+        
+        // if (sqrt(rn_dot_rn) <= tol) {
+        if (norm_inf(r, n3) <= tol) {
+            // printf("iter = %d - res = %lf\n", iter, norm_inf(r, n3));
             res = iter;
             break;
         }
@@ -137,7 +140,11 @@ int conj_grad_precond(
         daxpy(Ap, r, alpha, n3);  // r_new = r + alpha * Ap
 
         rn_dot_rn = ddot(r, r, n3);  // <r_new, r_new>
-        if (sqrt(rn_dot_rn) <= tol) {
+        // if (sqrt(rn_dot_rn) <= tol) {
+        //     res = iter;
+        //     break;
+        // }
+        if (norm_inf(r, n3) <= tol) {
             res = iter;
             break;
         }
@@ -210,11 +217,15 @@ EXTERN_C int conj_grad_pb(
         daxpy(Ap, r, alpha, n3);  // r_new = r + alpha * Ap
 
         rn_dot_rn = ddot(r, r, n3);  // <r_new, r_new>
-        if (sqrt(rn_dot_rn) <= tol) {
+        // if (sqrt(rn_dot_rn) <= tol) {
+        //     res = iter;
+        //     break;
+        // }
+        if (norm_inf(r, n3) <= tol) {
             res = iter;
             break;
         }
-
+        
         rn_dot_vn = - rn_dot_rn / 6.0;  // <r_new, v_new>
         beta = rn_dot_vn / r_dot_v;  // beta = <r_new, v_new> / <r, v>
         r_dot_v = rn_dot_vn;  // <r, v> = <r_new, v_new>

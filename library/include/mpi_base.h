@@ -38,6 +38,7 @@ void mpi_fprintf(FILE *fp, const char *format, ...);
 
 void bcast_double(double *buffer, long int size, int root);
 void allreduce_sum(double *buffer, long int size);
+void allreduce_max(double *buffer, long int size);
 void barrier();
 
 double * mpi_grid_allocate(int size1, int size2);

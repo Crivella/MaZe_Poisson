@@ -125,6 +125,12 @@ void allreduce_sum(double *buffer, long int count) {
     }
 }
 
+void allreduce_max(double *buffer, long int count) {
+    if (global_mpi_data->size > 1) {
+        MPI_Allreduce(MPI_IN_PLACE, buffer, count, MPI_DOUBLE, MPI_MAX, global_mpi_data->comm);
+    }
+}
+
 void bcast_double(double *buffer, long int size, int root) {
     if (global_mpi_data->size > 1) {
         MPI_Bcast(buffer, size, MPI_DOUBLE, root, global_mpi_data->comm);
@@ -196,6 +202,10 @@ void bcast_double(double *buffer, long int size, int root) {
 
 void allreduce_sum(double *buffer, long int size) {
     // Do nothing
+}
+
+void allreduce_max(double *buffer, long int size) {
+    // Do nothing (serial build)
 }
 
 void barrier() {
