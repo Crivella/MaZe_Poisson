@@ -115,11 +115,11 @@ void maze_lcg_grid_init_field(grid *grid) {
 
     if (grid->pb_enabled) {
         conj_grad_pb(
-            grid->phi_n, grid->y, grid->phi_p, grid->tol, grid->n_local, grid->n,
+            grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n,
             grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
         );
     } else {
-        conj_grad(grid->phi_n, grid->y, grid->phi_p, grid->tol, grid->n_local, grid->n);
+        conj_grad(grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n);
     }
 }
 

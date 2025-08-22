@@ -119,7 +119,7 @@ void lcg_grid_init_field(grid *grid) {
             grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
         );
     } else {
-        conj_grad(grid->phi_n, grid->y, grid->phi_p, grid->tol, grid->n_local, grid->n);
+        conj_grad(grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n);
     }
 }
 
@@ -130,6 +130,9 @@ int lcg_grid_update_field(grid *grid) {
     if ( ! grid->pb_enabled) {
         constant /= grid->eps_s;  // Scale by the dielectric constant if not using PB explicitly
     }
+
+    memcpy(grid->phi_p, grid->phi_n, grid->size * sizeof(double));  // phi_prev = phi_n
+    
     // y = constant * q
     memcpy(grid->y, grid->q, grid->size * sizeof(double));
     dscal(grid->y, constant, grid->size);
