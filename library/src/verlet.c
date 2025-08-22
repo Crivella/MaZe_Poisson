@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 
 #include "verlet.h"
 #include "constants.h"
@@ -119,32 +120,36 @@ EXTERN_C int verlet_poisson_multigrid(
     limit = 1000;
 
     while(iter_conv < limit) { 
+        memset(y, 0, n3 * sizeof(double));
         multigrid_apply(
             tmp, y, size1, size2, get_n_start(),
             MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
         );
         // Compute the residual
         laplace_filter(y, tmp2, size1, size2);  // tmp2 = A . y
-        daxpy(tmp2, tmp, -1.0, n3);  // tmp2 = A . y - sigma_p
+        daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . y - sigma_p
         
-        // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
+        // app = sqrt(ddot(tmp, tmp2, n3));  // Compute the norm of the residual
         app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
-        
+        daxpy(y, phi, -1.0, n3);  // phi = phi - y
+
         // if (iter_conv > 1000) {
         if (app <= tol){
             // printf("iter = %d - res = %lf\n", iter_conv, app);
             break;
         }
         
-        daxpy(y, phi, -1.0, n3);  // phi = phi - y
+        memset(tmp, 0, n3 * sizeof(double));
+        laplace_filter(phi, tmp, size1, size2);
+        daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
+
         iter_conv++;
         
+        if (iter_conv >= limit) {
+            iter_conv = -1;  // Indicate that the multigrid did not converge
+            fprintf(stderr, "Warning: Multigrid did not converge after 1000 iterations.\n");    
+        }
         // printf("iter = %d - res = %lf\n", iter_conv, app);
-    }
-
-    if (iter_conv >= limit) {
-        iter_conv = -1;  // Indicate that the multigrid did not converge
-        fprintf(stderr, "Warning: Multigrid did not converge after 1000 iterations.\n");    
     }
 
     // Scale the field with the constrained 'force' term
