@@ -21,8 +21,9 @@ np.random.seed(42)
 method_grid_map: Dict[str, int] = {
     # 'LCG': 0,
     # 'FFT': 1,
-    # 'MG': 2,
-    # 'MAZE LCG': 3,
+    # 'MULTIGRID': 2,
+    # 'MAZE-LCG': 3,
+    # 'MAZE-MULTIGRID': 4
 }
 
 integrator_map: Dict[str, int] = {
