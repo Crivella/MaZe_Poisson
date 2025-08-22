@@ -298,23 +298,14 @@ to read I+1 on rank boundaries. No writes to halo memory are performed here.
 void prolong_trilinear(double *in, double *out,
                        int s1, int s2, int target_s1, int target_s2, int target_n_start)
 {
-    // if ((target_s2 & 1) != 0 || target_s1 != ( (s1<<1) - (target_n_start & 1) ))
-    // {
-    //     // same assumption as legacy: fine grid is 2x coarse in j,k; i depends on parity
-    //     // we only assert j,k doubling here to be safe
-    //     if ((target_s2 & 1) != 0) {
-    //         mpi_fprintf(stderr, "prolong_trilinear: target_s2 must be even\n");
-    //         exit(1);
-    //     }
-    // }
-
     const long int n2c = (long int)s2 * (long int)s2;
     const long int n2f = (long int)target_s2 * (long int)target_s2;
     const int d = target_n_start & 1;
 
-    // legacy behavior: ensure we can read I0+1 from contiguous ghost on 'in'
+    // halo on coarse input
     mpi_grid_exchange_bot_top(in, s1, s2);
 
+    // periodic neighbors for coarse j,k
     int *jnext = (int*) malloc((size_t)s2 * sizeof(int));
     int *knext = (int*) malloc((size_t)s2 * sizeof(int));
     for (int t = 0; t < s2; ++t) {
@@ -323,7 +314,9 @@ void prolong_trilinear(double *in, double *out,
     }
 
     #pragma omp parallel for collapse(2) schedule(static)
-    for (int i = 0; i < target_s1; ++i) {
+    for (int i = 0; i < target_s1; ++i)
+    for (int j = 0; j < target_s2; ++j) {
+        // --- declarations moved inside the collapsed nest ---
         const int I0 = (i < d) ? (s1 - 1) : ((i - d) >> 1);
         const long int i0 = (long int)I0 * n2c;
         const long int ip = i0 + n2c;
@@ -332,47 +325,45 @@ void prolong_trilinear(double *in, double *out,
         const double wi0 = (ti == 0) ? 1.0 : 0.5;
         const double wi1 = (ti == 0) ? 0.0 : 0.5;
 
-        for (int j = 0; j < target_s2; ++j) {
-            const int J0 = j >> 1;
-            const int J1 = jnext[J0];
-            const long int j0c = (long int)J0 * s2;
-            const long int j1c = (long int)J1 * s2;
+        const int J0 = j >> 1;
+        const int J1 = jnext[J0];
+        const long int j0c = (long int)J0 * s2;
+        const long int j1c = (long int)J1 * s2;
 
-            const int tj = j & 1;
-            const double wj0 = (tj == 0) ? 1.0 : 0.5;
-            const double wj1 = (tj == 0) ? 0.0 : 0.5;
+        const int tj = j & 1;
+        const double wj0 = (tj == 0) ? 1.0 : 0.5;
+        const double wj1 = (tj == 0) ? 0.0 : 0.5;
 
-            const long int row_f = (long int)i * n2f + (long int)j * target_s2;
+        const long int row_f = (long int)i * n2f + (long int)j * target_s2;
 
-            for (int k = 0; k < target_s2; ++k) {
-                const int K0 = k >> 1;
-                const int K1 = knext[K0];
+        for (int k = 0; k < target_s2; ++k) {
+            const int K0 = k >> 1;
+            const int K1 = knext[K0];
 
-                const int tk = k & 1;
-                const double wk0 = (tk == 0) ? 1.0 : 0.5;
-                const double wk1 = (tk == 0) ? 0.0 : 0.5;
+            const int tk = k & 1;
+            const double wk0 = (tk == 0) ? 1.0 : 0.5;
+            const double wk1 = (tk == 0) ? 0.0 : 0.5;
 
-                const long int idx_f = row_f + k;
+            const long int idx_f = row_f + k;
 
-                const double c000 = in[i0 + j0c + K0];
-                const double c100 = in[ip + j0c + K0];
-                const double c010 = in[i0 + j1c + K0];
-                const double c110 = in[ip + j1c + K0];
-                const double c001 = in[i0 + j0c + K1];
-                const double c101 = in[ip + j0c + K1];
-                const double c011 = in[i0 + j1c + K1];
-                const double c111 = in[ip + j1c + K1];
+            const double c000 = in[i0 + j0c + K0];
+            const double c100 = in[ip + j0c + K0];
+            const double c010 = in[i0 + j1c + K0];
+            const double c110 = in[ip + j1c + K0];
+            const double c001 = in[i0 + j0c + K1];
+            const double c101 = in[ip + j0c + K1];
+            const double c011 = in[i0 + j1c + K1];
+            const double c111 = in[ip + j1c + K1];
 
-                out[idx_f] =
-                    c000 * wi0 * wj0 * wk0 +
-                    c100 * wi1 * wj0 * wk0 +
-                    c010 * wi0 * wj1 * wk0 +
-                    c110 * wi1 * wj1 * wk0 +
-                    c001 * wi0 * wj0 * wk1 +
-                    c101 * wi1 * wj0 * wk1 +
-                    c011 * wi0 * wj1 * wk1 +
-                    c111 * wi1 * wj1 * wk1;
-            }
+            out[idx_f] =
+                c000 * wi0 * wj0 * wk0 +
+                c100 * wi1 * wj0 * wk0 +
+                c010 * wi0 * wj1 * wk0 +
+                c110 * wi1 * wj1 * wk0 +
+                c001 * wi0 * wj0 * wk1 +
+                c101 * wi1 * wj0 * wk1 +
+                c011 * wi0 * wj1 * wk1 +
+                c111 * wi1 * wj1 * wk1;
         }
     }
 
@@ -381,7 +372,6 @@ void prolong_trilinear(double *in, double *out,
     // legacy post-condition: out halos ready + wrap if d==1
     mpi_grid_exchange_bot_top(out, target_s1, target_s2);
     if (d) {
-        // same as old prolong_nearestneighbors: copy top slice into bottom ghost
         vec_copy(out - n2f, out, n2f);
     }
 }
