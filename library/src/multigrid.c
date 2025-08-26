@@ -8,7 +8,7 @@
 #include "mp_structs.h"
 #include "mpi_base.h"
 
-#define OMEGA 0.66
+#define JACOBI_OMEGA 0.66
 
 
 int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int depth) {
@@ -29,7 +29,7 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
             exit(1);
         }
         // Base case: no more levels to go down
-        // smooth(in, out, s1, s2, sm);  // out = smooth(in, out)  ~solve(A . out = in)
+        smooth(in, out, s1, s2, sm);  // out = smooth(in, out)  ~solve(A . out = in)
         return depth;
     }
 
@@ -48,7 +48,7 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
     daxpy(in, r, 1.0, size);
 
     restriction(r, rhs, s1, s2, n_start);  // rhs = restriction(r)
-    smooth(rhs, eps, s1_nxt, s2_nxt, 2 * sm);  // eps = smooth(rhs)  ~solve(A . eps = rhs)
+    // smooth(rhs, eps, s1_nxt, s2_nxt, 2 * sm);  // eps = smooth(rhs)  ~solve(A . eps = rhs)
     res = v_cycle(rhs, eps, s1_nxt, s2_nxt, n_start_nxt, 2 * sm, depth + 1);  // eps = v_cycle(rhs)
 
     prolong(eps, r, s1_nxt, s2_nxt, s1, s2, n_start);  // r = prolong(eps)
@@ -63,7 +63,7 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
     return res;  // Return the number of levels processed
 }
 
-int multigrid_apply(
+int multigrid_apply_recursive(
     double *in, double *out, int s1, int s2, int n_start1,
     int sm1, int sm2, int sm3, int sm4
 ) {
@@ -81,7 +81,7 @@ using a 3-level V-cycle multigrid method.
 @param s2: size of the second dimension (number of grid points per slice)
 @param n_start1: starting index for the first dimension (used for restriction)
 */
-void multigrid_apply_(
+void multigrid_apply_3lvl(
     double *in, double *out, int s1, int s2, int n_start1,
     int sm1, int sm2, int sm3, int sm4
 ) {
@@ -166,7 +166,7 @@ using a 3-level V-cycle multigrid method.
 @param s2: size of the second dimension (number of grid points per slice)
 @param n_start1: starting index for the first dimension (used for restriction)
 */
-void multigrid_apply__(
+void multigrid_apply_2lvl(
     double *in, double *out, int s1, int s2, int n_start1,
     int sm1, int sm2, int sm3, int sm4
 ) {
@@ -208,17 +208,6 @@ void multigrid_apply__(
     daxpy(in, r1, 1.0, size1);
     restriction(r1, r2, n_loc1, n1, n_start1);  // r2 = restriction(r1)
 
-    // smooth(r2, e2, n_loc2, n2, sm2);  // e2 = smooth(r2)  ~solve(A . e2 = r2)
-    // // tmp2  =  r2 - A . e2
-    // laplace_filter(e2, tmp2, n_loc2, n2);
-    // dscal(tmp2, -1.0, size2);
-    // daxpy(r2, tmp2, 1.0, size2);
-    // restriction(tmp2, r3, n_loc2, n2, n_start2);  // r3 = restriction(r2 - A . e2)
-
-
-    // smooth(r3, e3, n_loc3, n3, sm3);  // e3 = smooth(r3)  ~solve(A . e3 = r3)
-    // prolong(e3, r2, n_loc3, n3, n_loc2, n2, n_start2);
-    // daxpy(r2, e2, 1.0, size2);  // e2 = e2 + prolong(e3)
 
     smooth(r2, e2, n_loc2, n2, sm2);  // e2 = smooth(r2, e2)  ~solve(A . e2 = r2)
     prolong(e2, r1, n_loc2, n2, n_loc1, n1, n_start1);
@@ -234,7 +223,10 @@ void multigrid_apply__(
     mpi_grid_free(tmp2, n2);
 }
 
-void prolong_nearestneighbors(double *in, double *out, int s1, int s2, int target_s1, int target_s2, int target_n_start) {
+void prolong_nearestneighbors(
+    double *in, double *out, int s1, int s2,
+    int target_s1, int target_s2, int target_n_start
+) {
     int a, b;
     long int i, j, k;
     long int i0, j0, k0;
@@ -295,79 +287,91 @@ to read I+1 on rank boundaries. No writes to halo memory are performed here.
 @param target_s2:     fine number of points per line in j,k
 @param target_n_start: starting index (global) for the fine grid in i (parity across MPI ranks)
 */
-void prolong_trilinear(double *in, double *out,
-                       int s1, int s2, int target_s1, int target_s2, int target_n_start)
-{
-    const long int n2c = (long int)s2 * (long int)s2;
-    const long int n2f = (long int)target_s2 * (long int)target_s2;
-    const int d = target_n_start & 1;
+void prolong_trilinear(
+    double *in, double *out, int s1, int s2,
+    int target_s1, int target_s2, int target_n_start
+) {
+    long int n2c = s2 * s2;
+    long int n2f = target_s2 * target_s2;
+
+    long int row_f;
+    long int i0, j0, k0;
+    long int i1, j1, k1;
+    double wi0, wj0, wk0;
+    double wi1, wj1, wk1;
+    // double c000, c100, c010, c110, c001, c101, c011, c111;
+
+    int d = target_n_start & 1;
 
     // halo on coarse input
     mpi_grid_exchange_bot_top(in, s1, s2);
 
     // periodic neighbors for coarse j,k
-    int *jnext = (int*) malloc((size_t)s2 * sizeof(int));
-    int *knext = (int*) malloc((size_t)s2 * sizeof(int));
-    for (int t = 0; t < s2; ++t) {
+    int *jnext = (int *)malloc(s2 * sizeof(int));
+    // int *knext = (int *)malloc(s2 * sizeof(int));
+    for (int t = 0; t < s2; t++) {
         jnext[t] = (t + 1 == s2) ? 0 : (t + 1);
-        knext[t] = jnext[t];
+        // knext[t] = jnext[t];
     }
 
-    #pragma omp parallel for collapse(2) schedule(static)
-    for (int i = 0; i < target_s1; ++i)
-    for (int j = 0; j < target_s2; ++j) {
-        // --- declarations moved inside the collapsed nest ---
-        const int I0 = (i < d) ? (s1 - 1) : ((i - d) >> 1);
-        const long int i0 = (long int)I0 * n2c;
-        const long int ip = i0 + n2c;
+    #pragma omp parallel for private(i0, j0, k0, i1, j1, k1, wi0, wj0, wk0, wi1, wj1, wk1, row_f)
+    for (int i = 0; i < target_s1; i++) {
+        int I0 = (i < d) ? (s1 - 1) : ((i - d) >> 1);
+        i0 = I0 * n2c;
+        i1 = i0 + n2c;
 
-        const int ti = (i ^ d) & 1;
-        const double wi0 = (ti == 0) ? 1.0 : 0.5;
-        const double wi1 = (ti == 0) ? 0.0 : 0.5;
+        if ((i + target_n_start) % 2) {
+            wi0 = 0.5;
+            wi1 = 0.5;
+        } else {
+            wi0 = 1.0;
+            wi1 = 0.0;
+        }
 
-        const int J0 = j >> 1;
-        const int J1 = jnext[J0];
-        const long int j0c = (long int)J0 * s2;
-        const long int j1c = (long int)J1 * s2;
+        for (int j = 0; j < target_s2; j++) {
+            // int J0 = j / 2;
+            // int J1 = jnext[J0];
+            // int J1 = (j + 1) % s2;
+            j0 = ((j     + 1) % s2) * s2;
+            j1 = ((j / 2 + 1) % s2) * s2;
 
-        const int tj = j & 1;
-        const double wj0 = (tj == 0) ? 1.0 : 0.5;
-        const double wj1 = (tj == 0) ? 0.0 : 0.5;
+            if (j % 2) {
+                wj0 = 1.0;
+                wj1 = 0.0;
+            } else {
+                wj0 = 0.5;
+                wj1 = 0.5;
+            }
 
-        const long int row_f = (long int)i * n2f + (long int)j * target_s2;
+            row_f = i * n2f + j * target_s2;
 
-        for (int k = 0; k < target_s2; ++k) {
-            const int K0 = k >> 1;
-            const int K1 = knext[K0];
+            for (int k = 0; k < target_s2; k++) {
+                k0 = k / 2;
+                k1 = jnext[k0];
 
-            const int tk = k & 1;
-            const double wk0 = (tk == 0) ? 1.0 : 0.5;
-            const double wk1 = (tk == 0) ? 0.0 : 0.5;
+                if (k % 2) {
+                    wk0 = 1.0;
+                    wk1 = 0.0;
+                } else {
+                    wk0 = 0.5;
+                    wk1 = 0.5;
+                }
 
-            const long int idx_f = row_f + k;
-
-            const double c000 = in[i0 + j0c + K0];
-            const double c100 = in[ip + j0c + K0];
-            const double c010 = in[i0 + j1c + K0];
-            const double c110 = in[ip + j1c + K0];
-            const double c001 = in[i0 + j0c + K1];
-            const double c101 = in[ip + j0c + K1];
-            const double c011 = in[i0 + j1c + K1];
-            const double c111 = in[ip + j1c + K1];
-
-            out[idx_f] =
-                c000 * wi0 * wj0 * wk0 +
-                c100 * wi1 * wj0 * wk0 +
-                c010 * wi0 * wj1 * wk0 +
-                c110 * wi1 * wj1 * wk0 +
-                c001 * wi0 * wj0 * wk1 +
-                c101 * wi1 * wj0 * wk1 +
-                c011 * wi0 * wj1 * wk1 +
-                c111 * wi1 * wj1 * wk1;
+                out[row_f + k] =
+                    in[i0 + j0 + k0] * wi0 * wj0 * wk0 +
+                    in[i1 + j0 + k0] * wi1 * wj0 * wk0 +
+                    in[i0 + j1 + k0] * wi0 * wj1 * wk0 +
+                    in[i1 + j1 + k0] * wi1 * wj1 * wk0 +
+                    in[i0 + j0 + k1] * wi0 * wj0 * wk1 +
+                    in[i1 + j0 + k1] * wi1 * wj0 * wk1 +
+                    in[i0 + j1 + k1] * wi0 * wj1 * wk1 +
+                    in[i1 + j1 + k1] * wi1 * wj1 * wk1;
+            }
         }
     }
 
-    free(jnext); free(knext);
+    free(jnext);
+    // free(knext);
 
     // legacy post-condition: out halos ready + wrap if d==1
     mpi_grid_exchange_bot_top(out, target_s1, target_s2);
@@ -430,53 +434,53 @@ and is computed with weights: center=8, faces=4, edges=2, corners=1, normalized 
 @param n_start:  global starting index in i (used to preserve parity across MPI ranks)
 */
 void restriction_27pt(double *in, double *out, int s1, int s2, int n_start) {
-    const int s3 = s2 / 2;
-    const long int n2 = (long int)s2 * (long int)s2;
-    const long int n3 = (long int)s3 * (long int)s3;
-    const double inv64 = 1.0 / 64.0;
+    int s3 = s2 / 2;
+    long int n2 = s2 * s2;
+    long int n3 = s3 * s3;
+    double inv64 = 1.0 / 64.0;
 
     // legacy behavior: ensure we can read i-1 / i+1 from contiguous ghosts
     mpi_grid_exchange_bot_top(in, s1, s2);
 
-    int *jprev = (int*) malloc((size_t)s2 * sizeof(int));
-    int *jnext = (int*) malloc((size_t)s2 * sizeof(int));
-    int *kprev = (int*) malloc((size_t)s2 * sizeof(int));
-    int *knext = (int*) malloc((size_t)s2 * sizeof(int));
-    for (int t = 0; t < s2; ++t) {
+    int *jprev = (int *)malloc(s2 * sizeof(int));
+    int *jnext = (int *)malloc(s2 * sizeof(int));
+    // int *kprev = (int *)malloc(s2 * sizeof(int));
+    // int *knext = (int *)malloc(s2 * sizeof(int));
+    for (int t = 0; t < s2; t++) {
         jprev[t] = (t == 0)      ? (s2 - 1) : (t - 1);
         jnext[t] = (t + 1 == s2) ? 0        : (t + 1);
-        kprev[t] = jprev[t];
-        knext[t] = jnext[t];
+        // kprev[t] = jprev[t];
+        // knext[t] = jnext[t];
     }
 
-    const int i_offset = n_start & 1;
+    int i_offset = n_start & 1;
 
-    #pragma omp parallel for schedule(static)
+    #pragma omp parallel for
     for (int i = i_offset; i < s1; i += 2) {
-        const long int i0 = (long int)i * n2;
-        const long int im = i0 - n2;      // contiguous ghost
-        const long int ip = i0 + n2;      // contiguous ghost
-        const long int a  = ((long int)i / 2) * n3;
+        long int i0 = i * n2;
+        long int im = i0 - n2;      // contiguous ghost
+        long int ip = i0 + n2;      // contiguous ghost
+        long int a  = (i / 2) * n3;
 
         for (int j = 0; j < s2; j += 2) {
-            const long int j0  = (long int)j * s2;
-            const long int jpm = (long int)jprev[j] * s2;
-            const long int jpp = (long int)jnext[j] * s2;
-            const long int b   = ((long int)j / 2) * s3;
+            long int j0  = j * s2;
+            long int jpm = jprev[j] * s2;
+            long int jpp = jnext[j] * s2;
+            long int b   = (j / 2) * s3;
 
             for (int k = 0; k < s2; k += 2) {
-                const int km = kprev[k];
-                const int kp = knext[k];
+                int km = jprev[k];
+                int kp = jnext[k];
 
-                const long int idx_c   = i0 + j0 + k;
-                const long int out_idx = a + b + (k >> 1);
+                long int idx_c   = i0 + j0 + k;
+                long int out_idx = a + b + (k >> 1);
 
-                const double f_sum =
+                double f_sum =
                     in[im + j0 + k] + in[ip + j0 + k] +
                     in[i0 + jpm + k] + in[i0 + jpp + k] +
                     in[i0 + j0 + km] + in[i0 + j0 + kp];
 
-                const double e_sum =
+                double e_sum =
                     in[im + jpm + k] + in[im + jpp + k] +
                     in[ip + jpm + k] + in[ip + jpp + k] +
                     in[im + j0 + km] + in[im + j0 + kp] +
@@ -484,7 +488,7 @@ void restriction_27pt(double *in, double *out, int s1, int s2, int n_start) {
                     in[i0 + jpm + km] + in[i0 + jpm + kp] +
                     in[i0 + jpp + km] + in[i0 + jpp + kp];
 
-                const double c_sum =
+                double c_sum =
                     in[im + jpm + km] + in[im + jpm + kp] +
                     in[im + jpp + km] + in[im + jpp + kp] +
                     in[ip + jpm + km] + in[ip + jpm + kp] +
@@ -495,9 +499,11 @@ void restriction_27pt(double *in, double *out, int s1, int s2, int n_start) {
         }
     }
 
-    free(jprev); free(jnext); free(kprev); free(knext);
+    free(jprev);
+    free(jnext);
+    // free(kprev);
+    // free(knext);
 }
-
 
 
 /*
@@ -513,7 +519,7 @@ Gives an approximate solution to the equation A.out = in based
 void smooth_jacobi(double *in, double *out, int s1, int s2, double tol) {
     long int n3 = s1 * s2 * s2;
 
-    double omega = OMEGA / -6.0;
+    double omega = JACOBI_OMEGA / -6.0;
 
     double *tmp = (double *)malloc(n3 * sizeof(double));
 
@@ -526,6 +532,7 @@ void smooth_jacobi(double *in, double *out, int s1, int s2, double tol) {
 
     free(tmp);
 }
+
 
 /*
 Apply the Red-Black Gauss-Seidel smoothing method to solve the Poisson equation.
@@ -540,49 +547,51 @@ with a 7-point Laplacian stencil under periodic boundary conditions in j,k.
 */
 void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
     int iters = (int)tol;
-    if (iters <= 0) return;
+    if (iters <= 0) {
+        return;
+    }
 
-    const long int n2 = (long int)s2 * (long int)s2;
-    const double inv_diag = -1.0 / 6.0;   // diagonal entry of 7-point Laplacian
-    const int n_start = get_n_start();    // global offset for MPI parity
+    long int n2 = s2 * s2;
+    double inv_diag = -1.0 / 6.0;   // diagonal entry of 7-point Laplacian
+    int n_start = get_n_start();    // global offset for MPI parity
 
     // Precompute neighbor indices for periodic BCs in j and k
-    int *jprev = (int*) malloc((size_t)s2 * sizeof(int));
-    int *jnext = (int*) malloc((size_t)s2 * sizeof(int));
-    int *kprev = (int*) malloc((size_t)s2 * sizeof(int));
-    int *knext = (int*) malloc((size_t)s2 * sizeof(int));
-    for (int t = 0; t < s2; ++t) {
+    int *jprev = (int *)malloc((size_t)s2 * sizeof(int));
+    int *jnext = (int *)malloc((size_t)s2 * sizeof(int));
+    int *kprev = (int *)malloc((size_t)s2 * sizeof(int));
+    int *knext = (int *)malloc((size_t)s2 * sizeof(int));
+    for (int t = 0; t < s2; t++) {
         jprev[t] = (t == 0)      ? (s2 - 1) : (t - 1);
         jnext[t] = (t + 1 == s2) ? 0        : (t + 1);
         kprev[t] = jprev[t];
         knext[t] = jnext[t];
     }
 
-    for (int iter = 0; iter < iters; ++iter) {
+    for (int iter = 0; iter < iters; iter++) {
         // Exchange ghost slices before starting the red sweep
         mpi_grid_exchange_bot_top(out, s1, s2);
 
         // ----- RED sweep -----
-        #pragma omp parallel for schedule(static)
-        for (int i = 0; i < s1; ++i) {
-            const long int i0 = (long int)i * n2;
-            const long int im = i0 - n2;      // ghost if i==0
-            const long int ip = i0 + n2;      // ghost if i==s1-1
-            const int par_i = (n_start + i) & 1;
+        #pragma omp parallel for
+        for (int i = 0; i < s1; i++) {
+            long int i0 = i * n2;
+            long int im = i0 - n2;      // ghost if i==0
+            long int ip = i0 + n2;      // ghost if i==s1-1
+            int par_i = (n_start + i) & 1;
 
-            for (int j = 0; j < s2; ++j) {
-                const long int j0  = (long int)j * s2;
-                const long int jpm = (long int)jprev[j] * s2;
-                const long int jpp = (long int)jnext[j] * s2;
+            for (int j = 0; j < s2; j++) {
+                long int j0  = j * s2;
+                long int jpm = jprev[j] * s2;
+                long int jpp = jnext[j] * s2;
 
                 // choose k parity so that (i+j+k) % 2 == 0 (red)
                 int k = (2 - ((par_i + (j & 1)) & 1)) & 1;
                 for (; k < s2; k += 2) {
-                    const int km = kprev[k];
-                    const int kp = knext[k];
-                    const long int idx = i0 + j0 + k;
+                    int km = kprev[k];
+                    int kp = knext[k];
+                    long int idx = i0 + j0 + k;
 
-                    const double sum_nb =
+                    double sum_nb =
                         out[im + j0 + k] + out[ip + j0 + k] +     // i-1, i+1
                         out[i0 + jpm + k] + out[i0 + jpp + k] +   // j-1, j+1
                         out[i0 + j0  + km] + out[i0 + j0  + kp];  // k-1, k+1
@@ -597,25 +606,25 @@ void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
 
         // ----- BLACK sweep -----
         #pragma omp parallel for schedule(static)
-        for (int i = 0; i < s1; ++i) {
-            const long int i0 = (long int)i * n2;
-            const long int im = i0 - n2;
-            const long int ip = i0 + n2;
-            const int par_i = (n_start + i) & 1;
+        for (int i = 0; i < s1; i++) {
+            long int i0 = i * n2;
+            long int im = i0 - n2;
+            long int ip = i0 + n2;
+            int par_i = (n_start + i) & 1;
 
-            for (int j = 0; j < s2; ++j) {
-                const long int j0  = (long int)j * s2;
-                const long int jpm = (long int)jprev[j] * s2;
-                const long int jpp = (long int)jnext[j] * s2;
+            for (int j = 0; j < s2; j++) {
+                long int j0  = j * s2;
+                long int jpm = jprev[j] * s2;
+                long int jpp = jnext[j] * s2;
 
                 // choose k parity so that (i+j+k) % 2 == 1 (black)
                 int k = (1 - ((par_i + (j & 1)) & 1)) & 1;
                 for (; k < s2; k += 2) {
-                    const int km = kprev[k];
-                    const int kp = knext[k];
-                    const long int idx = i0 + j0 + k;
+                    int km = kprev[k];
+                    int kp = knext[k];
+                    long int idx = i0 + j0 + k;
 
-                    const double sum_nb =
+                    double sum_nb =
                         out[im + j0 + k] + out[ip + j0 + k] +
                         out[i0 + jpm + k] + out[i0 + jpp + k] +
                         out[i0 + j0  + km] + out[i0 + j0  + kp];
@@ -627,12 +636,17 @@ void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
         // After black sweep: next iteration will exchange halos again
     }
 
-    free(jprev); free(jnext); free(kprev); free(knext);
+    free(jprev);
+    free(jnext);
+    free(kprev);
+    free(knext);
 }
+
 
 // void smooth_lcg(double *in, double *out, int s1, int s2, double tol) {
 //     conj_grad(in, out, out, 1E-1, s1, s2);  // out = ~solve(A . out = in)
 // }
+
 
 // void smooth_diag(double *in, double *out, int s1, int s2, double tol) {
 //     long int n3 = s1 * s2 * s2;
@@ -640,7 +654,6 @@ void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
 //         out[i] = in[i] / -6.0;
 //     }
 // }
-
 
 
 // choose smoothing, restriction and interpolation

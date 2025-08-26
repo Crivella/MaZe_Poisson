@@ -108,40 +108,9 @@ void multigrid_grid_init_field(grid *grid) {
 }
 
 int multigrid_grid_update_field(grid *grid) {
+    int res = -1;
     int precond = 1;
-    long int n2 = grid->n * grid->n;
-    long int n3 = grid->n_local * n2;
     
-    double tol = grid->tol;
-    double app;
-    int iter_conv, limit;
-    limit = 1000;
-
-    double *tmp = mpi_grid_allocate(grid->n_local, grid->n);
-    double *tmp2 = mpi_grid_allocate(grid->n_local, grid->n);
-
-    double constant = -4 * M_PI / grid->h;
-    if ( ! grid->pb_enabled) {
-        constant /= grid->eps_s;  // Scale by the dielectric constant if not using PB explicitly
-    }
-
-    // memset(grid->y, 0, grid->size * sizeof(double));  // y = 0
-    // vec_copy(grid->phi_n, grid->phi_p, grid->size);  // phi_prev = phi_n
-    
-    // Compute provisional update for the field phi
-    int i;
-
-    // #pragma omp parallel for private(app)
-    // for (i = 0; i < n3; i++) {
-    //     app = grid->phi_n[i];
-    //     grid->phi_n[i] = 2 * app - grid->phi_p[i];
-    //     grid->phi_p[i] = app;
-    // }
-    
-    // phi_n = constant * q
-    vec_copy(grid->q, tmp, grid->size);
-    dscal(tmp, constant, grid->size);
-
     switch (grid->precond_type) {
         case PRECOND_TYPE_NONE:
             precond = 0;
@@ -159,11 +128,40 @@ int multigrid_grid_update_field(grid *grid) {
         exit(1);
     }
 
-    iter_conv = 0;
-    app = tol + 1.0;  // Initialize app to a value greater than tol
+    long int n2 = grid->n * grid->n;
+    long int n3 = grid->n_local * n2;
+    
+    double tol = grid->tol;
+    double app;
+    int iter_conv = 0;
 
-    while(iter_conv < limit) {
-        multigrid_apply(
+    double *tmp = mpi_grid_allocate(grid->n_local, grid->n);
+    double *tmp2 = mpi_grid_allocate(grid->n_local, grid->n);
+
+    double constant = -4 * M_PI / grid->h;
+    if ( ! grid->pb_enabled) {
+        constant /= grid->eps_s;  // Scale by the dielectric constant if not using PB explicitly
+    }
+
+    // memset(grid->y, 0, grid->size * sizeof(double));  // y = 0
+    // vec_copy(grid->phi_n, grid->phi_p, grid->size);  // phi_prev = phi_n
+    
+    // Compute provisional update for the field phi
+    // int i;
+
+    // #pragma omp parallel for private(app)
+    // for (i = 0; i < n3; i++) {
+    //     app = grid->phi_n[i];
+    //     grid->phi_n[i] = 2 * app - grid->phi_p[i];
+    //     grid->phi_p[i] = app;
+    // }
+    
+    // phi_n = constant * q
+    vec_copy(grid->q, tmp, grid->size);
+    dscal(tmp, constant, grid->size);
+
+    while(iter_conv < MG_ITER_LIMIT) {
+        multigrid_apply_recursive(
             tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start,
             MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
         );
@@ -175,9 +173,8 @@ int multigrid_grid_update_field(grid *grid) {
         // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
         app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
         
-        // if (iter_conv > 1000) {
         if (app <= tol){
-            // printf("iter = %d - res = %lf\n", iter_conv, app);
+            res = iter_conv;
             break;
         }
         
@@ -189,12 +186,12 @@ int multigrid_grid_update_field(grid *grid) {
         // printf("iter = %d - res = %.9lf\n", iter_conv, app);
     }
 
-    // multigrid_apply(
+    // multigrid_apply_recursive(
     //     grid->phi_p, grid->phi_n, grid->n_local, grid->n, grid->n_start,
     //     MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
     // );
 
-    return iter_conv;
+    return res;
 }   
 
 double multigrid_grid_update_charges(grid *grid, particles *p) {

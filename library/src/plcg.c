@@ -64,6 +64,13 @@ int conj_grad(double *b, double *x0, double *x, double tol, int size1, int size2
         daxpy(Ap, r, alpha, n3);  // r_new = r + alpha * Ap
 
         rn_dot_rn = ddot(r, r, n3);  // <r_new, r_new>
+        // if (sqrt(rn_dot_rn) <= tol) {
+        if (norm_inf(r, n3) <= tol) {
+            // printf("iter = %d - res = %lf\n", iter, norm_inf(r, n3));
+            res = iter;
+            break;
+        }
+    
         rn_dot_vn = - rn_dot_rn / 6.0;  // <r_new, v_new>
         beta = rn_dot_vn / r_dot_v;  // beta = <r_new, v_new> / <r, v>
         r_dot_v = rn_dot_vn;  // <r, v> = <r_new, v_new>
@@ -71,12 +78,6 @@ int conj_grad(double *b, double *x0, double *x, double tol, int size1, int size2
         dscal(p, beta, n3);  // p = beta * p
         daxpy(r, p, 1.0 / 6.0, n3);  // p = p - v = p + r / 6.0
 
-        // if (sqrt(rn_dot_rn) <= tol) {
-        if (norm_inf(r, n3) <= tol) {
-            // printf("iter = %d - res = %lf\n", iter, norm_inf(r, n3));
-            res = iter;
-            break;
-        }
         iter++;
     }
 
@@ -139,9 +140,10 @@ int conj_grad_precond(
 
         rn_dot_rn = ddot(r, r, n3);  // <r_new, r_new>
         // if (sqrt(rn_dot_rn) <= tol) {
-        //     res = iter;
-        //     break;
-        // }
+        if (norm_inf(r, n3) <= tol) {
+            res = iter;
+            break;
+        }
 
         apply(r, v, size1, size2, get_n_start());  // v = P^-1 . r
         rn_dot_vn = ddot(r, v, n3);  // <r_new, v_new>
@@ -150,11 +152,6 @@ int conj_grad_precond(
 
         dscal(p, beta, n3);  // p = beta * p
         daxpy(v, p, -1.0, n3);  // p = p - v
-
-        if (norm_inf(r, n3) <= tol) {
-            res = iter;
-            break;
-        }
 
         iter++;
     }
@@ -217,9 +214,6 @@ EXTERN_C int conj_grad_pb(
 
         rn_dot_rn = ddot(r, r, n3);  // <r_new, r_new>
         // if (sqrt(rn_dot_rn) <= tol) {
-        //     res = iter;
-        //     break;
-        // }
         if (norm_inf(r, n3) <= tol) {
             res = iter;
             break;

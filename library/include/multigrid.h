@@ -1,7 +1,9 @@
 #ifndef __MP_MULTIGRID_H
 #define __MP_MULTIGRID_H
 
-#define MG_SOLVE_SM1 25
+#define MG_ITER_LIMIT 1000
+
+#define MG_SOLVE_SM1 5
 #define MG_SOLVE_SM2 20
 #define MG_SOLVE_SM3 40
 #define MG_SOLVE_SM4 10
@@ -15,7 +17,7 @@ void prolong(double *in, double *out, int s1, int s2, int ts1, int ts2, int tns)
 void restriction(double *in, double *out, int s1, int s2, int n_start);
 void smooth(double *in, double *out, int s1, int s2, double tol);
 
-int multigrid_apply(
+int multigrid_apply_recursive(
     double *in, double *out, int s1, int s2, int n_start1,
     int sm1, int sm2, int sm3, int sm4
 );
