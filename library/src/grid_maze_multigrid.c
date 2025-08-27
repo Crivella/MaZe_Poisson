@@ -99,20 +99,6 @@ void maze_multigrid_grid_init_field(grid *grid) {
     vec_copy(grid->q, tmp, grid->size);
     dscal(tmp, constant, grid->size);
 
-    // if (grid->pb_enabled) {
-    //     fprintf(stderr, "Multigrid Poisson-Boltzmann not implemented yet.\n");
-    //     exit(1);
-    // } else {
-    //     // multigrid_apply_recursive(
-    //     //     tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start,
-    //     //     MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
-    //     // );
-    //     multigrid_apply_recursive(
-    //         tmp, grid->phi_p, grid->n_local, grid->n, grid->n_start,
-    //         MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
-    //     );
-    // }
-
     if (grid->pb_enabled) {
         conj_grad_pb(
             tmp, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n,

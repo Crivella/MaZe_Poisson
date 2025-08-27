@@ -142,26 +142,15 @@ int multigrid_grid_update_field(grid *grid) {
     if ( ! grid->pb_enabled) {
         constant /= grid->eps_s;  // Scale by the dielectric constant if not using PB explicitly
     }
-
-    // memset(grid->y, 0, grid->size * sizeof(double));  // y = 0
-    // vec_copy(grid->phi_n, grid->phi_p, grid->size);  // phi_prev = phi_n
-    
-    // Compute provisional update for the field phi
-    // int i;
-
-    // #pragma omp parallel for private(app)
-    // for (i = 0; i < n3; i++) {
-    //     app = grid->phi_n[i];
-    //     grid->phi_n[i] = 2 * app - grid->phi_p[i];
-    //     grid->phi_p[i] = app;
-    // }
     
     // phi_n = constant * q
     vec_copy(grid->q, tmp, grid->size);
     dscal(tmp, constant, grid->size);
 
     while(iter_conv < MG_ITER_LIMIT) {
-        multigrid_apply_recursive(
+        // Here the b in A.x = b is always the same, what is updated in the loop is the starting guess for
+        // the field phi_n
+        multigrid_apply(
             tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start,
             MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
         );
@@ -178,18 +167,8 @@ int multigrid_grid_update_field(grid *grid) {
             break;
         }
         
-        // memset(tmp, 0, n3 * sizeof(double));
-        // vec_copy(grid->q, tmp, grid->size);
-        // dscal(tmp, constant, grid->size);
-        
         iter_conv++;
-        // printf("iter = %d - res = %.9lf\n", iter_conv, app);
     }
-
-    // multigrid_apply_recursive(
-    //     grid->phi_p, grid->phi_n, grid->n_local, grid->n, grid->n_start,
-    //     MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
-    // );
 
     return res;
 }   
