@@ -113,10 +113,8 @@ void multigrid_apply_3lvl(
     double *r1 = mpi_grid_allocate(n_loc1, n1);
     double *r2 = mpi_grid_allocate(n_loc2, n2);
     double *r3 = mpi_grid_allocate(n_loc3, n3);
-
     double *e2 = mpi_grid_allocate(n_loc2, n2);
     double *e3 = mpi_grid_allocate(n_loc3, n3);
-
     double *tmp2 = mpi_grid_allocate(n_loc2, n2);
 
     // memset(out, 0, size1 * sizeof(double));  // out = 0
@@ -193,9 +191,7 @@ void multigrid_apply_2lvl(
 
     double *r1 = mpi_grid_allocate(n_loc1, n1);
     double *r2 = mpi_grid_allocate(n_loc2, n2);
-
     double *e2 = mpi_grid_allocate(n_loc2, n2);
-
     double *tmp2 = mpi_grid_allocate(n_loc2, n2);
 
     // memset(out, 0, size1 * sizeof(double));  // out = 0
@@ -217,9 +213,7 @@ void multigrid_apply_2lvl(
 
     mpi_grid_free(r1, n1);
     mpi_grid_free(r2, n2);
-    // mpi_grid_free(r3, n3);
     mpi_grid_free(e2, n2);
-    // mpi_grid_free(e3, n3);
     mpi_grid_free(tmp2, n2);
 }
 
@@ -238,6 +232,7 @@ void prolong_nearestneighbors(
     double app;
 
     int d = target_n_start % 2;
+    double should_exchange = d;
 
     #pragma omp parallel for private(i, j, k, i0, j0, k0, i1, j1, k1, a, b, app)
     for (i = 0; i < s1; i++) {
@@ -264,11 +259,24 @@ void prolong_nearestneighbors(
         }
     }
 
-    // In case of odd number of slices, we need to wrap around the top slice from the proc below
-    // as the 1st bottom slice of the current proc
-    mpi_grid_exchange_bot_top(out, target_s1, target_s2);  // Called outside the if to avoid deadlock
-    if (d) {
-        vec_copy(out - target_n2, out, target_n2);
+    allreduce_max(&should_exchange, 1);
+    if (should_exchange) {
+        // In case of odd number of slices, we need to wrap around the top slice from the proc below
+        // as the 1st bottom slice of the current proc
+        mpi_grid_exchange_bot_top(out, target_s1, target_s2);  // Called outside the if to avoid deadlock
+        if (d) {
+            vec_copy(out - target_n2, out, target_n2);
+        }
+    }
+}
+
+void calc_w0_w1(int cond, double *w0, double *w1) {
+    if (cond) {
+        *w0 = 0.5;
+        *w1 = 0.5;
+    } else {
+        *w0 = 1.0;
+        *w1 = 0.0;
     }
 }
 
@@ -299,65 +307,32 @@ void prolong_trilinear(
     long int i1, j1, k1;
     double wi0, wj0, wk0;
     double wi1, wj1, wk1;
-    // double c000, c100, c010, c110, c001, c101, c011, c111;
 
-    int d = target_n_start & 1;
+    int d = target_n_start % 2;
+    double should_exchange = d;
 
-    // halo on coarse input
     mpi_grid_exchange_bot_top(in, s1, s2);
 
-    // periodic neighbors for coarse j,k
-    int *jnext = (int *)malloc(s2 * sizeof(int));
-    // int *knext = (int *)malloc(s2 * sizeof(int));
-    for (int t = 0; t < s2; t++) {
-        jnext[t] = (t + 1 == s2) ? 0 : (t + 1);
-        // knext[t] = jnext[t];
-    }
-
-    #pragma omp parallel for private(i0, j0, k0, i1, j1, k1, wi0, wj0, wk0, wi1, wj1, wk1, row_f)
+    #pragma omp parallel for private(i0, j0, k0, i1, j1, k1, row_f, wi0, wj0, wk0, wi1, wj1, wk1)
     for (int i = 0; i < target_s1; i++) {
-        int I0 = (i < d) ? (s1 - 1) : ((i - d) >> 1);
-        i0 = I0 * n2c;
+        i0 = (i < d) ? (s1 - 1) : ((i - d) / 2);
+        i0 = i0 * n2c;
         i1 = i0 + n2c;
 
-        if ((i + target_n_start) % 2) {
-            wi0 = 0.5;
-            wi1 = 0.5;
-        } else {
-            wi0 = 1.0;
-            wi1 = 0.0;
-        }
-
+        calc_w0_w1((i ^ d) % 2, &wi0, &wi1);
         for (int j = 0; j < target_s2; j++) {
-            // int J0 = j / 2;
-            // int J1 = jnext[J0];
-            // int J1 = (j + 1) % s2;
-            j0 = ((j     + 1) % s2) * s2;
+            j0 = ((j / 2    ) % s2) * s2;
             j1 = ((j / 2 + 1) % s2) * s2;
-
-            if (j % 2) {
-                wj0 = 1.0;
-                wj1 = 0.0;
-            } else {
-                wj0 = 0.5;
-                wj1 = 0.5;
-            }
 
             row_f = i * n2f + j * target_s2;
 
+            calc_w0_w1(j % 2, &wj0, &wj1); 
             for (int k = 0; k < target_s2; k++) {
-                k0 = k / 2;
-                k1 = jnext[k0];
+                k0 = (k / 2    ) % s2;
+                k1 = (k / 2 + 1) % s2;
 
-                if (k % 2) {
-                    wk0 = 1.0;
-                    wk1 = 0.0;
-                } else {
-                    wk0 = 0.5;
-                    wk1 = 0.5;
-                }
-
-                out[row_f + k] =
+                calc_w0_w1(k % 2, &wk0, &wk1);
+                out[row_f + k] = (
                     in[i0 + j0 + k0] * wi0 * wj0 * wk0 +
                     in[i1 + j0 + k0] * wi1 * wj0 * wk0 +
                     in[i0 + j1 + k0] * wi0 * wj1 * wk0 +
@@ -365,18 +340,21 @@ void prolong_trilinear(
                     in[i0 + j0 + k1] * wi0 * wj0 * wk1 +
                     in[i1 + j0 + k1] * wi1 * wj0 * wk1 +
                     in[i0 + j1 + k1] * wi0 * wj1 * wk1 +
-                    in[i1 + j1 + k1] * wi1 * wj1 * wk1;
+                    in[i1 + j1 + k1] * wi1 * wj1 * wk1
+                );
             }
         }
     }
 
-    free(jnext);
-    // free(knext);
+    allreduce_max(&should_exchange, 1);
+    if (should_exchange > 0.5) {
+        // In case of odd number of slices, we need to wrap around the top slice from the proc below
+        // as the 1st bottom slice of the current proc
+        mpi_grid_exchange_bot_top(out, target_s1, target_s2);  // Called outside the if to avoid deadlock
+        if (d) {
+            vec_copy(out - n2f, out, n2f);
+        }
 
-    // legacy post-condition: out halos ready + wrap if d==1
-    mpi_grid_exchange_bot_top(out, target_s1, target_s2);
-    if (d) {
-        vec_copy(out - n2f, out, n2f);
     }
 }
 
@@ -391,9 +369,14 @@ void restriction_8pt(double *in, double *out, int s1, int s2, int n_start) {
     int s3 = s2 / 2;
     long int n3 = s3 * s3;
 
+    double should_exchange = s1 % 2;
+
     // If the number of slices in the first dimension is odd, we need to wrap around
     // the bottom slice above to apply the averaging with PBCs
-    mpi_grid_exchange_bot_top(in, s1, s2);
+    allreduce_max(&should_exchange, 1);
+    if (should_exchange > 0.5) {
+        mpi_grid_exchange_bot_top(in, s1, s2);
+    }   
 
     #pragma omp parallel for private(i, j, k, i0, i1, j0, j1, k1, a, b)
     for (i = n_start % 2; i < s1; i+=2) {
@@ -439,70 +422,59 @@ void restriction_27pt(double *in, double *out, int s1, int s2, int n_start) {
     long int n3 = s3 * s3;
     double inv64 = 1.0 / 64.0;
 
-    // legacy behavior: ensure we can read i-1 / i+1 from contiguous ghosts
+    long int a, b, c;
+    long int i0, j0, k0;
+    long int i1, j1, k1;
+    long int i2, j2, k2;
+    double f_sum, e_sum, c_sum;
+
+    // If the number of slices in the first dimension is odd, we need to wrap around
+    // the bottom slice above to apply the averaging with PBCs
     mpi_grid_exchange_bot_top(in, s1, s2);
 
-    int *jprev = (int *)malloc(s2 * sizeof(int));
-    int *jnext = (int *)malloc(s2 * sizeof(int));
-    // int *kprev = (int *)malloc(s2 * sizeof(int));
-    // int *knext = (int *)malloc(s2 * sizeof(int));
-    for (int t = 0; t < s2; t++) {
-        jprev[t] = (t == 0)      ? (s2 - 1) : (t - 1);
-        jnext[t] = (t + 1 == s2) ? 0        : (t + 1);
-        // kprev[t] = jprev[t];
-        // knext[t] = jnext[t];
-    }
+    int i_offset = n_start % 2;
 
-    int i_offset = n_start & 1;
-
-    #pragma omp parallel for
+    #pragma omp parallel for private(i0, i1, i2, j0, j1, j2, k0, k1, k2, a, b, c, f_sum, e_sum, c_sum)
     for (int i = i_offset; i < s1; i += 2) {
-        long int i0 = i * n2;
-        long int im = i0 - n2;      // contiguous ghost
-        long int ip = i0 + n2;      // contiguous ghost
-        long int a  = (i / 2) * n3;
+        i0 = i * n2;
+        i1 = i0 + n2;      // contiguous ghost
+        i2 = i0 - n2;      // contiguous ghost
+        a  = (i / 2) * n3;
 
         for (int j = 0; j < s2; j += 2) {
-            long int j0  = j * s2;
-            long int jpm = jprev[j] * s2;
-            long int jpp = jnext[j] * s2;
-            long int b   = (j / 2) * s3;
+            j0 = j * s2;
+            j1 = ((j + 1     ) % s2) * s2;
+            j2 = ((j - 1 + s2) % s2) * s2;
+            b = (j / 2) * s3;
 
             for (int k = 0; k < s2; k += 2) {
-                int km = jprev[k];
-                int kp = jnext[k];
+                k2 = (k - 1 + s2) % s2;
+                k1 = (k + 1     ) % s2;
+                c = k / 2;
 
-                long int idx_c   = i0 + j0 + k;
-                long int out_idx = a + b + (k >> 1);
+                f_sum =
+                    in[i2 + j0 + k]  + in[i1 + j0 + k] +
+                    in[i0 + j2 + k]  + in[i0 + j1 + k] +
+                    in[i0 + j0 + k2] + in[i0 + j0 + k1];
 
-                double f_sum =
-                    in[im + j0 + k] + in[ip + j0 + k] +
-                    in[i0 + jpm + k] + in[i0 + jpp + k] +
-                    in[i0 + j0 + km] + in[i0 + j0 + kp];
+                e_sum =
+                    in[i1 + j0 + k2] + in[i1 + j0 + k1] +
+                    in[i2 + j0 + k2] + in[i2 + j0 + k1] +
+                    in[i1 + j2 + k]  + in[i1 + j1 + k] +
+                    in[i2 + j2 + k]  + in[i2 + j1 + k] +
+                    in[i0 + j2 + k2] + in[i0 + j2 + k1] +
+                    in[i0 + j1 + k2] + in[i0 + j1 + k1];
 
-                double e_sum =
-                    in[im + jpm + k] + in[im + jpp + k] +
-                    in[ip + jpm + k] + in[ip + jpp + k] +
-                    in[im + j0 + km] + in[im + j0 + kp] +
-                    in[ip + j0 + km] + in[ip + j0 + kp] +
-                    in[i0 + jpm + km] + in[i0 + jpm + kp] +
-                    in[i0 + jpp + km] + in[i0 + jpp + kp];
+                c_sum =
+                    in[i1 + j1 + k2] + in[i1 + j1 + k1] +
+                    in[i1 + j2 + k2] + in[i1 + j2 + k1] +
+                    in[i2 + j1 + k2] + in[i2 + j1 + k1] +
+                    in[i2 + j2 + k2] + in[i2 + j2 + k1];
 
-                double c_sum =
-                    in[im + jpm + km] + in[im + jpm + kp] +
-                    in[im + jpp + km] + in[im + jpp + kp] +
-                    in[ip + jpm + km] + in[ip + jpm + kp] +
-                    in[ip + jpp + km] + in[ip + jpp + kp];
-
-                out[out_idx] = (8.0 * in[idx_c] + 4.0 * f_sum + 2.0 * e_sum + c_sum) * inv64;
+                out[a + b + c] = (8.0 * in[i0 + j0 + k] + 4.0 * f_sum + 2.0 * e_sum + c_sum) * inv64;
             }
         }
     }
-
-    free(jprev);
-    free(jnext);
-    // free(kprev);
-    // free(knext);
 }
 
 
@@ -555,46 +527,41 @@ void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
     double inv_diag = -1.0 / 6.0;   // diagonal entry of 7-point Laplacian
     int n_start = get_n_start();    // global offset for MPI parity
 
-    // Precompute neighbor indices for periodic BCs in j and k
-    int *jprev = (int *)malloc((size_t)s2 * sizeof(int));
-    int *jnext = (int *)malloc((size_t)s2 * sizeof(int));
-    int *kprev = (int *)malloc((size_t)s2 * sizeof(int));
-    int *knext = (int *)malloc((size_t)s2 * sizeof(int));
-    for (int t = 0; t < s2; t++) {
-        jprev[t] = (t == 0)      ? (s2 - 1) : (t - 1);
-        jnext[t] = (t + 1 == s2) ? 0        : (t + 1);
-        kprev[t] = jprev[t];
-        knext[t] = jnext[t];
-    }
+    int d;
+    long int idx;
+    long int i0, j0;
+    long int i1, j1, k1;
+    long int i2, j2, k2;
+    double sum_nb;
 
     for (int iter = 0; iter < iters; iter++) {
         // Exchange ghost slices before starting the red sweep
         mpi_grid_exchange_bot_top(out, s1, s2);
 
         // ----- RED sweep -----
-        #pragma omp parallel for
+        #pragma omp parallel for private(i0, i1, i2, j0, j1, j2, k1, k2, d, idx, sum_nb)
         for (int i = 0; i < s1; i++) {
-            long int i0 = i * n2;
-            long int im = i0 - n2;      // ghost if i==0
-            long int ip = i0 + n2;      // ghost if i==s1-1
-            int par_i = (n_start + i) & 1;
+            i0 = i * n2;
+            i2 = i0 - n2;      // ghost if i==0
+            i1 = i0 + n2;      // ghost if i==s1-1
+            d = (n_start + i) % 2;
 
             for (int j = 0; j < s2; j++) {
-                long int j0  = j * s2;
-                long int jpm = jprev[j] * s2;
-                long int jpp = jnext[j] * s2;
+                j0  = j * s2;
+                j1 = ((j + 1     ) % s2) * s2;
+                j2 = ((j - 1 + s2) % s2) * s2;
 
                 // choose k parity so that (i+j+k) % 2 == 0 (red)
-                int k = (2 - ((par_i + (j & 1)) & 1)) & 1;
+                int k = (2 - ((d + (j % 2)) % 2)) % 2;
                 for (; k < s2; k += 2) {
-                    int km = kprev[k];
-                    int kp = knext[k];
-                    long int idx = i0 + j0 + k;
+                    k1 = (k + 1     ) % s2;
+                    k2 = (k - 1 + s2) % s2;
+                    idx = i0 + j0 + k;
 
-                    double sum_nb =
-                        out[im + j0 + k] + out[ip + j0 + k] +     // i-1, i+1
-                        out[i0 + jpm + k] + out[i0 + jpp + k] +   // j-1, j+1
-                        out[i0 + j0  + km] + out[i0 + j0  + kp];  // k-1, k+1
+                    sum_nb =
+                        out[i2 + j0 + k] + out[i1 + j0 + k] +
+                        out[i0 + j0  + k2] + out[i0 + j0  + k1] +
+                        out[i0 + j2 + k] + out[i0 + j1 + k];
 
                     out[idx] = (in[idx] - sum_nb) * inv_diag;
                 }
@@ -605,29 +572,29 @@ void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
         mpi_grid_exchange_bot_top(out, s1, s2);
 
         // ----- BLACK sweep -----
-        #pragma omp parallel for schedule(static)
+        #pragma omp parallel for private(i0, i1, i2, j0, j1, j2, k1, k2, d, idx, sum_nb)
         for (int i = 0; i < s1; i++) {
-            long int i0 = i * n2;
-            long int im = i0 - n2;
-            long int ip = i0 + n2;
-            int par_i = (n_start + i) & 1;
+            i0 = i * n2;
+            i2 = i0 - n2;
+            i1 = i0 + n2;
+            d = (n_start + i) % 2;
 
             for (int j = 0; j < s2; j++) {
-                long int j0  = j * s2;
-                long int jpm = jprev[j] * s2;
-                long int jpp = jnext[j] * s2;
+                j0  = j * s2;
+                j1 = ((j + 1     ) % s2) * s2;
+                j2 = ((j - 1 + s2) % s2) * s2;
 
                 // choose k parity so that (i+j+k) % 2 == 1 (black)
-                int k = (1 - ((par_i + (j & 1)) & 1)) & 1;
+                int k = (1 - ((d + (j % 2)) % 2)) % 2;
                 for (; k < s2; k += 2) {
-                    int km = kprev[k];
-                    int kp = knext[k];
-                    long int idx = i0 + j0 + k;
+                    k1 = (k + 1     ) % s2;
+                    k2 = (k - 1 + s2) % s2;
+                    idx = i0 + j0 + k;
 
-                    double sum_nb =
-                        out[im + j0 + k] + out[ip + j0 + k] +
-                        out[i0 + jpm + k] + out[i0 + jpp + k] +
-                        out[i0 + j0  + km] + out[i0 + j0  + kp];
+                    sum_nb =
+                        out[i2 + j0 + k] + out[i1 + j0 + k] +
+                        out[i0 + j2 + k] + out[i0 + j1 + k] +
+                        out[i0 + j0  + k2] + out[i0 + j0  + k1];
 
                     out[idx] = (in[idx] - sum_nb) * inv_diag;
                 }
@@ -635,11 +602,6 @@ void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
         }
         // After black sweep: next iteration will exchange halos again
     }
-
-    free(jprev);
-    free(jnext);
-    free(kprev);
-    free(knext);
 }
 
 
@@ -655,6 +617,14 @@ void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
 //     }
 // }
 
+int multigrid_apply(
+    double *in, double *out, int s1, int s2, int n_start1,
+    int sm1, int sm2, int sm3, int sm4
+) {
+    multigrid_apply_recursive(in, out, s1, s2, n_start1, sm1, sm2, sm3, sm4);
+    // multigrid_apply_3lvl(in, out, s1, s2, n_start1, sm1, sm2, sm3, sm4);
+    // multigrid_apply_2lvl(in, out, s1, s2, n_start1, sm1, sm2, sm3, sm4);
+}
 
 // choose smoothing, restriction and interpolation
 void smooth(double *in, double *out, int s1, int s2, double tol) {
@@ -665,8 +635,8 @@ void smooth(double *in, double *out, int s1, int s2, double tol) {
 }
 
 void restriction(double *in, double *out, int s1, int s2, int n_start) {
-    // restriction_8pt(in, out, s1, s2, n_start);
-    restriction_27pt(in, out, s1, s2, n_start);
+    restriction_8pt(in, out, s1, s2, n_start);
+    // restriction_27pt(in, out, s1, s2, n_start);
 }
 
 void prolong(double *in, double *out, int s1, int s2, int target_s1, int target_s2, int target_n_start) {
