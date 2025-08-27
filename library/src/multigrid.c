@@ -20,6 +20,8 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
     s2_nxt = s2 / 2;
     n_start_nxt = (n_start + 1) / 2;
 
+    int sm_iter = (int)ceil(sm * pow(MG_RECURSION_FACTOR, depth));
+
     if (s1_nxt < fmax(4, get_size())) {
         if (depth == 0) {
             mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
@@ -29,7 +31,7 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
             exit(1);
         }
         // Base case: no more levels to go down
-        smooth(in, out, s1, s2, sm);  // out = smooth(in, out)  ~solve(A . out = in)
+        smooth(in, out, s1, s2, sm_iter);  // out = smooth(in, out)  ~solve(A . out = in)
         return depth;
     }
 
@@ -41,7 +43,7 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
 
     memset(eps, 0, size_nxt * sizeof(double));  // eps = 0
 
-    smooth(in, out, s1, s2, sm);  // out = smooth(in, out)  ~solve(A . out = in)
+    smooth(in, out, s1, s2, sm_iter);  // out = smooth(in, out)  ~solve(A . out = in)
     // r  =  in - A . out
     laplace_filter(out, r, s1, s2);
     dscal(r, -1.0, size);
@@ -49,12 +51,12 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
 
     restriction(r, rhs, s1, s2, n_start);  // rhs = restriction(r)
     // smooth(rhs, eps, s1_nxt, s2_nxt, 2 * sm);  // eps = smooth(rhs)  ~solve(A . eps = rhs)
-    res = v_cycle(rhs, eps, s1_nxt, s2_nxt, n_start_nxt, 2 * sm, depth + 1);  // eps = v_cycle(rhs)
+    res = v_cycle(rhs, eps, s1_nxt, s2_nxt, n_start_nxt, sm, depth + 1);  // eps = v_cycle(rhs)
 
     prolong(eps, r, s1_nxt, s2_nxt, s1, s2, n_start);  // r = prolong(eps)
     daxpy(r, out, 1.0, size);  // out = out + r
 
-    smooth(in, out, s1, s2, sm);  // out = smooth(in, out)  ~solve(A . out = in)
+    smooth(in, out, s1, s2, sm_iter);  // out = smooth(in, out)  ~solve(A . out = in)
 
     mpi_grid_free(r, s2);
     mpi_grid_free(rhs, s2_nxt);
@@ -63,12 +65,9 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
     return res;  // Return the number of levels processed
 }
 
-int multigrid_apply_recursive(
-    double *in, double *out, int s1, int s2, int n_start1,
-    int sm1, int sm2, int sm3, int sm4
-) {
+int multigrid_apply_recursive(double *in, double *out, int s1, int s2, int n_start1, int sm) {
     // memset(out, 0, s1 * s2 * s2 * sizeof(double));  // Initialize out to zero
-    return v_cycle(in, out, s1, s2, n_start1, sm1, 0);  // Apply the recursive V-cycle multigrid method
+    return v_cycle(in, out, s1, s2, n_start1, sm, 0);  // Apply the recursive V-cycle multigrid method
 }
 
 /*
@@ -81,10 +80,7 @@ using a 3-level V-cycle multigrid method.
 @param s2: size of the second dimension (number of grid points per slice)
 @param n_start1: starting index for the first dimension (used for restriction)
 */
-void multigrid_apply_3lvl(
-    double *in, double *out, int s1, int s2, int n_start1,
-    int sm1, int sm2, int sm3, int sm4
-) {
+void multigrid_apply_3lvl(double *in, double *out, int s1, int s2, int n_start1, int sm) {
     int n1 = s2;
     int n2 = n1 / 2;
     int n3 = n2 / 2;
@@ -121,14 +117,14 @@ void multigrid_apply_3lvl(
     memset(e2, 0, size2 * sizeof(double));  // e2 = 0
     memset(e3, 0, size3 * sizeof(double));  // e3 = 0
 
-    smooth(in, out, n_loc1, n1, sm1);  // out = smooth(in, out)  ~solve(A . out = in)
+    smooth(in, out, n_loc1, n1, sm);  // out = smooth(in, out)  ~solve(A . out = in)
     // r1  =  in - A . out
     laplace_filter(out, r1, n_loc1, n1);
     dscal(r1, -1.0, size1);
     daxpy(in, r1, 1.0, size1);
     restriction(r1, r2, n_loc1, n1, n_start1);  // r2 = restriction(r1)
 
-    smooth(r2, e2, n_loc2, n2, sm2);  // e2 = smooth(r2)  ~solve(A . e2 = r2)
+    smooth(r2, e2, n_loc2, n2, (int)ceil(sm * 1.2));  // e2 = smooth(r2)  ~solve(A . e2 = r2)
     // tmp2  =  r2 - A . e2
     laplace_filter(e2, tmp2, n_loc2, n2);
     dscal(tmp2, -1.0, size2);
@@ -136,15 +132,15 @@ void multigrid_apply_3lvl(
     restriction(tmp2, r3, n_loc2, n2, n_start2);  // r3 = restriction(r2 - A . e2)
 
 
-    smooth(r3, e3, n_loc3, n3, sm3);  // e3 = smooth(r3)  ~solve(A . e3 = r3)
+    smooth(r3, e3, n_loc3, n3, (int)ceil(sm * 1.5));  // e3 = smooth(r3)  ~solve(A . e3 = r3)
     prolong(e3, r2, n_loc3, n3, n_loc2, n2, n_start2);
     daxpy(r2, e2, 1.0, size2);  // e2 = e2 + prolong(e3)
 
-    smooth(r2, e2, n_loc2, n2, sm2);  // e2 = smooth(r2, e2)  ~solve(A . e2 = r2)
+    smooth(r2, e2, n_loc2, n2, (int)ceil(sm * 1.2));  // e2 = smooth(r2, e2)  ~solve(A . e2 = r2)
     prolong(e2, r1, n_loc2, n2, n_loc1, n1, n_start1);
     daxpy(r1, out, 1.0, size1);  // out = out + prolong(e2)
 
-    smooth(in, out, n_loc1, n1, sm4);  // out = smooth(in, out)  ~solve(A . out = in)
+    smooth(in, out, n_loc1, n1, sm);  // out = smooth(in, out)  ~solve(A . out = in)
 
     mpi_grid_free(r1, n1);
     mpi_grid_free(r2, n2);
@@ -164,10 +160,7 @@ using a 3-level V-cycle multigrid method.
 @param s2: size of the second dimension (number of grid points per slice)
 @param n_start1: starting index for the first dimension (used for restriction)
 */
-void multigrid_apply_2lvl(
-    double *in, double *out, int s1, int s2, int n_start1,
-    int sm1, int sm2, int sm3, int sm4
-) {
+void multigrid_apply_2lvl(double *in, double *out, int s1, int s2, int n_start1, int sm) {
     int n1 = s2;
     int n2 = n1 / 2;
 
@@ -197,7 +190,7 @@ void multigrid_apply_2lvl(
     // memset(out, 0, size1 * sizeof(double));  // out = 0
     memset(e2, 0, size2 * sizeof(double));  // e2 = 0
 
-    smooth(in, out, n_loc1, n1, sm1);  // out = smooth(in, out)  ~solve(A . out = in)
+    smooth(in, out, n_loc1, n1, sm);  // out = smooth(in, out)  ~solve(A . out = in)
     // r1  =  in - A . out
     laplace_filter(out, r1, n_loc1, n1);
     dscal(r1, -1.0, size1);
@@ -205,11 +198,11 @@ void multigrid_apply_2lvl(
     restriction(r1, r2, n_loc1, n1, n_start1);  // r2 = restriction(r1)
 
 
-    smooth(r2, e2, n_loc2, n2, sm2);  // e2 = smooth(r2, e2)  ~solve(A . e2 = r2)
+    smooth(r2, e2, n_loc2, n2, (int)ceil(sm * 1.2));  // e2 = smooth(r2, e2)  ~solve(A . e2 = r2)
     prolong(e2, r1, n_loc2, n2, n_loc1, n1, n_start1);
     daxpy(r1, out, 1.0, size1);  // out = out + prolong(e2)
 
-    smooth(in, out, n_loc1, n1, sm4);  // out = smooth(in, out)  ~solve(A . out = in)
+    smooth(in, out, n_loc1, n1, sm);  // out = smooth(in, out)  ~solve(A . out = in)
 
     mpi_grid_free(r1, n1);
     mpi_grid_free(r2, n2);
@@ -617,13 +610,10 @@ void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
 //     }
 // }
 
-int multigrid_apply(
-    double *in, double *out, int s1, int s2, int n_start1,
-    int sm1, int sm2, int sm3, int sm4
-) {
-    multigrid_apply_recursive(in, out, s1, s2, n_start1, sm1, sm2, sm3, sm4);
-    // multigrid_apply_3lvl(in, out, s1, s2, n_start1, sm1, sm2, sm3, sm4);
-    // multigrid_apply_2lvl(in, out, s1, s2, n_start1, sm1, sm2, sm3, sm4);
+int multigrid_apply(double *in, double *out, int s1, int s2, int n_start1, int sm) {
+    multigrid_apply_recursive(in, out, s1, s2, n_start1, sm);
+    // multigrid_apply_3lvl(in, out, s1, s2, n_start1, sm);
+    // multigrid_apply_2lvl(in, out, s1, s2, n_start1, sm);
 }
 
 // choose smoothing, restriction and interpolation

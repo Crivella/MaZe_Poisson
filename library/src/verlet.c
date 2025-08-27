@@ -112,10 +112,7 @@ EXTERN_C int verlet_poisson_multigrid(
         laplace_filter(phi, tmp, size1, size2);
         daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
 
-        multigrid_apply(
-            tmp, y, size1, size2, get_n_start(),
-            MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
-        );
+        multigrid_apply(tmp, y, size1, size2, get_n_start(), MG_SOLVE_SM);
         // Compute the residual
         laplace_filter(y, tmp2, size1, size2);  // tmp2 = A . y
         daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . y - sigma_p

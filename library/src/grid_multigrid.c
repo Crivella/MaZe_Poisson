@@ -150,10 +150,7 @@ int multigrid_grid_update_field(grid *grid) {
     while(iter_conv < MG_ITER_LIMIT) {
         // Here the b in A.x = b is always the same, what is updated in the loop is the starting guess for
         // the field phi_n
-        multigrid_apply(
-            tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start,
-            MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
-        );
+        multigrid_apply(tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start, MG_SOLVE_SM);
 
          // Compute the residual
         laplace_filter(grid->phi_n, tmp2, grid->n_local, grid->n);  // tmp2 = A . phi
