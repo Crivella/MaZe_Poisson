@@ -304,6 +304,14 @@ void prolong_trilinear(
     int d = target_n_start % 2;
     double should_exchange = d;
 
+    // Precompute neighbor indices for periodic BCs in j and k
+    long int jnext[s2];
+    long int knext[s2];
+    for (int t = 0; t < s2; ++t) {
+        knext[t] = ((t + 1) % s2);
+        jnext[t] = knext[t] * s2;
+    }
+
     mpi_grid_exchange_bot_top(in, s1, s2);
 
     #pragma omp parallel for private(i0, j0, k0, i1, j1, k1, row_f, wi0, wj0, wk0, wi1, wj1, wk1)
@@ -314,15 +322,16 @@ void prolong_trilinear(
 
         calc_w0_w1((i ^ d) % 2, &wi0, &wi1);
         for (int j = 0; j < target_s2; j++) {
-            j0 = ((j / 2    ) % s2) * s2;
-            j1 = ((j / 2 + 1) % s2) * s2;
+            j0 = ((j / 2    ) % s2);
+            j1 = jnext[j0];
+            j0 *= s2;
 
             row_f = i * n2f + j * target_s2;
 
             calc_w0_w1(j % 2, &wj0, &wj1); 
             for (int k = 0; k < target_s2; k++) {
                 k0 = (k / 2    ) % s2;
-                k1 = (k / 2 + 1) % s2;
+                k1 = knext[k0];
 
                 calc_w0_w1(k % 2, &wk0, &wk1);
                 out[row_f + k] = (
@@ -421,6 +430,18 @@ void restriction_27pt(double *in, double *out, int s1, int s2, int n_start) {
     long int i2, j2, k2;
     double f_sum, e_sum, c_sum;
 
+    // Precompute neighbor indices for periodic BCs in j and k
+    int jprev[s2];
+    int jnext[s2];
+    int kprev[s2];
+    int knext[s2];
+    for (int t = 0; t < s2; ++t) {
+        kprev[t] = ((t - 1 + s2 ) % s2);
+        knext[t] = ((t + 1      ) % s2);
+        jprev[t] = kprev[t] * s2;
+        jnext[t] = knext[t] * s2;
+    }
+
     // If the number of slices in the first dimension is odd, we need to wrap around
     // the bottom slice above to apply the averaging with PBCs
     mpi_grid_exchange_bot_top(in, s1, s2);
@@ -436,13 +457,13 @@ void restriction_27pt(double *in, double *out, int s1, int s2, int n_start) {
 
         for (int j = 0; j < s2; j += 2) {
             j0 = j * s2;
-            j1 = ((j + 1     ) % s2) * s2;
-            j2 = ((j - 1 + s2) % s2) * s2;
+            j1 = jnext[j];
+            j2 = jprev[j];
             b = (j / 2) * s3;
 
             for (int k = 0; k < s2; k += 2) {
-                k2 = (k - 1 + s2) % s2;
-                k1 = (k + 1     ) % s2;
+                k2 = kprev[k];
+                k1 = knext[k];
                 c = k / 2;
 
                 f_sum =
@@ -512,13 +533,11 @@ with a 7-point Laplacian stencil under periodic boundary conditions in j,k.
 */
 void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
     int iters = (int)tol;
-    if (iters <= 0) {
-        return;
-    }
+    if (iters <= 0) return;
 
-    long int n2 = s2 * s2;
-    double inv_diag = -1.0 / 6.0;   // diagonal entry of 7-point Laplacian
-    int n_start = get_n_start();    // global offset for MPI parity
+    const long int n2 = s2 * s2;
+    const double inv_diag = -1.0 / 6.0;   // diagonal entry of 7-point Laplacian
+    const int n_start = get_n_start();    // global offset for MPI parity
 
     int d;
     long int idx;
@@ -527,61 +546,72 @@ void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
     long int i2, j2, k2;
     double sum_nb;
 
-    for (int iter = 0; iter < iters; iter++) {
-        // Exchange ghost slices before starting the red sweep
+    // Precompute neighbor indices for periodic BCs in j and k
+    int jprev[s2];
+    int jnext[s2];
+    int kprev[s2];
+    int knext[s2];
+    for (int t = 0; t < s2; ++t) {
+        kprev[t] = ((t - 1 + s2 ) % s2);
+        knext[t] = ((t + 1      ) % s2);
+        jprev[t] = kprev[t] * s2;
+        jnext[t] = knext[t] * s2;
+    }
+
+    for (int iter = 0; iter < iters; ++iter) {
         mpi_grid_exchange_bot_top(out, s1, s2);
 
         // ----- RED sweep -----
         #pragma omp parallel for private(i0, i1, i2, j0, j1, j2, k1, k2, d, idx, sum_nb)
-        for (int i = 0; i < s1; i++) {
+        for (int i = 0; i < s1; ++i) {
             i0 = i * n2;
-            i2 = i0 - n2;      // ghost if i==0
-            i1 = i0 + n2;      // ghost if i==s1-1
+            i1 = i0 + n2;
+            i2 = i0 - n2;
             d = (n_start + i) % 2;
 
-            for (int j = 0; j < s2; j++) {
-                j0  = j * s2;
-                j1 = ((j + 1     ) % s2) * s2;
-                j2 = ((j - 1 + s2) % s2) * s2;
+            for (int j = 0; j < s2; ++j) {
+                j0 = j * s2;
+                j1 = jnext[j];
+                j2 = jprev[j];
 
                 // choose k parity so that (i+j+k) % 2 == 0 (red)
                 int k = (2 - ((d + (j % 2)) % 2)) % 2;
                 for (; k < s2; k += 2) {
-                    k1 = (k + 1     ) % s2;
-                    k2 = (k - 1 + s2) % s2;
+                    k2 = kprev[k];
+                    k1 = knext[k];
                     idx = i0 + j0 + k;
 
                     sum_nb =
-                        out[i2 + j0 + k] + out[i1 + j0 + k] +
-                        out[i0 + j0  + k2] + out[i0 + j0  + k1] +
-                        out[i0 + j2 + k] + out[i0 + j1 + k];
+                        out[i2 + j0 + k] + out[i1 + j0 + k] +     // i-1, i+1
+                        out[i0 + j2 + k] + out[i0 + j1 + k] +     // j-1, j+1
+                        out[i0 + j0  + k2] + out[i0 + j0  + k1];  // k-1, k+1
 
                     out[idx] = (in[idx] - sum_nb) * inv_diag;
                 }
             }
         }
 
-        // Exchange halo again before the black sweep
+        // Exchange again before the black sweep
         mpi_grid_exchange_bot_top(out, s1, s2);
 
         // ----- BLACK sweep -----
         #pragma omp parallel for private(i0, i1, i2, j0, j1, j2, k1, k2, d, idx, sum_nb)
-        for (int i = 0; i < s1; i++) {
+        for (int i = 0; i < s1; ++i) {
             i0 = i * n2;
             i2 = i0 - n2;
             i1 = i0 + n2;
             d = (n_start + i) % 2;
 
-            for (int j = 0; j < s2; j++) {
-                j0  = j * s2;
-                j1 = ((j + 1     ) % s2) * s2;
-                j2 = ((j - 1 + s2) % s2) * s2;
+            for (int j = 0; j < s2; ++j) {
+                j0 = j * s2;
+                j1 = jnext[j];
+                j2 = jprev[j];
 
                 // choose k parity so that (i+j+k) % 2 == 1 (black)
                 int k = (1 - ((d + (j % 2)) % 2)) % 2;
                 for (; k < s2; k += 2) {
-                    k1 = (k + 1     ) % s2;
-                    k2 = (k - 1 + s2) % s2;
+                    k1 = knext[k];
+                    k2 = kprev[k];
                     idx = i0 + j0 + k;
 
                     sum_nb =
@@ -593,10 +623,8 @@ void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
                 }
             }
         }
-        // After black sweep: next iteration will exchange halos again
     }
 }
-
 
 // void smooth_lcg(double *in, double *out, int s1, int s2, double tol) {
 //     conj_grad(in, out, out, 1E-1, s1, s2);  // out = ~solve(A . out = in)
@@ -625,8 +653,8 @@ void smooth(double *in, double *out, int s1, int s2, double tol) {
 }
 
 void restriction(double *in, double *out, int s1, int s2, int n_start) {
-    restriction_8pt(in, out, s1, s2, n_start);
-    // restriction_27pt(in, out, s1, s2, n_start);
+    // restriction_8pt(in, out, s1, s2, n_start);
+    restriction_27pt(in, out, s1, s2, n_start);
 }
 
 void prolong(double *in, double *out, int s1, int s2, int target_s1, int target_s2, int target_n_start) {
