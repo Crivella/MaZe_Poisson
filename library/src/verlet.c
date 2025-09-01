@@ -92,14 +92,11 @@ EXTERN_C int verlet_poisson_multigrid(
     int iter_conv = 0;
 
     long int i;
-    // long int n2 = size2 * size2;
-    // long int n3 = size1 * n2;
     long int n3 = size1 * size2 * size2;
 
     double app, constant;
     double *tmp = (double*)malloc(n3 * sizeof(double));
 
-    //double *tmp2 = mpi_grid_allocate(size1, size2);
     // Compute provisional update for the field phi
     #pragma omp parallel for private(app)
     for (i = 0; i < n3; i++) {
@@ -113,23 +110,21 @@ EXTERN_C int verlet_poisson_multigrid(
     daxpy(q, tmp, constant, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
     while(iter_conv < MG_ITER_LIMIT) { 
         memset(y, 0, n3 * sizeof(double));
-
         // Compute the constraint with the provisional value of the field phi
-
         multigrid_apply(tmp, y, size1, size2, get_n_start(), MG_SOLVE_SM);
-        // Compute the residual
-        // laplace_filter(y, tmp2, size1, size2);  // tmp2 = A . y
-        // daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . y - sigma_p
-        
-        // app = sqrt(ddot(tmp, tmp2, n3));  // Compute the norm of the residual
 
         // Scale the field with the constrained 'force' term
         daxpy(y, phi, -1.0, n3);  // phi = phi - y
 
+        // Instead of checking for the residual of A . y = sigma_p we check for the residual of
+        // A . phi = 4 * pi / h . q as it is equivalent (using the definitions of sigma_p = A . phi + 4 * pi / h . q)
+        // and phi_k+1 = phi_k - y_k
         laplace_filter(phi, tmp, size1, size2);
         daxpy(q, tmp, constant, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
-        app = norm_inf(tmp, n3);   // Compute norm_inf of residual
 
+        // sigma_p is the residual of the original equation A . phi = - 4 * pi / h . q and is equivalent in magnitude
+        // to the residual of the equation A . y = sigma_p
+        app = norm_inf(tmp, n3);   // Compute norm_inf of residual
         if (app <= tol){
             res = iter_conv;
             break;
@@ -138,7 +133,6 @@ EXTERN_C int verlet_poisson_multigrid(
     }
     // Free temporary arrays
     free(tmp);
-    // mpi_grid_free(tmp2, size2);
 
     if (res == -1) {
         fprintf(stderr, "Warning: Multigrid did not converge after 1000 iterations.\n");    
