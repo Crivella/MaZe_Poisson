@@ -22,7 +22,7 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
 
     int sm_iter = (int)ceil(sm * pow(MG_RECURSION_FACTOR, depth));
 
-    if (s1_nxt < fmax(4, get_size())) {
+    if (s1_nxt < fmax(16, get_size())) {
         if (depth == 0) {
             mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
             mpi_fprintf(stderr, "Multigrid: requires atleast one level of recursion (s1 >= %d)\n", fmax(4, get_size()));

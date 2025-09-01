@@ -132,10 +132,11 @@ int maze_multigrid_grid_update_field(grid *grid) {
         fprintf(stderr, "Maze Multigrid with preconditioner not implemented yet.\n");
         exit(1);
     }
+
     res = verlet_poisson_multigrid(
-        grid->tol, grid->h * grid->eps_s, grid->phi_n, grid->phi_p, grid->q, grid->y,
+        grid->tol * (4 * M_PI) / grid->h, grid->h * grid->eps_s, grid->phi_n, grid->phi_p, grid->q, grid->y,
         grid->n_local, grid->n
-    );
+    );  //tolerance scaled by 4*pi/h to guarantee correct sigma_p = A . phi . h/4pi + rho/eps 
     return res;
 }   
 

@@ -55,10 +55,11 @@ EXTERN_C int verlet_poisson(
     daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
 
     // Apply LCG
+
     if (precond == NULL) {
-        iter_conv = conj_grad(tmp, y, y, tol, size1, size2);  // Inplace y <- y0
+        iter_conv = conj_grad(tmp, y, y, tol * (4 * M_PI) / h, size1, size2);  // Inplace y <- y0 - tolerance scaled by 4*pi/h to guarantee correct sigma_p = A . phi . h/4pi + rho/eps 
     } else {
-        iter_conv = conj_grad_precond(tmp, y, y, tol, size1, size2, precond);  // Inplace y <- y0
+        iter_conv = conj_grad_precond(tmp, y, y, tol * (4 * M_PI) / h, size1, size2, precond);  // Inplace y <- y0 - tolerance scaled by 4*pi/h to guarantee correct sigma_p = A . phi . h/4pi + rho/eps 
     }
 
     // Scale the field with the constrained 'force' term
@@ -91,13 +92,14 @@ EXTERN_C int verlet_poisson_multigrid(
     int iter_conv = 0;
 
     long int i;
-    long int n2 = size2 * size2;
-    long int n3 = size1 * n2;
+    // long int n2 = size2 * size2;
+    // long int n3 = size1 * n2;
+    long int n3 = size1 * size2 * size2;
 
-    double app;
+    double app, constant;
     double *tmp = (double*)malloc(n3 * sizeof(double));
 
-    double *tmp2 = mpi_grid_allocate(size1, size2);
+    //double *tmp2 = mpi_grid_allocate(size1, size2);
     // Compute provisional update for the field phi
     #pragma omp parallel for private(app)
     for (i = 0; i < n3; i++) {
@@ -106,10 +108,12 @@ EXTERN_C int verlet_poisson_multigrid(
         phi_prev[i] = app;
     }
 
+    constant = (4 * M_PI) / h;
     laplace_filter(phi, tmp, size1, size2);
-    daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
+    daxpy(q, tmp, constant, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
     while(iter_conv < MG_ITER_LIMIT) { 
         memset(y, 0, n3 * sizeof(double));
+
         // Compute the constraint with the provisional value of the field phi
 
         multigrid_apply(tmp, y, size1, size2, get_n_start(), MG_SOLVE_SM);
@@ -123,7 +127,7 @@ EXTERN_C int verlet_poisson_multigrid(
         daxpy(y, phi, -1.0, n3);  // phi = phi - y
 
         laplace_filter(phi, tmp, size1, size2);
-        daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
+        daxpy(q, tmp, constant, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
         app = norm_inf(tmp, n3);   // Compute norm_inf of residual
 
         if (app <= tol){
@@ -132,12 +136,9 @@ EXTERN_C int verlet_poisson_multigrid(
         }
         iter_conv++;
     }
-
-    // daxpy(y, phi, -1.0, n3);  // phi = phi - y
-
     // Free temporary arrays
     free(tmp);
-    mpi_grid_free(tmp2, size2);
+    // mpi_grid_free(tmp2, size2);
 
     if (res == -1) {
         fprintf(stderr, "Warning: Multigrid did not converge after 1000 iterations.\n");    
@@ -145,6 +146,7 @@ EXTERN_C int verlet_poisson_multigrid(
 
     return res;
 }
+
 
 EXTERN_C int verlet_poisson_pb(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y,
