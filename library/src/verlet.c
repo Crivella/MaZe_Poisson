@@ -106,22 +106,25 @@ EXTERN_C int verlet_poisson_multigrid(
         phi_prev[i] = app;
     }
 
+    laplace_filter(phi, tmp, size1, size2);
+    daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
     while(iter_conv < MG_ITER_LIMIT) { 
         memset(y, 0, n3 * sizeof(double));
         // Compute the constraint with the provisional value of the field phi
-        laplace_filter(phi, tmp, size1, size2);
-        daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
 
         multigrid_apply(tmp, y, size1, size2, get_n_start(), MG_SOLVE_SM);
         // Compute the residual
-        laplace_filter(y, tmp2, size1, size2);  // tmp2 = A . y
-        daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . y - sigma_p
+        // laplace_filter(y, tmp2, size1, size2);  // tmp2 = A . y
+        // daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . y - sigma_p
         
         // app = sqrt(ddot(tmp, tmp2, n3));  // Compute the norm of the residual
-        app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
 
         // Scale the field with the constrained 'force' term
         daxpy(y, phi, -1.0, n3);  // phi = phi - y
+
+        laplace_filter(phi, tmp, size1, size2);
+        daxpy(q, tmp, (4 * M_PI) / h, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
+        app = norm_inf(tmp, n3);   // Compute norm_inf of residual
 
         if (app <= tol){
             res = iter_conv;
