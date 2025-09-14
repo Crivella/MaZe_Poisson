@@ -324,7 +324,7 @@ class SolverMD(Logger):
         """Initialize the first 2 steps for the MD and forces."""
         self.logger.info("Initializing MD (first 2 steps)...")
         ffile = self.gset.restart_field_file
-        if ffile is None or self.mdv.invert_time:
+        if ffile is None or self.mdv.invert_time==False:
             # STEP 0 Verlet
             # self.logger.debug("Running first step of MD loop (Verlet)...")
             self.update_charges()
