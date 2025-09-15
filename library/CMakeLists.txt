@@ -147,6 +147,8 @@ if (LAPACK_FOUND)
             message(WARNING "LAPACKE library not found")
         endif()
     endif()
+else()
+    message(WARNING "LAPACK not found, some features will be disabled")
 endif()
 
 # Set FFTW flags
