@@ -138,6 +138,13 @@ int multigrid_grid_update_field(grid *grid) {
     double *tmp = mpi_grid_allocate(grid->n_local, grid->n);
     double *tmp2 = mpi_grid_allocate(grid->n_local, grid->n);
 
+    long int i;
+    #pragma omp parallel for private(app)
+    for (i = 0; i < n3; i++) {
+        app = grid->phi_n[i];
+        grid->phi_n[i] = 2 * app - grid->phi_p[i];
+        grid->phi_p[i] = app;
+    }
     double constant = -4 * M_PI / grid->h;
     if ( ! grid->pb_enabled) {
         constant /= grid->eps_s;  // Scale by the dielectric constant if not using PB explicitly
@@ -147,6 +154,11 @@ int multigrid_grid_update_field(grid *grid) {
     vec_copy(grid->q, tmp, grid->size);
     dscal(tmp, constant, grid->size);
 
+    laplace_filter(grid->phi_n, tmp2, grid->n_local, grid->n);  // tmp2 = A . phi
+    daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . phi - (- 4pi/h q)
+    app = norm_inf(tmp2, n3); 
+    // printf("\niter=%d \t res=%e\n", iter_conv,app);
+    
     while(iter_conv < MG_ITER_LIMIT) {
         // Here the b in A.x = b is always the same, what is updated in the loop is the starting guess for
         // the field phi_n
@@ -158,13 +170,12 @@ int multigrid_grid_update_field(grid *grid) {
         
         // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
         app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
-        
+        iter_conv++;
+        // printf("iter=%d \t res=%e\n", iter_conv,app);
         if (app <= tol){
             res = iter_conv;
             break;
         }
-        
-        iter_conv++;
     }
 
     return res;
