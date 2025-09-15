@@ -41,12 +41,6 @@ int conj_grad(double *b, double *x0, double *x, double tol, int size1, int size2
     laplace_filter(x0, r, size1, size2);  // r = A . x
     daxpy(b, r, -1.0, n3);  // r = A . x - b
 
-    // Test if norm is already below tolerance at iteration 0
-    if (norm_inf(r, n3) <= tol) {
-        // printf("iter = %d - res = %lf\n", iter, norm_inf(r, n3));
-        free(r);
-        return 0;
-    }
     if (x != x0)
     {
         vec_copy(x0, x, n3);  // Inplace copy

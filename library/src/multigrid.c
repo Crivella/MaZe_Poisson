@@ -10,7 +10,7 @@
 
 #define JACOBI_OMEGA 0.66
 
-static int cg_coarse(const double* b, double* x, int s1, int s2, int maxit, double rtol)
+static int cg_coarse(double* b, double* x, int s1, int s2, int maxit, double rtol)
 {
     const long n = (long)s1 * (long)s2 * (long)s2;
 
@@ -108,11 +108,10 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
     // Se lo giri senza MPI funziona anche senza il +1 ma con il +1 server per tenero conto di quando n_start e' dispari
     const int n_start_nxt = (n_start + 1) / 2;   // CHANGED: floor  
 
-
     const int sm_iter = (int)ceil(sm * pow(MG_RECURSION_FACTOR, depth));
 
     // base case
-    if (s1_nxt < fmax(16, get_size())) {
+    if ( (s1_nxt < fmax(16, get_size())) || (depth >= 1) ) {
         if (depth == 0) {
             mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
             mpi_fprintf(stderr, "Multigrid: requires atleast one level of recursion (s1 >= %d)\n", fmax(4, get_size()));
@@ -121,8 +120,9 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
             exit(1);
         }
         // smooth(in, out, s1, s2, sm_iter);
-        // cg_coarse(in, out, s1, s2, 50, 1e-5); //prima era 1e-4
-        conj_grad(in, out, out, 1e-5, s1, s2);
+        // printf("Solving exact at depth %d with CG\n", depth);
+        cg_coarse(in, out, s1, s2, 50, 1e-5); //prima era 1e-4
+        // conj_grad(in, out, out, 1e-5, s1, s2);
         return depth;
     }
 
