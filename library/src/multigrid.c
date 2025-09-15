@@ -98,15 +98,17 @@ static int cg_coarse(const double* b, double* x, int s1, int s2, int maxit, doub
 
 int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int depth) {
     int res;
-    int s1_nxt, s2_nxt, n_start_nxt;
-    long int size = s1 * s2 * s2;
+    const long int n2   = (long int)s2 * s2;
+    const long int size = (long int)s1 * n2;
 
-    s1_nxt = (s1 + 1 - (n_start % 2)) / 2;
-    s2_nxt = s2 / 2;
-    n_start_nxt = (n_start + 1) / 2;
+    // next level sizes/parity
+    const int s1_nxt      = (s1 + 1 - (n_start % 2)) / 2;
+    const int s2_nxt      = s2 / 2;
+    const int n_start_nxt = n_start / 2;   // CHANGED: floor
 
-    int sm_iter = (int)ceil(sm * pow(MG_RECURSION_FACTOR, depth));
+    const int sm_iter = (int)ceil(sm * pow(MG_RECURSION_FACTOR, depth));
 
+    // base case
     if (s1_nxt < fmax(16, get_size())) {
         if (depth == 0) {
             mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
@@ -120,34 +122,45 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
         return depth;
     }
 
-    long int size_nxt = s1_nxt * s2_nxt * s2_nxt;
+    const long int size_nxt = (long int)s1_nxt * s2_nxt * s2_nxt;
 
-    double *r = mpi_grid_allocate(s1, s2);
+    // buffers
+    double *r   = mpi_grid_allocate(s1,     s2);
     double *rhs = mpi_grid_allocate(s1_nxt, s2_nxt);
     double *eps = mpi_grid_allocate(s1_nxt, s2_nxt);
 
-    memset(eps, 0, size_nxt * sizeof(double));  // eps = 0
+    memset(eps, 0, size_nxt * sizeof(double));
 
-    smooth(in, out, s1, s2, sm_iter);  // out = smooth(in, out)  ~solve(A . out = in)
-    // r  =  in - A . out
+    // 1) pre-smoothing
+    smooth(in, out, s1, s2, sm_iter);
+
+    // 2) residual: r = in - A*out
     laplace_filter(out, r, s1, s2);
     dscal(r, -1.0, size);
     daxpy(in, r, 1.0, size);
 
-    restriction(r, rhs, s1, s2, n_start);  // rhs = restriction(r)
-    // smooth(rhs, eps, s1_nxt, s2_nxt, 2 * sm);  // eps = smooth(rhs)  ~solve(A . eps = rhs)
-    res = v_cycle(rhs, eps, s1_nxt, s2_nxt, n_start_nxt, sm, depth + 1);  // eps = v_cycle(rhs)
+    // 3) restrict to coarse
+    mpi_grid_exchange_bot_top(r, s1, s2);                 // CHANGED
+    restriction(r, rhs, s1, s2, n_start);
 
-    prolong(eps, r, s1_nxt, s2_nxt, s1, s2, n_start);  // r = prolong(eps)
-    daxpy(r, out, 1.0, size);  // out = out + r
+    // 4) coarse solve (recursive)
+    res = v_cycle(rhs, eps, s1_nxt, s2_nxt, n_start_nxt, sm, depth + 1);
 
-    smooth(in, out, s1, s2, sm_iter);  // out = smooth(in, out)  ~solve(A . out = in)
+    // 5) prolong correction
+    mpi_grid_exchange_bot_top(eps, s1_nxt, s2_nxt);       // CHANGED
+    prolong(eps, r, s1_nxt, s2_nxt, s1, s2, n_start);
 
-    mpi_grid_free(r, s2);
+    // 6) apply correction
+    daxpy(r, out, 1.0, size);
+
+    // 7) post-smoothing
+    smooth(in, out, s1, s2, sm_iter);
+
+    mpi_grid_free(r,   s2);
     mpi_grid_free(rhs, s2_nxt);
     mpi_grid_free(eps, s2_nxt);
 
-    return res;  // Return the number of levels processed
+    return res;
 }
 
 int multigrid_apply_recursive(double *in, double *out, int s1, int s2, int n_start1, int sm) {
