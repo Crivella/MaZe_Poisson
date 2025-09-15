@@ -10,6 +10,91 @@
 
 #define JACOBI_OMEGA 0.66
 
+static int cg_coarse(const double* b, double* x, int s1, int s2, int maxit, double rtol)
+{
+    const long n = (long)s1 * (long)s2 * (long)s2;
+
+    /* --- scalari --- */
+    int    k;
+    double r0_inf, r_inf;
+    double r_dot_v, denom, alpha;
+    double rn_rn, rn_dot_vn, beta;
+
+    /* --- buffer con ghost --- */
+    double *r;
+    double *p;
+    double *Ap;
+
+    /* --- allocazioni --- */
+    r  = mpi_grid_allocate(s1, s2);
+    p  = mpi_grid_allocate(s1, s2);
+    Ap = mpi_grid_allocate(s1, s2);
+
+    /* r = A x - b  (x è il guess iniziale passatoci dal chiamante) */
+    mpi_grid_exchange_bot_top(x, s1, s2);
+    laplace_filter(x, r, s1, s2);   /* r <- A x */
+    daxpy(b, r, -1.0, n);           /* r <- r - b */
+
+    /* p = -v = r/6  con v = -r/6 (precondizionatore diagonale del Laplaciano) */
+    memcpy(p, r, n * sizeof(double));
+    dscal(p, 1.0/6.0, n);
+
+    /* norma iniziale (stop relativo) */
+    r0_inf = norm_inf(r, n);
+    if (r0_inf == 0.0) {
+        mpi_grid_free(r, s2);
+        mpi_grid_free(p, s2);
+        mpi_grid_free(Ap, s2);
+        return 0;
+    }
+
+    /* r_dot_v = <r, v> = -<r, p> perché p = -v */
+    r_dot_v = - ddot(r, p, n);
+
+    for (k = 0; k < maxit; ++k) {
+        /* Ap = A p */
+        mpi_grid_exchange_bot_top(p, s1, s2);
+        laplace_filter(p, Ap, s1, s2);
+
+        denom = ddot(p, Ap, n);
+        if (fabs(denom) < 1e-300) {
+            /* direzione quasi nulla / breakdown */
+            break;
+        }
+
+        alpha = r_dot_v / denom;
+
+        /* x <- x + alpha p */
+        daxpy(p, x, alpha, n);
+
+        /* r <- r + alpha Ap   (perché r = A x - b) */
+        daxpy(Ap, r, alpha, n);
+
+        /* criterio di arresto relativo in norma infinito */
+        r_inf = norm_inf(r, n);
+        if (r_inf <= rtol * r0_inf) {
+            ++k;           /* conta anche l’iterazione corrente */
+            break;
+        }
+
+        /* update scalari */
+        rn_rn     = ddot(r, r, n);
+        rn_dot_vn = - rn_rn / 6.0;     /* <r_new, v_new> con v_new = -r_new/6 */
+        beta      = rn_dot_vn / r_dot_v;
+        r_dot_v   = rn_dot_vn;
+
+        /* p <- beta p + r/6 */
+        dscal(p, beta, n);
+        daxpy(r, p, 1.0/6.0, n);
+    }
+
+    mpi_grid_free(r,  s2);
+    mpi_grid_free(p,  s2);
+    mpi_grid_free(Ap, s2);
+
+    return k;  /* numero di iterazioni eseguite */
+}
+
 
 int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int depth) {
     int res;
@@ -30,8 +115,8 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
             mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
             exit(1);
         }
-        // Base case: no more levels to go down
-        smooth(in, out, s1, s2, sm_iter);  // out = smooth(in, out)  ~solve(A . out = in)
+        // smooth(in, out, s1, s2, sm_iter);
+        cg_coarse(in, out, s1, s2, 50, 1e-5); //prima era 1e-4
         return depth;
     }
 
