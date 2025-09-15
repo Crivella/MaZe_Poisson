@@ -111,21 +111,23 @@ EXTERN_C int verlet_poisson_multigrid(
     // memset(y, 0, n3 * sizeof(double));
     // printf("\nprima y = %e\n", norm_inf(y, n3));
     
-    laplace_filter(y, tmp, size1, size2);
-    daxpy(tmp2, tmp, -1., n3);  // res = A . y - sigma_p
-    app = norm_inf(tmp, n3);   // Compute norm_inf of residual
+    // Questo pezzo non e' usato se vedi app e tmp2 vengono riscritti prima di essere letti
+    // Serve solo se abiliti il printf sotto
+    // laplace_filter(y, tmp, size1, size2);
+    // daxpy(tmp2, tmp, -1., n3);  // res = A . y - sigma_p
+    // app = norm_inf(tmp, n3);   // Compute norm_inf of residual
     // printf("\ny = %e \t iter=%d \t res=%e\n", norm_inf(y, n3), iter_conv,app);
     
     while(iter_conv < MG_ITER_LIMIT) { 
         // Compute the constraint with the provisional value of the field phi
-        multigrid_apply(tmp2, y, size1, size2, get_n_start(), MG_SOLVE_SM); //solve A . y = ssigma_p
+        multigrid_apply(tmp2, y, size1, size2, get_n_start(), MG_SOLVE_SM); //solve A . y = sigma_p
 
         laplace_filter(y, tmp, size1, size2);
         daxpy(tmp2, tmp, -1., n3);  // res = A . y - sigma_p
         app = norm_inf(tmp, n3);   // Compute norm_inf of residual
         iter_conv++;
         
-        printf("\ny = %e \t iter=%d \t res=%e\n", norm_inf(y, n3), iter_conv,app);
+        // printf("\ny = %e \t iter=%d \t res=%e\n", norm_inf(y, n3), iter_conv,app);
         
         if (app <= tol){
             res = iter_conv;

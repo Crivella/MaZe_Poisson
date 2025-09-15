@@ -31,7 +31,7 @@ static int cg_coarse(const double* b, double* x, int s1, int s2, int maxit, doub
     Ap = mpi_grid_allocate(s1, s2);
 
     /* r = A x - b  (x è il guess iniziale passatoci dal chiamante) */
-    mpi_grid_exchange_bot_top(x, s1, s2);
+    // mpi_grid_exchange_bot_top(x, s1, s2);
     laplace_filter(x, r, s1, s2);   /* r <- A x */
     daxpy(b, r, -1.0, n);           /* r <- r - b */
 
@@ -53,7 +53,7 @@ static int cg_coarse(const double* b, double* x, int s1, int s2, int maxit, doub
 
     for (k = 0; k < maxit; ++k) {
         /* Ap = A p */
-        mpi_grid_exchange_bot_top(p, s1, s2);
+        // mpi_grid_exchange_bot_top(p, s1, s2);
         laplace_filter(p, Ap, s1, s2);
 
         denom = ddot(p, Ap, n);
@@ -72,7 +72,7 @@ static int cg_coarse(const double* b, double* x, int s1, int s2, int maxit, doub
 
         /* criterio di arresto relativo in norma infinito */
         r_inf = norm_inf(r, n);
-        if (r_inf <= rtol * r0_inf) {
+        if (r_inf <= rtol * r0_inf) { // TODO: questo non lo capisco
             ++k;           /* conta anche l’iterazione corrente */
             break;
         }
@@ -104,7 +104,10 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
     // next level sizes/parity
     const int s1_nxt      = (s1 + 1 - (n_start % 2)) / 2;
     const int s2_nxt      = s2 / 2;
-    const int n_start_nxt = n_start / 2;   // CHANGED: floor
+
+    // Se lo giri senza MPI funziona anche senza il +1 ma con il +1 server per tenero conto di quando n_start e' dispari
+    const int n_start_nxt = (n_start + 1) / 2;   // CHANGED: floor  
+
 
     const int sm_iter = (int)ceil(sm * pow(MG_RECURSION_FACTOR, depth));
 
@@ -118,14 +121,15 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
             exit(1);
         }
         // smooth(in, out, s1, s2, sm_iter);
-        cg_coarse(in, out, s1, s2, 50, 1e-5); //prima era 1e-4
+        // cg_coarse(in, out, s1, s2, 50, 1e-5); //prima era 1e-4
+        conj_grad(in, out, out, 1e-5, s1, s2);
         return depth;
     }
 
     const long int size_nxt = (long int)s1_nxt * s2_nxt * s2_nxt;
 
     // buffers
-    double *r   = mpi_grid_allocate(s1,     s2);
+    double *r   = mpi_grid_allocate(s1, s2);
     double *rhs = mpi_grid_allocate(s1_nxt, s2_nxt);
     double *eps = mpi_grid_allocate(s1_nxt, s2_nxt);
 
@@ -140,14 +144,14 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
     daxpy(in, r, 1.0, size);
 
     // 3) restrict to coarse
-    mpi_grid_exchange_bot_top(r, s1, s2);                 // CHANGED
+    // mpi_grid_exchange_bot_top(r, s1, s2);                 // CHANGED
     restriction(r, rhs, s1, s2, n_start);
 
     // 4) coarse solve (recursive)
     res = v_cycle(rhs, eps, s1_nxt, s2_nxt, n_start_nxt, sm, depth + 1);
 
     // 5) prolong correction
-    mpi_grid_exchange_bot_top(eps, s1_nxt, s2_nxt);       // CHANGED
+    // mpi_grid_exchange_bot_top(eps, s1_nxt, s2_nxt);       // CHANGED
     prolong(eps, r, s1_nxt, s2_nxt, s1, s2, n_start);
 
     // 6) apply correction
@@ -156,7 +160,7 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
     // 7) post-smoothing
     smooth(in, out, s1, s2, sm_iter);
 
-    mpi_grid_free(r,   s2);
+    mpi_grid_free(r, s2);
     mpi_grid_free(rhs, s2_nxt);
     mpi_grid_free(eps, s2_nxt);
 

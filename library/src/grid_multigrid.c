@@ -154,9 +154,11 @@ int multigrid_grid_update_field(grid *grid) {
     vec_copy(grid->q, tmp, grid->size);
     dscal(tmp, constant, grid->size);
 
-    laplace_filter(grid->phi_n, tmp2, grid->n_local, grid->n);  // tmp2 = A . phi
-    daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . phi - (- 4pi/h q)
-    app = norm_inf(tmp2, n3); 
+    // Questo pezzo non e' usato se vedi app e tmp2 vengono riscritti prima di essere letti
+    // Serve solo se abiliti il printf sotto
+    // laplace_filter(grid->phi_n, tmp2, grid->n_local, grid->n);  // tmp2 = A . phi
+    // daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . phi - (- 4pi/h q)
+    // app = norm_inf(tmp2, n3); 
     // printf("\niter=%d \t res=%e\n", iter_conv,app);
     
     while(iter_conv < MG_ITER_LIMIT) {
