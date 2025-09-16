@@ -180,6 +180,9 @@ int multigrid_grid_update_field(grid *grid) {
         }
     }
 
+    mpi_grid_free(tmp, grid->n);
+    mpi_grid_free(tmp2, grid->n);
+
     return res;
 }   
 
