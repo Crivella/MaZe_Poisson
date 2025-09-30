@@ -125,18 +125,22 @@ int maze_multigrid_grid_update_field(grid *grid) {
     int res;
 
     if (grid->pb_enabled) {
-        fprintf(stderr, "Maze Multigrid Poisson-Boltzmann not implemented yet.\n");
-        exit(1);
-    } 
+           res = verlet_pb_multigrid(
+            grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
+            grid->n_local, grid->n, grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
+        );  
+    } else{
+        res = verlet_poisson_multigrid(
+            grid->tol, grid->h * grid->eps_s, grid->phi_n, grid->phi_p, grid->q, grid->y,
+            grid->n_local, grid->n
+        );  
+    }
     if (precond) {
         fprintf(stderr, "Maze Multigrid with preconditioner not implemented yet.\n");
         exit(1);
     }
 
-    res = verlet_poisson_multigrid(
-        grid->tol, grid->h * grid->eps_s, grid->phi_n, grid->phi_p, grid->q, grid->y,
-        grid->n_local, grid->n
-    );  //tolerance scaled by 4*pi/h to guarantee correct sigma_p = A . phi . h/4pi + rho/eps 
+
     return res;
 }   
 

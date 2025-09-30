@@ -53,6 +53,7 @@ add_library(maze_poisson MODULE
     src/plcg.c
     src/verlet.c
     src/multigrid.c
+    src/multigrid_pb.c
     src/fftw_wrap.c
 
     src/forces.c

@@ -4,6 +4,7 @@
 #include "laplace.h"
 #include "plcg.h"
 #include "multigrid.h"
+#include "multigrid_pb.h"
 
 int verlet_poisson(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y, int size1, int size2,
@@ -17,5 +18,8 @@ int verlet_poisson_pb(
     int size1, int size2,
     double *eps_x, double *eps_y, double *eps_z, double *k2_screen
 );
-
+int verlet_pb_multigrid(
+    double tol, double h, double* phi, double* phi_prev, double* q, double* y, 
+    int size1, int size2, double *eps_x, double *eps_y, double *eps_z, double *k2_screen
+);
 #endif // VERLET_H
