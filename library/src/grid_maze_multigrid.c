@@ -133,13 +133,12 @@ int maze_multigrid_grid_update_field(grid *grid) {
         res = verlet_poisson_multigrid(
             grid->tol, grid->h * grid->eps_s, grid->phi_n, grid->phi_p, grid->q, grid->y,
             grid->n_local, grid->n
-        );  
+        );  // grid->h * grid->eps_s to account for the dielectric constant in the poisson equation
     }
     if (precond) {
         fprintf(stderr, "Maze Multigrid with preconditioner not implemented yet.\n");
         exit(1);
     }
-
 
     return res;
 }   

@@ -127,6 +127,7 @@ int multigrid_grid_update_field(grid *grid) {
         grid->phi_n[i] = 2 * app - grid->phi_p[i];
         grid->phi_p[i] = app;
     }
+    // memset(grid->phi_n, 0, grid->size * sizeof(double));  // phi_n = 0 in case we need want multigrid to start without initial guess
 
     double constant = -4 * M_PI / grid->h;
     if ( ! grid->pb_enabled) {
@@ -145,16 +146,24 @@ int multigrid_grid_update_field(grid *grid) {
             break;
     }
 
+    // if poisson boltzmann is enabled use the pb multigrid solver, otherwise use the poisson one.
+    // the RHS of the equation is always the same, what changes are the multigrid and the laplace_filter functions
     if (grid->pb_enabled) {
+        // uncomment below only to print the residual at iteration = 0
+        // laplace_filter_pb(grid->phi_n, tmp2, grid->n_local, grid->n, grid->eps_x, grid->eps_y, grid->eps_z, grid->k2);  // tmp2 = A_pb . phi
+        // daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
+        // app = norm_inf(tmp2, n3); 
+        // printf("\niter=%d \t res=%e\n", iter_conv,app);
+
         while(iter_conv < MG_ITER_LIMIT_PB) {
             // Here the b in A.x = b is always the same, what is updated in the loop is the starting guess for
             // the field phi_n
             multigrid_pb_apply(tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start, MG_SOLVE_SM_PB, grid->eps_x, grid->eps_y, grid->eps_z, grid->k2);
 
             // Compute the residual
-            laplace_filter_pb(grid->phi_n, tmp2, grid->n_local, grid->n, grid->eps_x, grid->eps_y, grid->eps_z, grid->k2);  // tmp2 = A . phi
-            daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . phi - (- 4pi/h q)
-            
+            laplace_filter_pb(grid->phi_n, tmp2, grid->n_local, grid->n, grid->eps_x, grid->eps_y, grid->eps_z, grid->k2);  // tmp2 = A_pb . phi
+            daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
+
             // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
             app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
             iter_conv++;
@@ -167,14 +176,20 @@ int multigrid_grid_update_field(grid *grid) {
         }
     } 
     else{
+        // uncomment below only to print the residual at iteration = 0
+        // laplace_filter(grid->phi_n, tmp2, grid->n_local, grid->n);  // tmp2 = A_pb . phi
+        // daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
+        // app = norm_inf(tmp2, n3); 
+        // printf("\niter=%d \t res=%e\n", iter_conv,app);
+
         while(iter_conv < MG_ITER_LIMIT) {
             // Here the b in A.x = b is always the same, what is updated in the loop is the starting guess for
             // the field phi_n
             multigrid_apply(tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start, MG_SOLVE_SM);
 
             // Compute the residual
-            laplace_filter(grid->phi_n, tmp2, grid->n_local, grid->n);  // tmp2 = A . phi
-            daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . phi - (- 4pi/h q)
+            laplace_filter(grid->phi_n, tmp2, grid->n_local, grid->n);  // tmp2 = A_pb . phi
+            daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
             
             // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
             app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
@@ -186,20 +201,9 @@ int multigrid_grid_update_field(grid *grid) {
             }
         }
     }
-    // if (precond) {
-    //     fprintf(stderr, "Multigrid with preconditioner not implemented yet.\n");
-    //     exit(1);
-    // }
-
-
-    // Questo pezzo non e' usato se vedi app e tmp2 vengono riscritti prima di essere letti
-    // Serve solo se abiliti il printf sotto
-    // laplace_filter(grid->phi_n, tmp2, grid->n_local, grid->n);  // tmp2 = A . phi
-    // daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . phi - (- 4pi/h q)
-    // app = norm_inf(tmp2, n3); 
-    // printf("\niter=%d \t res=%e\n", iter_conv,app);
-    
-
+    if (iter_conv == MG_ITER_LIMIT || res == -1) {
+        res = -1;  // Not converged
+    }
 
     mpi_grid_free(tmp, grid->n);
     mpi_grid_free(tmp2, grid->n);

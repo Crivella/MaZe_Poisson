@@ -269,6 +269,9 @@ static int cg_coarse_pb_jacobi(double* b, double* x, int s1, int s2, int maxit, 
     return k;  /* number of iterations executed */
 }
 
+
+// Recursive V-cycle for PB equation: smoothing is adapted for PB, restriction and prolongation are the same as for Poisson 
+// + restriction for epsilon (face-centered)
 int v_cycle_pb(double *in, double *out, int s1, int s2, int n_start, int sm, int depth, double *eps_x, double *eps_y, double *eps_z, double *k2_screen) {
     int res;
     const long int n2   = (long int)s2 * s2;
@@ -292,10 +295,7 @@ int v_cycle_pb(double *in, double *out, int s1, int s2, int n_start, int sm, int
             mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
             exit(1);
         }
-        // smooth(in, out, s1, s2, sm_iter);
-        // printf("Solving exact at depth %d with CG\n", depth);
-        cg_coarse_pb(in, out, s1, s2, 50, 1e-5, eps_x, eps_y, eps_z, k2_screen); //prima era 1e-4
-        // conj_grad(in, out, out, 1e-5, s1, s2);
+        cg_coarse_pb(in, out, s1, s2, 50, 1e-5, eps_x, eps_y, eps_z, k2_screen); 
         return depth;
     }
 
@@ -335,7 +335,6 @@ int v_cycle_pb(double *in, double *out, int s1, int s2, int n_start, int sm, int
     res = v_cycle_pb(rhs, eps, s1_nxt, s2_nxt, n_start_nxt, sm, depth + 1, eps_x_c, eps_y_c, eps_z_c, k2_screen_c);
 
     // 5) prolong correction
-    // mpi_grid_exchange_bot_top(eps, s1_nxt, s2_nxt);       // CHANGED
     prolong(eps, r, s1_nxt, s2_nxt, s1, s2, n_start);
 
     // 6) apply correction
@@ -372,7 +371,6 @@ Axis encoding:
   axis = 2 -> Z faces (IJ plane average, uses i and i+1 planes)
 
 Output eps_H(I,J,K) corresponds to the coarse face in +axis direction of coarse cell (I,J,K).
-Periodic BCs are assumed in j and k.
 */
 void restriction_eps(double *eps_in, double *eps_out, int s1, int s2, int axis) {
     int s3;
@@ -501,7 +499,7 @@ void restriction_eps(double *eps_in, double *eps_out, int s1, int s2, int axis) 
 
 
 /*
-Apply the Jacobi smoothing method to solve the Poisson equation.
+Apply the Jacobi smoothing method to solve the PB equation.
 Gives an approximate solution to the equation A.out = in based
 
 @param in: input array (right-hand side of the equation)
@@ -509,6 +507,8 @@ Gives an approximate solution to the equation A.out = in based
 @param s1: size of the first dimension (number of slices)
 @param s2: size of the second dimension (number of grid points per slice)
 @param tol: number of iterations to perform
+@param eps_x, eps_y, eps_z: face-centered dielectric arrays
+@param k2_screen: cell-centered screening coefficient array
 */
 void smooth_pb_jacobi(double *in, double *out, int s1, int s2, double tol, double *eps_x, double *eps_y, double *eps_z, double *k2_screen) {
     long int n3 = s1 * s2 * s2;
@@ -538,6 +538,8 @@ with a 7-point Laplacian stencil under periodic boundary conditions in j,k.
 @param s1:   size of the first dimension (number of slices in i)
 @param s2:   size of the second dimension (number of grid points in j,k)
 @param tol:  number of smoothing iterations (each iteration = red + black sweep)
+@param eps_x, eps_y, eps_z: face-centered dielectric arrays
+@param k2_screen: cell-centered screening coefficient array
 */
 void smooth_pb_rbgs(
     double *in, double *out,
@@ -642,13 +644,9 @@ void smooth_pb_rbgs(
 
 int multigrid_pb_apply(double *in, double *out, int s1, int s2, int n_start1, int sm, double *eps_x, double *eps_y, double *eps_z, double *k2_screen) {
     multigrid_pb_apply_recursive(in, out, s1, s2, n_start1, sm, eps_x, eps_y, eps_z, k2_screen);
-    // multigrid_apply_3lvl(in, out, s1, s2, n_start1, sm);
-    // multigrid_apply_2lvl(in, out, s1, s2, n_start1, sm);
 }
 
-// choose smoothing, restriction and interpolation
 void smooth_pb(double *in, double *out, int s1, int s2, double tol, double *eps_x, double *eps_y, double *eps_z, double *k2_screen) {
     // smooth_pb_jacobi(in, out, s1, s2, tol);
-    // smooth_diag_pb(in, out, s1, s2, tol);
     smooth_pb_rbgs(in, out, s1, s2, tol, eps_x, eps_y, eps_z, k2_screen);
 }

@@ -204,8 +204,9 @@ The previous and current fields and the y array are updated in place.
 @param q: the charge on a grid of size n_grid * n_grid * n_grid\
 @param y: copy of the 'q' given as input to the function
 @param n_grid: the number of grid points in each dimension
-
-@return the number of iterations for convergence of the LCG
+@param eps_x, eps_y, eps_z: the spatially dependent dielectric constants in each direction
+@param k2_screen: the spatially dependent screening term for the linearized PB equation
+@return the number of iterations for convergence of the MG
 */
 EXTERN_C int verlet_pb_multigrid(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y,
@@ -233,16 +234,15 @@ EXTERN_C int verlet_pb_multigrid(
     laplace_filter_pb(phi, tmp2, size1, size2, eps_x, eps_y, eps_z, k2_screen);
     daxpy(q, tmp2, constant, n3);  // sigma_p = A_pb . phi + 4 * pi * q / h
     
-    // Questo pezzo non e' usato se vedi app e tmp2 vengono riscritti prima di essere letti
-    // Serve solo se abiliti il printf sotto
+    // uncomment below only to print the residual at iteration = 0
     // laplace_filter_pb(y, tmp, size1, size2, eps_x, eps_y, eps_z, k2_screen);
-    // daxpy(tmp2, tmp, -1., n3);  // res = A . y - sigma_p
+    // daxpy(tmp2, tmp, -1., n3);  // res = A_pb . y - sigma_p
     // app = norm_inf(tmp, n3);   // Compute norm_inf of residual
     // printf("\ny = %e \t iter=%d \t res=%e\n", norm_inf(y, n3), iter_conv,app);
     
     while(iter_conv < MG_ITER_LIMIT_PB) { 
         // Compute the constraint with the provisional value of the field phi
-        multigrid_pb_apply(tmp2, y, size1, size2, get_n_start(), MG_SOLVE_SM_PB, eps_x, eps_y, eps_z, k2_screen); //solve A . y = sigma_p
+        multigrid_pb_apply(tmp2, y, size1, size2, get_n_start(), MG_SOLVE_SM_PB, eps_x, eps_y, eps_z, k2_screen); //solve A_pb . y = sigma_p
 
         laplace_filter_pb(y, tmp, size1, size2, eps_x, eps_y, eps_z, k2_screen);
         daxpy(tmp2, tmp, -1., n3);  // res = A . y - sigma_p
