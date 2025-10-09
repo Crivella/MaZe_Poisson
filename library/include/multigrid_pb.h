@@ -7,6 +7,7 @@
 #define MG_RECURSION_FACTOR_PB 2
 
 void restriction_eps(double *eps_in, double *eps_out, int s1, int s2, int axis);
+void restriction_k2screen(const double *in, double *out, int s1, int s2, int n_start);
 void smooth_pb(double *in, double *out, int s1, int s2, double tol, double *eps_x, double *eps_y, double *eps_z, double *k2_screen);
 
 int multigrid_pb_apply(

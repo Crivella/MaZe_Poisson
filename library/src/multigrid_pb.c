@@ -329,7 +329,7 @@ int v_cycle_pb(double *in, double *out, int s1, int s2, int n_start, int sm, int
     restriction_eps(eps_z, eps_z_c, s1, s2, AXIS_Z);
 
     // Restrict k2_screen to coarse grid
-    restriction(k2_screen, k2_screen_c, s1, s2, n_start); // k2_screen is cell-centered so we can use same restriction as for rhs
+    restriction_k2screen(k2_screen, k2_screen_c, s1, s2, n_start); 
 
     // 4) coarse solve (recursive)
     res = v_cycle_pb(rhs, eps, s1_nxt, s2_nxt, n_start_nxt, sm, depth + 1, eps_x_c, eps_y_c, eps_z_c, k2_screen_c);
@@ -497,6 +497,75 @@ void restriction_eps(double *eps_in, double *eps_out, int s1, int s2, int axis) 
     }
 }
 
+
+/*
+ * Restriction per campi cell-centered (es. k2_screen).
+ * Fine:  s1 x s2 x s2
+ * Coarse:(s1/2) x (s2/2) x (s2/2)
+ * - PBC in i, j, k tramite tabelle precompute (no ghost richiesti).
+ * - Offset cell-centered: i_offset = 1 - (n_start % 2)
+ * - s1 e s2 devono essere pari.
+ */
+void restriction_k2screen(const double *in, double *out, int s1, int s2, int n_start)
+{
+    const int s3  = s2 / 2;
+    const long n2 = (long)s2 * s2;
+    const long n3 = (long)s3 * s3;
+    const double inv8 = 1.0 / 8.0;
+
+    // Check veloci
+    if ((s1 & 1) || (s2 & 1)) {
+        fprintf(stderr, "restriction_k2screen: s1 (%d) e s2 (%d) devono essere pari\n", s1, s2);
+        exit(1);
+    }
+
+    // Offset per campi cell-centered: complementare ai nodi
+    const int i_offset = 1 - (n_start % 2);
+
+    // Tabelle PBC per i (in stride di piani), j e k
+    long iprev[s1], inext[s1];
+    long jnext[s2];
+    int  knext[s2];
+
+    for (int i = 0; i < s1; ++i) {
+        int im = (i - 1 + s1) % s1;
+        int ip = (i + 1) % s1;
+        iprev[i] = (long)im * n2;
+        inext[i] = (long)ip * n2;
+    }
+    for (int t = 0; t < s2; ++t) {
+        int tp = (t + 1) % s2;
+        knext[t] = tp;
+        jnext[t] = (long)tp * s2;
+    }
+
+    #pragma omp parallel for
+    for (int i = i_offset; i < s1; i += 2) {
+        long i0 = (long)i * n2;
+        long i1 = inext[i];              // wrap periodico lungo i
+        long a  = (long)(i / 2) * n3;
+
+        for (int j = 0; j < s2; j += 2) {
+            long j0 = (long)j * s2;
+            long j1 = jnext[j];
+            long b  = (long)(j / 2) * s3;
+
+            for (int k = 0; k < s2; k += 2) {
+                int  k0 = k;
+                int  k1 = knext[k];
+                long c  = k / 2;
+
+                double sum =
+                    in[i0 + j0 + k0] + in[i0 + j0 + k1] +
+                    in[i0 + j1 + k0] + in[i0 + j1 + k1] +
+                    in[i1 + j0 + k0] + in[i1 + j0 + k1] +
+                    in[i1 + j1 + k0] + in[i1 + j1 + k1];
+
+                out[a + b + c] = inv8 * sum;
+            }
+        }
+    }
+}
 
 /*
 Apply the Jacobi smoothing method to solve the PB equation.
