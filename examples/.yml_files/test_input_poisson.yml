@@ -20,11 +20,13 @@ md_variables:
   not_elec: TRUE                # LJ or Tosi-Fumi ON/OFF 
 
 output_settings: 
-  restart: false                 # restart the simulation using the restart file 
+  path: 'Outputs/'              # path and name of the output folder
+  restart: false                # restart the simulation using the restart file 
   print_tot_force: false        # print sum of total forces on the particles
   print_field: false            # print the electrostatic potential along the x axis
-  print_performance: false       # print performance of the simulation
+  print_performance: false      # print performance of the simulation
   print_solute: true           # print positions, velocities and electrostatic forces on the particles
   print_energy: true           # print kinetic and not electrostatic potential energy
   print_temperature: true      # print temperature of the system
+  print_momentum: true         # print momentum of the system
   generate_restart_file: true  # generate restart file at the end of the simulation

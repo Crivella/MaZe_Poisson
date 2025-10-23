@@ -12,6 +12,7 @@ class OutputFiles:
     file_output_temperature = None
     file_output_solute = None
     file_output_tot_force = None
+    file_output_momentum = None
 
 
 open_files = []
@@ -47,6 +48,9 @@ def generate_output_files(grid, md_variables):
     output_settings = grid.output_settings
     md_variables = grid.md_variables
     path = output_settings.path
+
+    if not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
 
     output_files = OutputFiles()
 
@@ -86,6 +90,11 @@ def generate_output_files(grid, md_variables):
         output_temperature = prepare_output_file('temperature.csv')
         output_files.file_output_temperature = generate_output_file(output_temperature)
         output_files.file_output_temperature.write("iter,T\n")
+    
+    if output_settings.print_momentum:
+        output_momentum = prepare_output_file('momentum.csv')
+        output_files.file_output_momentum = generate_output_file(output_momentum)
+        output_files.file_output_momentum.write("iter,Px,Py,Pz\n")
 
     if output_settings.print_solute:
         output_solute = prepare_output_file('solute.csv')

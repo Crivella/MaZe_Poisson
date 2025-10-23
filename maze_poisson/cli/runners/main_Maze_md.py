@@ -203,6 +203,10 @@ def main(grid_setting, output_settings, md_variables):
                 field_x_MaZe = np.array([grid.phi[l, j, k] for l in range(N)])
                 for n in range(N):
                     ofiles.file_output_field.write(str(i - init_steps) + ',' + str(X[n] * a0) + ',' + str(field_x_MaZe[n] * V) + '\n')
+            
+            if output_settings.print_momentum:
+                total_momentum = grid.particles.GetTotMomentum()
+                ofiles.file_output_momentum.write(f"{i - init_steps},{total_momentum[0]},{total_momentum[1]},{total_momentum[2]}\n")
 
     if output_settings.generate_restart_file:
         ofiles.file_output_solute.flush()

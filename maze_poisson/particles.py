@@ -279,6 +279,9 @@ class Particles:
             np.sum(phi_values * g_x * g_y * g_prime_z)
         ])
 
+    def GetTotMomentum(self) -> np.ndarray:
+        momentum = np.sum(self.masses[:, None] * self.vel, axis=0)
+        return momentum
 
   
 # distance with periodic boundary conditions
