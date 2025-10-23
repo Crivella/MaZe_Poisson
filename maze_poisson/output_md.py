@@ -41,20 +41,20 @@ def generate_output_files(grid, md_variables):
 
     if output_settings.print_field:
         os.makedirs(path, exist_ok=True)
-        output_field = os.path.join(path, 'field_N' + str(N) +'_'+str(num_threads)+'.csv')
+        output_field = os.path.join(path, 'field.csv')
         output_files.file_output_field = generate_output_file(output_field)
         output_files.file_output_field.write("iter,x,MaZe\n")
 
     if output_settings.print_performance:
         os.makedirs(path, exist_ok=True)
         # output_performance = os.path.join(path, 'performance_N' + str(N) +'_'+str(N_p)+'.csv')
-        output_performance = os.path.join(path, 'performance_N' + str(N) +'.csv')
+        output_performance = os.path.join(path, 'performance.csv')
         output_files.file_output_performance = generate_output_file(output_performance)
         output_files.file_output_performance.write("iter,time,n_iters\n")
 
     if output_settings.print_iters:
         os.makedirs(path, exist_ok=True)
-        output_iters = os.path.join(path, 'iters_N' + str(N) +'.csv')
+        output_iters = os.path.join(path, 'iters.csv')
         output_files.file_output_iters = generate_output_file(output_iters)
         output_files.file_output_iters.write("iter,max_sigma,norm\n")
 
@@ -62,21 +62,21 @@ def generate_output_files(grid, md_variables):
     if output_settings.print_energy:
         os.makedirs(path, exist_ok=True)
         # output_energy = os.path.join(path, 'energy_N' + str(N) +'_'+str(num_threads)+'.csv')
-        output_energy = os.path.join(path, 'energy_N' + str(N) +'.csv')
+        output_energy = os.path.join(path, 'energy.csv')
         output_files.file_output_energy = generate_output_file(output_energy)
         output_files.file_output_energy.write("iter,K,V_notelec\n")
 
     if output_settings.print_temperature:
         os.makedirs(path, exist_ok=True)
         # output_temperature = os.path.join(path, 'temperature_N' + str(N) +'_'+str(num_threads)+ '.csv')
-        output_temperature = os.path.join(path, 'temperature_N' + str(N) +'.csv')
+        output_temperature = os.path.join(path, 'temperature.csv')
         output_files.file_output_temperature = generate_output_file(output_temperature)
         output_files.file_output_temperature.write("iter,T\n")
 
     if output_settings.print_solute:
         os.makedirs(path, exist_ok=True)
         # output_solute = os.path.join(path, 'solute_N' + str(N) +'_'+str(num_threads)+'.csv')
-        output_solute = os.path.join(path, 'solute_N' + str(N) +'.csv')
+        output_solute = os.path.join(path, 'solute.csv')
         output_files.file_output_solute = generate_output_file(output_solute)
         output_files.file_output_solute.write("charge,iter,particle,x,y,z,vx,vy,vz,fx_elec,fy_elec,fz_elec\n")
 

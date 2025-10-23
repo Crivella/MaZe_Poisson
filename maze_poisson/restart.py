@@ -10,10 +10,10 @@ def generate_restart(md_variables, grid_setting, output_settings, iter = None):
     N_p = grid_setting.N_p
     N = grid_setting.N
     path = output_settings.path
-    restart_path = os.path.join('restart_files', 'density_'+str(np.round(density,3)))
+    restart_path = os.path.join('Outputs')
     if thermostat == True: 
         path = os.path.join(path, 'Thermostatted')
-    filename = os.path.join(path, 'solute_N' + str(N) + '_N_p_'+str(N_p)+ '.csv')
+    filename = os.path.join(path, 'solute.csv')
 
     df = pd.read_csv(filename)
     m_Na = 22.99
@@ -39,9 +39,9 @@ def generate_restart(md_variables, grid_setting, output_settings, iter = None):
     print(new_df.head())
 
     if iter == None:
-        filename_output = os.path.join(restart_path, 'restart_N' + str(N) + '_N_p_'+ str(N_p) + '_iter' + str(max) + '.csv')
+        filename_output = os.path.join(restart_path, 'restart.csv')
     else:
-        filename_output = os.path.join(restart_path, 'restart_N' + str(N) + '_N_p_'+ str(N_p) + '_iter' + str(iter) + '.csv')
+        filename_output = os.path.join(restart_path, 'restart.csv')
 
     new_df.to_csv(filename_output, index=False)
 
