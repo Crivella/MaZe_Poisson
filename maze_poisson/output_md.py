@@ -3,6 +3,7 @@ import os
 
 num_threads = int(os.environ.get("OMP_NUM_THREADS", 1))
 
+
 class OutputFiles:
     file_output_field = None
     file_output_performance = None
@@ -12,14 +13,29 @@ class OutputFiles:
     file_output_solute = None
     file_output_tot_force = None
 
+
 open_files = []
 
+
+def remove_existing_file(path: str):
+    """If a file already exists at `path`, remove it safely."""
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+            print(f"Removed existing file: {path}")
+        except Exception as e:
+            print(f"Failed to remove {path}: {e}")
+
+
 def generate_output_file(out_path, overwrite=True):
+    """Create (and register) an output file, overwriting if needed."""
+    # Always remove the file if it already exists in the same directory
     if os.path.exists(out_path):
         if overwrite:
-            os.remove(out_path)
+            remove_existing_file(out_path)
         else:
             raise ValueError(f"File {out_path} already exists")
+
     res = open(out_path, 'w')
     open_files.append(res)
     return res
@@ -37,60 +53,58 @@ def generate_output_files(grid, md_variables):
     if md_variables.thermostat:
         thermostat_path = os.path.join(path, 'Thermostatted')
         os.makedirs(thermostat_path, exist_ok=True)
-        path = thermostat_path  # if thermostating is true then this has to take place.
+        path = thermostat_path
+
+    # Helper function to create directories and clean files
+    def prepare_output_file(filename):
+        os.makedirs(path, exist_ok=True)
+        full_path = os.path.join(path, filename)
+        remove_existing_file(full_path)
+        return full_path
 
     if output_settings.print_field:
-        os.makedirs(path, exist_ok=True)
-        output_field = os.path.join(path, 'field.csv')
+        output_field = prepare_output_file('field.csv')
         output_files.file_output_field = generate_output_file(output_field)
         output_files.file_output_field.write("iter,x,MaZe\n")
 
     if output_settings.print_performance:
-        os.makedirs(path, exist_ok=True)
-        # output_performance = os.path.join(path, 'performance_N' + str(N) +'_'+str(N_p)+'.csv')
-        output_performance = os.path.join(path, 'performance.csv')
+        output_performance = prepare_output_file('performance.csv')
         output_files.file_output_performance = generate_output_file(output_performance)
         output_files.file_output_performance.write("iter,time,n_iters\n")
 
     if output_settings.print_iters:
-        os.makedirs(path, exist_ok=True)
-        output_iters = os.path.join(path, 'iters.csv')
+        output_iters = prepare_output_file('iters.csv')
         output_files.file_output_iters = generate_output_file(output_iters)
         output_files.file_output_iters.write("iter,max_sigma,norm\n")
 
-    # prints only kinetic and non electrostatic potential
     if output_settings.print_energy:
-        os.makedirs(path, exist_ok=True)
-        # output_energy = os.path.join(path, 'energy_N' + str(N) +'_'+str(num_threads)+'.csv')
-        output_energy = os.path.join(path, 'energy.csv')
+        output_energy = prepare_output_file('energy.csv')
         output_files.file_output_energy = generate_output_file(output_energy)
         output_files.file_output_energy.write("iter,K,V_notelec\n")
 
     if output_settings.print_temperature:
-        os.makedirs(path, exist_ok=True)
-        # output_temperature = os.path.join(path, 'temperature_N' + str(N) +'_'+str(num_threads)+ '.csv')
-        output_temperature = os.path.join(path, 'temperature.csv')
+        output_temperature = prepare_output_file('temperature.csv')
         output_files.file_output_temperature = generate_output_file(output_temperature)
         output_files.file_output_temperature.write("iter,T\n")
 
     if output_settings.print_solute:
-        os.makedirs(path, exist_ok=True)
-        # output_solute = os.path.join(path, 'solute_N' + str(N) +'_'+str(num_threads)+'.csv')
-        output_solute = os.path.join(path, 'solute.csv')
+        output_solute = prepare_output_file('solute.csv')
         output_files.file_output_solute = generate_output_file(output_solute)
-        output_files.file_output_solute.write("charge,iter,particle,x,y,z,vx,vy,vz,fx_elec,fy_elec,fz_elec\n")
+        output_files.file_output_solute.write(
+            "charge,iter,particle,x,y,z,vx,vy,vz,fx_elec,fy_elec,fz_elec\n"
+        )
 
     if output_settings.print_tot_force:
-        os.makedirs(path, exist_ok=True)
-        # output_tot_force = os.path.join(path, 'tot_force_N' + str(N) +'_'+str(num_threads)+'.csv')
-        output_tot_force = os.path.join(path, 'tot_force_N' + str(N) +'.csv')
+        output_tot_force = prepare_output_file(f"tot_force_N{N}.csv")
         output_files.file_output_tot_force = generate_output_file(output_tot_force)
         output_files.file_output_tot_force.write("iter,Fx,Fy,Fz\n")
 
     return output_files
 
+
 @atexit.register
 def close_output_files():
+    """Ensure all open output files are closed at program exit."""
     not_closed = []
     while open_files:
         app = open_files.pop()
@@ -102,5 +116,4 @@ def close_output_files():
 
     if not_closed:
         open_files.extend(not_closed)
-        print("Some files could not be closed")
-            
+        print("Some files could not be closed.")
