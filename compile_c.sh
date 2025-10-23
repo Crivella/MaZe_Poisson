@@ -1,15 +1,21 @@
 #!/bin/bash
 
-# how to run this: ./compile_c.sh   
-# Print a message indicating the start of the build process
 echo "Building the shared library..."
 
-# Execute the GCC command to build the shared library
-/opt/homebrew/Cellar/gcc/14.2.0_1/bin/gcc-14 -O3 --fast-math -shared laplace.c -o maze_poisson/libmaze_poisson.so -fopenmp -fPIC
+# Check if source file exists
+if [ ! -f "poisson_solver.c" ]; then
+    echo "Error: poisson_solver.c not found in current directory"
+    echo "Available C files:"
+    ls *.c 2>/dev/null || echo "No C files found"
+    exit 1
+fi
 
-# Check if the build was successful
+# Use system GCC with correct syntax
+gcc -O3 -ffast-math -fopenmp -fPIC -shared poisson_solver.c -o libmaze_poisson.so
+
 if [ $? -eq 0 ]; then
-    echo "Build successful! The shared library has been created at 'maze_poisson/libmaze_poisson.so'."
+    echo "Build successful! The shared library has been created as 'libmaze_poisson.so'."
 else
     echo "Build failed. Please check the command and your environment."
+    exit 1
 fi
