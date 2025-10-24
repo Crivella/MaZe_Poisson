@@ -16,6 +16,7 @@ class OutputSettings:
     print_solute = None # to move
     print_energy = None # to move
     print_temperature = None 
+    print_momentum= None 
     print_tot_force = None 
     print_iters = False
     path = 'Outputs/'
