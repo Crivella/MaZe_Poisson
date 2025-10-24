@@ -6,9 +6,10 @@ import pandas as pd
 
 from .maze import maze
 from ..constants import density, m_Cl_amu, m_Na_amu, m_Cl, m_Na
-from .utilities.bcc_generate import generate_bcc_positions as bcc_positions
+from .utilities.generator_input_files import generate_bcc_positions as bcc_positions
+# from .utilities.bcc_generate import generate_bcc_positions as bcc_positions
 from .utilities.convert_to_xyz import convert_csv_to_xyz
-from .utilities.generate_bcc import lattice as bcc_lattice
+# from .utilities.generate_bcc import lattice as bcc_lattice
 from .utilities.get_L_N import get_L_N as _get_L_N
 
 

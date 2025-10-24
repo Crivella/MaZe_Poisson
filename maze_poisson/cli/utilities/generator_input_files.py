@@ -40,38 +40,38 @@ def generate_bcc_positions(box_size, num_particles):
 # PARAMETRI DI GENERAZIONE
 # ---------------------------
 
-L = np.array([13.11])
-num_particles = np.array([64])
+# L = np.array([13.11])
+# num_particles = np.array([64])
 
-folder = 'examples/input_files/'
-old_input_files = True  # <--- change flag here to generate old/new format
+# folder = 'examples/input_files/'
+# old_input_files = True  # <--- change flag here to generate old/new format
 
-m_Na = 22.99
-m_Cl = 35.453
-default_radius = 1.0  
+# m_Na = 22.99
+# m_Cl = 35.453
+# default_radius = 1.0  
 
-# ---------------------------
+# # ---------------------------
 
-for i in range(len(L)):
-    positions = generate_bcc_positions(L[i], num_particles[i])
-    filename = folder + f'input_coord{num_particles[i]}.csv'
+# for i in range(len(L)):
+#     positions = generate_bcc_positions(L[i], num_particles[i])
+#     filename = folder + f'input_coord{num_particles[i]}.csv'
 
-    with open(filename, "w", newline='') as f:
-        writer = csv.writer(f)
+#     with open(filename, "w", newline='') as f:
+#         writer = csv.writer(f)
 
-        if old_input_files:
-            header = ["charge", "mass", "radius", "x", "y", "z"]
-        else:
-            header = ["type", "x", "y", "z"]
-        writer.writerow(header)
+#         if old_input_files:
+#             header = ["charge", "mass", "radius", "x", "y", "z"]
+#         else:
+#             header = ["type", "x", "y", "z"]
+#         writer.writerow(header)
 
-        for idx, pos in enumerate(positions):
-            charge = (-1) ** idx  # +1, -1, +1, ...
-            if old_input_files:
-                mass = m_Na if charge > 0 else m_Cl
-                writer.writerow([charge, mass, default_radius, *pos])
-            else:
-                atom_type = "Na" if charge > 0 else "Cl"
-                writer.writerow([atom_type, *pos])
+#         for idx, pos in enumerate(positions):
+#             charge = (-1) ** idx  # +1, -1, +1, ...
+#             if old_input_files:
+#                 mass = m_Na if charge > 0 else m_Cl
+#                 writer.writerow([charge, mass, default_radius, *pos])
+#             else:
+#                 atom_type = "Na" if charge > 0 else "Cl"
+#                 writer.writerow([atom_type, *pos])
 
-    print(f"CSV file '{filename}' has been generated. (old_input_files={old_input_files})")
+#     print(f"CSV file '{filename}' has been generated. (old_input_files={old_input_files})")
