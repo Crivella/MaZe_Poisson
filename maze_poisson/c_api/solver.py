@@ -27,6 +27,7 @@ capi.register_function(
     'solver_initialize_grid_pois_boltz', None, [
         ctypes.c_double,
         ctypes.c_double,
+        ctypes.c_int
     ],
 )
 

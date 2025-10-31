@@ -1,5 +1,5 @@
 {
-    "cmake.sourceDirectory": "/Users/federica/Documents/PhD_project/GitHub/Working_code_0224/MaZe_Poisson_J/library",
+    "cmake.sourceDirectory": "/Users/federica/Documents/PhD_project/GitHub/Code_Davide/MaZe_Poisson_J/library",
     "files.associations": {
         "multigrid_pb.h": "c"
     }

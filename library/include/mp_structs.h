@@ -46,7 +46,7 @@ void grid_free(grid *grid);
 void particles_free(particles *p);
 void integrator_free(integrator *integrator);
 
-void grid_pb_init(grid *grid, double w, double kbar2);
+void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled);
 void grid_pb_free(grid *grid);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
 double grid_get_energy_elec(grid *grid);
@@ -148,6 +148,7 @@ struct grid {
 
     // Poisson-Boltzmann specific
     int pb_enabled;  // Poisson-Boltzmann enabled
+    int nonpolar_enabled; // Nonpolar forces enabled
     double w;  // Ionic boundary width
     double kbar2;  // Screening factor
 
@@ -196,6 +197,7 @@ struct particles {
 
     // Poisson-Boltzmann specific
     int pb_enabled;  // Poisson-Boltzmann enabled
+    int nonpolar_enabled; // Nonpolar forces enabled
     double gamma_np;
     double beta_np;
     // double *fcs_rf; // Particle reaction field forces (n_p x 3)

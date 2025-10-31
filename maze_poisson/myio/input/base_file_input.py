@@ -122,6 +122,7 @@ class MDVariables(BaseFileInput):
 
     # Poisson-Boltzmann specific
     poisson_boltzmann: bool = False  # Whether to use Poisson-Boltzmann method
+    nonpolar_forces: bool = False # Whether to use non polar forces or not
     gamma_np: float = 0.0  # Non-polarization gamma in kcal/mol/A^2
     beta_np: float = 0.0  # offset in kcal/mol
     probe_radius: float = 1.4 / a0  # Probe radius in a.u.

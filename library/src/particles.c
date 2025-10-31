@@ -566,10 +566,12 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         fcs_db[np3 + 1] -= app1 * delta_phi * phi_center * ry;
                         fcs_db[np3 + 2] -= app1 * delta_phi * phi_center * rz;
 
-                        // *********************** Non-polar forces ***********************
-                        fcs_np[np3    ] -= app1 * app2 * rx;
-                        fcs_np[np3 + 1] -= app1 * app2 * ry;
-                        fcs_np[np3 + 2] -= app1 * app2 * rz;
+                        if (g->nonpolar_enabled){
+                            // *********************** Non-polar forces ***********************
+                            fcs_np[np3    ] -= app1 * app2 * rx;
+                            fcs_np[np3 + 1] -= app1 * app2 * ry;
+                            fcs_np[np3 + 2] -= app1 * app2 * rz;
+                        }
                     } else {
                         // Inside the radius, do nothing
                     }
@@ -594,10 +596,12 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         fcs_db[np3 + 1] -= app1 * delta_phi * phi_center * ry;
                         fcs_db[np3 + 2] -= app1 * delta_phi * phi_center * rz;
 
-                        // *********************** Non-polar forces ***********************
-                        fcs_np[np3    ] += app1 * app2 * rx;
-                        fcs_np[np3 + 1] += app1 * app2 * ry;
-                        fcs_np[np3 + 2] += app1 * app2 * rz;
+                        if (g->nonpolar_enabled){
+                            // *********************** Non-polar forces ***********************
+                            fcs_np[np3    ] += app1 * app2 * rx;
+                            fcs_np[np3 + 1] += app1 * app2 * ry;
+                            fcs_np[np3 + 2] += app1 * app2 * rz;
+                        }
                     } else {
                         // Inside the radius, do nothing
                     }
@@ -623,10 +627,12 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         fcs_db[np3 + 1] -= app1 * delta_phi * phi_center * ry;
                         fcs_db[np3 + 2] -= app1 * delta_phi * phi_center * rz;
 
-                        // *********************** Non-polar forces ***********************
-                        fcs_np[np3    ] -= app1 * app2 * rx;
-                        fcs_np[np3 + 1] -= app1 * app2 * ry;
-                        fcs_np[np3 + 2] -= app1 * app2 * rz;
+                        if (g->nonpolar_enabled){
+                            // *********************** Non-polar forces ***********************
+                            fcs_np[np3    ] -= app1 * app2 * rx;
+                            fcs_np[np3 + 1] -= app1 * app2 * ry;
+                            fcs_np[np3 + 2] -= app1 * app2 * rz;
+                        }
                     } else {
                         // Inside the radius, do nothing
                     }
@@ -651,10 +657,12 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         fcs_db[np3 + 1] -= app1 * delta_phi * phi_center * ry;
                         fcs_db[np3 + 2] -= app1 * delta_phi * phi_center * rz;
 
-                        // *********************** Non-polar forces ***********************
-                        fcs_np[np3    ] += app1 * app2 * rx;
-                        fcs_np[np3 + 1] += app1 * app2 * ry;
-                        fcs_np[np3 + 2] += app1 * app2 * rz;
+                        if (g->nonpolar_enabled){
+                            // *********************** Non-polar forces ***********************
+                            fcs_np[np3    ] += app1 * app2 * rx;
+                            fcs_np[np3 + 1] += app1 * app2 * ry;
+                            fcs_np[np3 + 2] += app1 * app2 * rz;
+                        }
                     } else {
                         // Inside the radius, do nothing
                     }
@@ -680,10 +688,12 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         fcs_db[np3 + 1] -= app1 * delta_phi * phi_center * ry;
                         fcs_db[np3 + 2] -= app1 * delta_phi * phi_center * rz;
 
-                        // *********************** Non-polar forces ***********************
-                        fcs_np[np3    ] -= app1 * app2 * rx;
-                        fcs_np[np3 + 1] -= app1 * app2 * ry;
-                        fcs_np[np3 + 2] -= app1 * app2 * rz;
+                        if (g->nonpolar_enabled){
+                            // *********************** Non-polar forces ***********************
+                            fcs_np[np3    ] -= app1 * app2 * rx;
+                            fcs_np[np3 + 1] -= app1 * app2 * ry;
+                            fcs_np[np3 + 2] -= app1 * app2 * rz;
+                        }
                     } else {
                         // Inside the radius, do nothing
                     }
@@ -708,10 +718,12 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         fcs_db[np3 + 1] -= app1 * delta_phi * phi_center * ry;
                         fcs_db[np3 + 2] -= app1 * delta_phi * phi_center * rz;
 
-                        // *********************** Non-polar forces ***********************
-                        fcs_np[np3    ] += app1 * app2 * rx;
-                        fcs_np[np3 + 1] += app1 * app2 * ry;
-                        fcs_np[np3 + 2] += app1 * app2 * rz;
+                        if (g->nonpolar_enabled){
+                            // *********************** Non-polar forces ***********************
+                            fcs_np[np3    ] += app1 * app2 * rx;
+                            fcs_np[np3 + 1] += app1 * app2 * ry;
+                            fcs_np[np3 + 2] += app1 * app2 * rz;
+                        }
                     } else {
                         // Inside the radius, do nothing
                     }

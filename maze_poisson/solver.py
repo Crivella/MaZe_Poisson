@@ -151,8 +151,14 @@ class SolverMD(Logger):
                 eps_s * cst.eps0 * cst.kB_si * self.mdv.T
             ) * cst.BR ** 2 * self.h ** 2
             self.logger.info("Initializing grid for Poisson-Boltzmann.")
+
+            if self.mdv.nonpolar_forces:
+                nonpolar_enabled = 1
+            else:  
+                nonpolar_enabled = 0   
+
             capi.solver_initialize_grid_pois_boltz(
-                self.gset.w, kbar2
+                self.gset.w, kbar2, nonpolar_enabled
             )
 
     def get_tosi_fumi_params(self, particles) -> np.ndarray:

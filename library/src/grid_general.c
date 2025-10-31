@@ -62,6 +62,7 @@ grid * grid_init(int n, double L, double h, double tol, double eps, int grid_typ
 
 
     new->pb_enabled = 0;  // Poisson-Boltzmann not enabled by default
+    new->nonpolar_enabled = 0; //nonpolar forces not enabled by default
     new->w = 0.0;  // Ionic boundary width
     new->kbar2 = 0.0;  // Screening factor
 
@@ -80,9 +81,10 @@ grid * grid_init(int n, double L, double h, double tol, double eps, int grid_typ
     return new;
 }
 
-void grid_pb_init(grid *grid, double w, double kbar2) {
+void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled) {
     // Initialize the grid for Poisson-Boltzmann simulations
     grid->pb_enabled = 1;  // Enable Poisson-Boltzmann
+    grid->nonpolar_enabled = nonpolar_enabled; //nonpolar forces ON/OFF
     grid->w = w;
     grid->kbar2 = kbar2;
 
