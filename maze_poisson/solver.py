@@ -33,7 +33,7 @@ integrator_map: Dict[str, int] = {
 
 potential_map: Dict[str, int] = {
     # 'TF': 0,
-    # 'LD': 1,
+    # 'LJ': 1,
     # 'SC': 2,
 }
 
@@ -233,6 +233,45 @@ class SolverMD(Logger):
 
         return sc_params_array
 
+    def get_lennard_jones_params(self, particles) -> np.ndarray:
+        """Get the Lennard Jones parameters for the particles."""
+        if self.mdv.potential_params_file is None:
+            raise ValueError("Potential parameters file must be provided for LJ potential.")
+        lj_params = pd.read_csv(self.mdv.potential_params_file)
+        expected = self.N_typs * (self.N_typs + 1) // 2
+        if len(lj_params) != expected:
+            raise ValueError(
+                f"Potential parameters file must have {expected} unique pairs of types."
+            )
+        try:
+            particles.loc[lj_params['type1']]
+            particles.loc[lj_params['type2']]
+        except KeyError as e:
+            raise ValueError(f"Particle type not found in particles file: {e}")
+
+        lj_params.set_index(['type1', 'type2'], inplace=True)
+        if len(lj_params) != len(lj_params.index.unique()):
+            raise ValueError(
+                "Potential parameters file must have unique pairs of types (type1, type2)."
+            )
+        lj_params_array = np.empty((self.N_typs, self.N_typs, 2), dtype=np.float64) * np.nan
+        for t1, t2 in lj_params.index:
+            t1_idx = particles.loc[t1, 'enum']
+            t2_idx = particles.loc[t2, 'enum']
+            if not np.isnan(lj_params_array[t1_idx, t2_idx, 0]):
+                raise ValueError(f"Duplicate potential parameters for types {t1_idx} and {t2_idx}.")
+            if not np.isnan(lj_params_array[t2_idx, t1_idx, 0]):
+                raise ValueError(f"Potential parameters for types {t1_idx} and {t2_idx} must be symmetric.")
+            lj_params_array[t1_idx, t2_idx] = lj_params.loc[(t1, t2), ['sigma', 'epsilon']].values
+            lj_params_array[t2_idx, t1_idx] = lj_params_array[t1_idx, t2_idx]
+        if np.any(np.isnan(lj_params_array)):
+            raise ValueError("Potential parameters for some particle types are missing.")
+        lj_params_array[:, :, 0] /= cst.a0  # ang -> a.u.
+        lj_params_array[:, :, 1] *= cst.kJmol_to_hartree  # kJ/mol -> Hartree
+        lj_params_array = np.ascontiguousarray(lj_params_array.flatten(), dtype=np.float64)
+
+        return lj_params_array
+    
     def initialize_particles(self):
         """Initialize the particles."""
         self.logger.info(f"Reading particle definitions from file: {self.gset.particles_file}")
@@ -291,6 +330,8 @@ class SolverMD(Logger):
 
         if potential == 'TF':
             pot_params = self.get_tosi_fumi_params(particles)
+        elif potential == 'LJ':
+            pot_params = self.get_lennard_jones_params(particles)
         elif potential == 'SC':
             pot_params = self.get_sc_params()
 

@@ -10,7 +10,7 @@
 
 #define PARTICLE_POTENTIAL_TYPE_NUM 3
 #define PARTICLE_POTENTIAL_TYPE_TF 0
-#define PARTICLE_POTENTIAL_TYPE_LD 1
+#define PARTICLE_POTENTIAL_TYPE_LJ 1
 #define PARTICLE_POTENTIAL_TYPE_SC 2
 
 #define CHARGE_ASS_SCHEME_TYPE_NUM 3
@@ -86,15 +86,15 @@ void particles_pb_free(particles *p);
 
 void particles_init_potential(particles *p, int pot_type, double *pot_params);
 void particles_init_potential_tf(particles *p, double *pot_params);
-void particles_init_potential_ld(particles *p, double *pot_params);
+void particles_init_potential_lj(particles *p, double *pot_params);
 void particles_init_potential_sc(particles *p, double *pot_params);
 void particles_update_nearest_neighbors_cic(particles *p);
 void particles_update_nearest_neighbors_spline(particles *p);
 
 double particles_compute_forces_field(particles *p, grid *grid);
 double particles_compute_forces_tf(particles *p);
+double particles_compute_forces_lj(particles *p);
 double particles_compute_forces_sc(particles *p);
-double particles_compute_forces_ld(particles *p);
 double particles_compute_forces_pb(particles *p, grid *grid);
 void particles_compute_forces_tot(particles *p);
 
@@ -193,6 +193,7 @@ struct particles {
     double sigma;
     double epsilon;
     double *tf_params;  // Parameters for the TF potential (7 x n_p x n_p)
+    double *lj_params;  // Parameters for the LJ potential (4 x n_p x n_p)
     double *sc_params;  // Parameters for the SC potential (5)
 
     // Poisson-Boltzmann specific

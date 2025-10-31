@@ -187,6 +187,88 @@ double compute_tf_forces(int n_p, double L, double *pos, double *params, double 
 
 
 /*
+Compute the particle-particle forces using the tabulated Lennard-Jones potential
+
+@param n_p: the number of particles
+@param L: the size of the box
+@param pos: the positions of the particles (n_p, 3)
+@param params: the parameters of the potential [sigma, epsilon] (4, n_p, n_p)
+@param r_cut: the cutoff radius
+@param forces: the output forces on each particle (n_p, 3)
+*/
+double compute_lj_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces) {
+    int ip, jp;
+    int n_p2 = 2 * n_p;
+    long int n_p_pow2 = n_p * n_p;
+    long int idx1, idx2;
+
+    double *sigma_lj = params;
+    double *epsilon_lj = sigma_lj + n_p_pow2;
+    double *alpha = epsilon_lj + n_p_pow2;
+    double *beta = alpha + n_p_pow2;
+
+    double app;
+    double r_diff[3];
+    double r_mag, f_mag, V_mag;
+    double potential_energy = 0.0;
+    double epsilon, sigma, al, be;
+
+    #pragma omp parallel for private(app, ip, jp, r_diff, r_mag, f_mag, V_mag, epsilon, sigma, al, be, idx1, idx2) reduction(+:potential_energy)
+    for (int i = 0; i < n_p; i++) {
+        r_mag = 0.0;
+        ip = i * 3;
+        idx1 = i * n_p;
+        forces[ip] = 0.0;
+        forces[ip + 1] = 0.0;
+        forces[ip + 2] = 0.0;
+        for (int j = 0; j < n_p; j++) {
+            if (i == j) {
+                continue;
+            }
+            jp = 3 * j;
+            app = pos[ip] - pos[jp];
+            app -= L * round(app / L);
+            r_mag = app * app;
+            r_diff[0] = app;
+            app = pos[ip + 1] - pos[jp + 1];
+            app -= L * round(app / L);
+            r_diff[1] = app;
+            r_mag += app * app;
+            app = pos[ip + 2] - pos[jp + 2];
+            app -= L * round(app / L);
+            r_diff[2] = app;
+            r_mag += app * app;
+            r_mag = sqrt(r_mag);
+            if (r_mag > r_cut) {
+                continue;
+            }
+            r_diff[0] /= r_mag;
+            r_diff[1] /= r_mag;
+            r_diff[2] /= r_mag;
+                
+            idx2 = idx1 + j;
+            sigma = sigma_lj[idx2];
+            epsilon = epsilon_lj[idx2];
+            al = alpha[idx2];
+            be = beta[idx2];
+
+            //write f_mag and V_mag for lennard-jones potential
+            f_mag = 4 * epsilon * (12 * pow(sigma / r_mag, 12) - 6 * pow(sigma / r_mag, 6)) / r_mag - al;
+            V_mag = 4 * epsilon * (pow(sigma / r_mag, 12) - pow(sigma / r_mag, 6)) + al * r_mag + be;
+
+            forces[ip] += f_mag * r_diff[0];
+            forces[ip + 1] += f_mag * r_diff[1];
+            forces[ip + 2] += f_mag * r_diff[2];
+
+            potential_energy += V_mag;
+        }
+    }
+
+    return potential_energy / 2;
+}
+
+
+/*
 Compute the particle-particle forces using the SC repulsive potential
 
 @param n_p: the number of particles
