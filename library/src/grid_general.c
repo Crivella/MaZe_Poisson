@@ -21,7 +21,7 @@ char *get_precond_type_str(int n) {
     return precond_type_str[n];
 }
 
-grid * grid_init(int n, double L, double h, double tol, double eps, int grid_type, int precond_type) {
+grid * grid_init(int n, double L, double h, double tol, double eps, double eps_int, int grid_type, int precond_type) {
     void   (*init_func)(grid *);
     switch (grid_type) {
         case GRID_TYPE_LCG:
@@ -50,6 +50,7 @@ grid * grid_init(int n, double L, double h, double tol, double eps, int grid_typ
     new->L = L;
     new->h = h;
     new->eps_s = eps;  // Dielectric constant of the solvent
+    new->eps_int = eps_int;  // Dielectric constant inside the solute
 
     new->n_local = n;
     new->n_start = 0;
@@ -145,6 +146,7 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
     double w = g->w;
 
     double eps_s = g->eps_s;
+    double eps_int = g->eps_int;
     double kbar2 = g->kbar2;
     double r_solv;
 
@@ -165,9 +167,9 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
 
     #pragma omp parallel for
     for (long int i = 0; i < size; i++) {
-        eps_x[i] = (eps_s - 1.0);
-        eps_y[i] = (eps_s - 1.0);
-        eps_z[i] = (eps_s - 1.0);
+        eps_x[i] = (eps_s - eps_int);
+        eps_y[i] = (eps_s - eps_int);
+        eps_z[i] = (eps_s - eps_int);
         k2[i] = kbar2;  // Update screening factor
     }
 
@@ -292,9 +294,9 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
         }
     }
     for (long int i = 0; i < size; i++) {
-        eps_x[i] += 1.0;  // Update x dielectric constant
-        eps_y[i] += 1.0;  // Update y dielectric constant
-        eps_z[i] += 1.0;  // Update z dielectric constant
+        eps_x[i] += eps_int;  // Update x dielectric constant
+        eps_y[i] += eps_int;  // Update y dielectric constant
+        eps_z[i] += eps_int;  // Update z dielectric constant
     }
 }    
 

@@ -38,7 +38,7 @@ typedef struct particles particles;
 typedef struct integrator integrator;
 
 // Struct function definitions
-grid * grid_init(int n, double L, double h, double tol, double eps, int type, int precond_type);
+grid * grid_init(int n, double L, double h, double tol, double eps, double eps_int, int type, int precond_type);
 particles * particles_init(int n, int n_p, int n_typ, double L, double h, int cas_type);
 integrator * integrator_init(int n_p, double dt, int type);
 
@@ -133,6 +133,7 @@ struct grid {
     double L;  // Length of the grid
     double h;  // Grid spacing
     double eps_s;  // Dielectric constant of the solvent
+    double eps_int;  // Dielectric constant inside the solute
 
     long int size;  // Total number of grid points
     int n_local; // X - Number of grid points per dimension (MPI aware)

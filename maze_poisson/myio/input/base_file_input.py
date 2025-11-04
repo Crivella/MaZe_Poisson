@@ -73,6 +73,7 @@ class GridSetting(BaseFileInput):
     L: float
     h: float = None
     eps_s: float = 1.0  # Relative permittivity of the solvent (vacuum by default)
+    eps_int: float = 1.0  # Relative permittivity inside the solute
 
     N_typs: int
 

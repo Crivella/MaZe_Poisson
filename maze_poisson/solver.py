@@ -139,12 +139,13 @@ class SolverMD(Logger):
         grid_id = method_grid_map[method]
         precond_id = precond_map[precond]
         capi.solver_initialize_grid(
-            self.N, self.L, self.h, self.mdv.tol, self.gset.eps_s,
+            self.N, self.L, self.h, self.mdv.tol, self.gset.eps_s, self.gset.eps_int,
             grid_id, precond_id
         )
 
         if self.mdv.poisson_boltzmann:
             eps_s = self.gset.eps_s
+            # eps_int = self.gset.eps_int
             kbar2 = (
                 8 * np.pi * cst.NA * cst.EC**2 * self.gset.I * 1e3
             ) / (

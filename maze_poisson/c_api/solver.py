@@ -17,6 +17,7 @@ capi.register_function(
         ctypes.c_double,
         ctypes.c_double,
         ctypes.c_double,
+        ctypes.c_double,
         ctypes.c_int,
         ctypes.c_int,
     ],

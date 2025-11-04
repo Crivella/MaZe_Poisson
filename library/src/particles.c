@@ -432,6 +432,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
     double w = g->w;
 
     double eps_s = g->eps_s;
+    double eps_int = g->eps_int;
     double kbar2 = g->kbar2;
     double r_solv;
 
@@ -589,7 +590,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         rz = dz / r1;
                         h_ratio = calc_h_ratio(r1 - r_solv + w, w2, w3);
 
-                        app1 = (eps_x_bwd - 1.0) * h_ratio;
+                        app1 = (eps_x_bwd - eps_int) * h_ratio;
                         // *********************** Dielectric boundary forces ***********************
                         delta_phi = g->phi_n[idx_bwd_x] - phi_center;
                         fcs_db[np3    ] -= app1 * delta_phi * phi_center * rx;
@@ -619,7 +620,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         rz = dz / r1;
                         h_ratio = calc_h_ratio(r1 - r_solv + w, w2, w3);
 
-                        app1 = (eps_x_cen - 1.0) * h_ratio;
+                        app1 = (eps_x_cen - eps_int) * h_ratio;
                         // *********************** Dielectric boundary forces ***********************
                         delta_phi = g->phi_n[idx_fwd_x] - phi_center;
                         fcs_db[np3    ] -= app1 * delta_phi * phi_center * rx;
@@ -650,7 +651,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         rz = dz / r1;
                         h_ratio = calc_h_ratio(r1 - r_solv + w, w2, w3);
 
-                        app1 = (eps_y_bwd - 1.0) * h_ratio;
+                        app1 = (eps_y_bwd - eps_int) * h_ratio;
                         // *********************** Dielectric boundary forces ***********************
                         delta_phi = g->phi_n[idx_bwd_y] - phi_center;
                         fcs_db[np3    ] -= app1 * delta_phi * phi_center * rx;
@@ -680,7 +681,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         rz = dz / r1;
                         h_ratio = calc_h_ratio(r1 - r_solv + w, w2, w3);
 
-                        app1 = (eps_y_cen - 1.0) * h_ratio;
+                        app1 = (eps_y_cen - eps_int) * h_ratio;
                         // *********************** Dielectric boundary forces ***********************
                         delta_phi = g->phi_n[idx_fwd_y] - phi_center;
                         fcs_db[np3    ] -= app1 * delta_phi * phi_center * rx;
@@ -711,7 +712,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         rz = app1 / r1;
                         h_ratio = calc_h_ratio(r1 - r_solv + w, w2, w3);
 
-                        app1 = (eps_z_bwd - 1.0) * h_ratio;
+                        app1 = (eps_z_bwd - eps_int) * h_ratio;
                         // *********************** Dielectric boundary forces ***********************
                         delta_phi = g->phi_n[idx_bwd_z] - phi_center;
                         fcs_db[np3    ] -= app1 * delta_phi * phi_center * rx;
@@ -741,7 +742,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
                         rz = app1 / r1;
                         h_ratio = calc_h_ratio(r1 - r_solv + w, w2, w3);
 
-                        app1 = (eps_z_cen - 1.0) * h_ratio;
+                        app1 = (eps_z_cen - eps_int) * h_ratio;
                         // *********************** Dielectric boundary forces ***********************
                         delta_phi = g->phi_n[idx_fwd_z] - phi_center;
                         fcs_db[np3    ] -= app1 * delta_phi * phi_center * rx;
@@ -768,7 +769,7 @@ double particles_compute_forces_pb(particles *p, grid *g) {
 
     dscal(fcs_db, h / (8.0 * M_PI), size);
     dscal(fcs_ib, h / (8.0 * M_PI), size);
-    dscal(fcs_np, -p->gamma_np * h / (eps_s - 1.0), size);
+    dscal(fcs_np, -p->gamma_np * h / (eps_s - eps_int), size);
 
     return non_polar_energy;
 }

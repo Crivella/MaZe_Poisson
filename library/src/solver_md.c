@@ -38,9 +38,9 @@ void solver_initialize() {
 }
 
 void solver_initialize_grid(
-    int n_grid, double L, double h, double tol, double eps, int grid_type, int precond_type
+    int n_grid, double L, double h, double tol, double eps, double eps_int, int grid_type, int precond_type
 ) {
-    g_grid = grid_init(n_grid, L, h, tol, eps, grid_type, precond_type);
+    g_grid = grid_init(n_grid, L, h, tol, eps, eps_int, grid_type, precond_type);
 }
 
 void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enabled) {
