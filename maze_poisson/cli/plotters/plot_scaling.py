@@ -1,5 +1,6 @@
 import os
 
+import matplotlib.ticker
 import matplotlib.pyplot as plt
 import matplotlib.ticker
 import numpy as np
@@ -11,6 +12,7 @@ from ...myio import logger
 label_fontsize=17
 legend_fontsize=15
 
+N_vector = [30,40,50,60,70,80,90,100,110,120] # will change from 10 to 100 once the CG works for 10,20
 N_vector = [30,40,50,60,70,80,90,100,110,120] # will change from 10 to 100 once the CG works for 10,20
 N_vector = np.array(N_vector)
 N_p_vector = [128,250,432,686,1024,1458]
@@ -41,6 +43,7 @@ def plot_time_iterNgrid(N_p):
     path_all_files = [(filename_MaZe + str(i) + '_N_p'+str(N_p)+'.csv') for i in N_vector]
     isExist = [os.path.exists(i) for i in path_all_files]
     if all(isExist) == False:
+        print(isExist)
         print(isExist)
         logger.error(str(len(N_vector))+ " files are needed. The files needed do not exist at "+filename_MaZe)
         raise FileNotFoundError(str(len(N_vector))+ " files are needed. The files needed do not exist at "+filename_MaZe)
@@ -73,6 +76,11 @@ def plot_time_iterNgrid(N_p):
     plt.xlabel('Number of grid points', fontsize=label_fontsize)
     plt.ylabel('Time (s)', fontsize=label_fontsize)
     plt.legend(frameon=False, loc='upper left', fontsize=legend_fontsize)
+    #plt.xscale('log')
+    #plt.yscale('log')
+    plt.xlabel('Number of grid points', fontsize=label_fontsize)
+    plt.ylabel('Time (s)', fontsize=label_fontsize)
+    plt.legend(frameon=False, loc='upper left', fontsize=legend_fontsize)
     title = 'time_per_iter_VS_N3_N_p_'
     plt.grid()
     name =  title +str(N_p)+ ".pdf"
@@ -83,6 +91,7 @@ def plot_time_iterNgrid(N_p):
 def f(x,a,b):
     return a * x + b
 
+# n-iter-vs-n3: plot of n iterations VS N_grid = N^3
 # n-iter-vs-n3: plot of n iterations VS N_grid = N^3
 def plot_convNgrid(N_p):
     path = 'Outputs/'
@@ -122,6 +131,7 @@ def plot_convNgrid(N_p):
     #plt.ylim(0,200)
     #plt.xscale('log')
     plt.legend(frameon=False, loc='upper left', fontsize=legend_fontsize)
+    plt.legend(frameon=False, loc='upper left', fontsize=legend_fontsize)
     plt.grid()
     title='n_iterations_vs_N_grid_N_p_'
     name =  title +str(N_p)+ ".pdf"
@@ -145,6 +155,7 @@ def plot_scaling_particles_time_iters():
     N_p=N_p_vector
     N_p = np.array(N_p)
     df_list_MaZe = [pd.read_csv(path+filename_MaZe + str(i) +'_'+str(j)+ '.csv') for i,j in zip(N_vector, N_p)]
+    df_list_MaZe = [pd.read_csv(path+filename_MaZe + str(i) +'_'+str(j)+ '.csv') for i,j in zip(N_vector, N_p)]
     avg1 = []
     sd1 = []
 
@@ -164,6 +175,9 @@ def plot_scaling_particles_time_iters():
    
     plt.errorbar(N_p, avg1, yerr=sd1, label = 'MaZe', color='r', marker='o', linestyle='', linewidth=1.5, markersize=6, capsize=5)
     plt.plot(x, g(x, a_optMaZe, b_optMaZe),  label=f'fit $ax^b$, b = {b_optMaZe:.2f}')
+    plt.xlabel('Number of particles', fontsize=label_fontsize)
+    plt.ylabel('Time (s)', fontsize=label_fontsize)
+    plt.legend(frameon=False, loc='upper left', fontsize=legend_fontsize)
     plt.xlabel('Number of particles', fontsize=label_fontsize)
     plt.ylabel('Time (s)', fontsize=label_fontsize)
     plt.legend(frameon=False, loc='upper left', fontsize=legend_fontsize)
@@ -190,6 +204,7 @@ def plot_scaling_particles_conv():
     N_vector = [80, 100, 120, 140, 160, 180]
     N_p = np.array(N_p_vector)
     df_list_MaZe = [pd.read_csv(path+filename_MaZe + str(i) +'_'+str(j)+'.csv') for i,j in zip(N_vector,N_p)]
+    df_list_MaZe = [pd.read_csv(path+filename_MaZe + str(i) +'_'+str(j)+'.csv') for i,j in zip(N_vector,N_p)]
     avg1 = []
     sd1 = []
 
@@ -210,6 +225,10 @@ def plot_scaling_particles_conv():
     print(sd1)
     plt.errorbar(N_p, avg1, yerr=sd1, label = 'MaZe', color='r', marker='o', linestyle='', linewidth=1.5, markersize=6, capsize=5)
     plt.plot(x, f(x, a_optMaZe, b_optMaZe), label=f'fit $a\\log{{x}}^b$, b = {b_optMaZe:.2f}') 
+    plt.xlabel('Number of particles', fontsize=label_fontsize)
+    plt.ylabel('# Iterations', fontsize=label_fontsize)
+    #plt.xscale('log')
+    plt.legend(frameon=False, loc='upper left', fontsize=legend_fontsize)
     plt.xlabel('Number of particles', fontsize=label_fontsize)
     plt.ylabel('# Iterations', fontsize=label_fontsize)
     #plt.xscale('log')
@@ -253,6 +272,7 @@ def iter_vs_threads():
     plt.ylabel('# iterations', fontsize=label_fontsize)
     #plt.xscale('log')
     plt.legend(frameon=False, loc='upper left', fontsize=legend_fontsize)
+    plt.legend(frameon=False, loc='upper left', fontsize=legend_fontsize)
     plt.grid()
     title='iterations_vs_threads'
     name =  title + ".pdf"
@@ -263,12 +283,14 @@ def iter_vs_threads():
 def time_vs_threads():
     # plotting strong scaling and weak scaling as references
     filename_strong='performance_N100_'
+    filename_strong='performance_N100_'
     path = 'Outputs/'
     path_pdf = path + 'PDFs/'
     
     os.makedirs(path_pdf, exist_ok=True)
 
     data1 = "time"
+    threads = np.array([1, 2, 4, 8, 16, 32, 64])
     threads = np.array([1, 2, 4, 8, 16, 32, 64])
     df_list_strong = [pd.read_csv(path+filename_strong + str(i) +'.csv') for i in threads]
     avg1 = []
@@ -284,6 +306,10 @@ def time_vs_threads():
 
     for i in range(len(avg1)):
         speedup.append(avg1[0]/avg1[i])
+    speedup=[]
+
+    for i in range(len(avg1)):
+        speedup.append(avg1[0]/avg1[i])
 
     x = threads
     poptMaZe, _ = curve_fit(g, x, avg1, sigma = sd1, absolute_sigma=True)
@@ -294,7 +320,10 @@ def time_vs_threads():
     plt.plot(x, g(x, a_optMaZe, b_optMaZe), label=f'fit $ax^b$, b = {b_optMaZe:.2f} a = {a_optMaZe:.2f}') 
     plt.xlabel('Number of threads', fontsize=label_fontsize)
     plt.ylabel('time per iteration (s)', fontsize=label_fontsize)
+    plt.xlabel('Number of threads', fontsize=label_fontsize)
+    plt.ylabel('time per iteration (s)', fontsize=label_fontsize)
     #plt.xscale('log')
+    plt.legend(frameon=False, loc='upper right', fontsize=legend_fontsize)
     plt.legend(frameon=False, loc='upper right', fontsize=legend_fontsize)
     plt.grid()
     title='time_vs_threads'
@@ -450,9 +479,11 @@ def iter_vs_tol():
     plt.ylabel('# iterations', fontsize=label_fontsize)
     #plt.xscale('log')
     plt.legend(frameon=False, loc='upper right', fontsize=legend_fontsize)
+    plt.legend(frameon=False, loc='upper right', fontsize=legend_fontsize)
     plt.grid()
     plt.title("N_p=250, N=100, dt=0.25")
     title='iterations_vs_tol'
     name =  title + ".pdf"
     plt.savefig(path_pdf+name, format='pdf')
     plt.show()
+

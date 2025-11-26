@@ -26,3 +26,8 @@ kJmol_to_hartree = 0.0003808798
 density = 1.3793 # this is the new value, g/cm^3
 ref_L=20.64
 ref_N=100
+
+# for the graphs
+label_fontsize=14
+legend_fontsize=12
+

@@ -162,3 +162,16 @@ examples/Outputs/**/*.csv
 examples/**
 functions.cpp
 .DS_Store
+examples/cluster_log_files/**/*.out/
+examples/cluster_log_files/log_N100_threads1_job28879174.out
+examples/cluster_log_files/log_N100_threads1_job28887376.out
+examples/cluster_log_files/log_N100_threads2_job28879207.out
+examples/cluster_log_files/log_N100_threads4_job28879208.out
+examples/cluster_log_files/log_N100_threads8_job28879215.out
+examples/cluster_log_files/log_N100_threads16_job28879234.out
+examples/cluster_log_files/log_N100_threads32_job28879235.out
+examples/cluster_log_files/log_N100_threads64_job28879250.out
+examples/cluster_log_files/log_temp_28889863.out
+examples/cluster_log_files/log_temp_28890601.out
+
+rough.py
