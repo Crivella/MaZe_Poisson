@@ -94,6 +94,27 @@ capi.register_function(
     ],
 )
 
+# void get_fcs_db(double *recv) {
+capi.register_function(
+    'get_fcs_db', None, [
+        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void get_fcs_ib(double *recv) {
+capi.register_function(
+    'get_fcs_ib', None, [
+        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void get_fcs_np(double *recv) {
+capi.register_function(
+    'get_fcs_np', None, [
+        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+    ],
+)
+
 # void get_fcs_tot(double *recv) {
 capi.register_function(
     'get_fcs_tot', None, [
@@ -101,16 +122,30 @@ capi.register_function(
     ],
 )
 
-# void get_charges(long int *recv) {
+# void get_charges(double *recv) {
 capi.register_function(
     'get_charges', None, [
-        npct.ndpointer(dtype=np.int64, ndim=1, flags='C_CONTIGUOUS'),
+        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void get_types(int *recv) {
+capi.register_function(
+    'get_types', None, [
+        npct.ndpointer(dtype=np.int32, ndim=1, flags='C_CONTIGUOUS'),
     ],
 )
 
 # void get_masses(double *recv) {
 capi.register_function(
     'get_masses', None, [
+        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void get_radii(double *recv) {
+capi.register_function(
+    'get_radii', None, [
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
     ],
 )
@@ -139,6 +174,11 @@ capi.register_function(
 # double get_kinetic_energy() {
 capi.register_function(
     'get_kinetic_energy', ctypes.c_double, [],
+)
+
+# double get_energy_elec() {
+capi.register_function(
+    'get_energy_elec', ctypes.c_double, [],
 )
 
 # void get_momentum(double *recv) {

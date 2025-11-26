@@ -12,7 +12,7 @@
 #include "multigrid.h"
 
 #ifdef __MPI
-void lcg_grid_init_mpi(grid *grid) {
+void maze_lcg_grid_init_mpi(grid *grid) {
     mpi_data *mpid = get_mpi_data();
 
     int n = grid->n;
@@ -44,7 +44,7 @@ void lcg_grid_init_mpi(grid *grid) {
 
 #else  // __MPI
 
-void lcg_grid_init_mpi(grid *grid) {
+void maze_lcg_grid_init_mpi(grid *grid) {
     mpi_data *mpid = get_mpi_data();
     mpid->n_loc = grid->n;
     mpid->n_start = 0;
@@ -52,13 +52,13 @@ void lcg_grid_init_mpi(grid *grid) {
 
 #endif  // __MPI
 
-void lcg_grid_init(grid * grid) {
+void maze_lcg_grid_init(grid * grid) {
     int n_loc = grid->n_local;
     int n = grid->n;
 
     long int n2 = n * n;
 
-    lcg_grid_init_mpi(grid);
+    maze_lcg_grid_init_mpi(grid);
 
     long int size = grid->n_local * n2;
     grid->size = size;
@@ -68,9 +68,9 @@ void lcg_grid_init(grid * grid) {
     grid->phi_p = mpi_grid_allocate(n_loc, n);
     grid->phi_n = mpi_grid_allocate(n_loc, n);
 
-    grid->init_field = lcg_grid_init_field;
-    grid->update_field = lcg_grid_update_field;
-    grid->update_charges = lcg_grid_update_charges;
+    grid->init_field = maze_lcg_grid_init_field;
+    grid->update_field = maze_lcg_grid_update_field;
+    grid->update_charges = maze_lcg_grid_update_charges;
 
     switch (grid->precond_type) {
         case PRECOND_TYPE_BLOCKJACOBI:
@@ -81,7 +81,7 @@ void lcg_grid_init(grid * grid) {
     }
 }
 
-void lcg_grid_cleanup(grid * grid) {
+void maze_lcg_grid_cleanup(grid * grid) {
     free(grid->q);
 
     switch (grid->precond_type) {
@@ -97,7 +97,7 @@ void lcg_grid_cleanup(grid * grid) {
     mpi_grid_free(grid->phi_n, grid->n);
 }
 
-void lcg_grid_init_field(grid *grid) {
+void maze_lcg_grid_init_field(grid *grid) {
     long int i;
 
     double constant = -4 * M_PI / grid->h;
@@ -123,32 +123,50 @@ void lcg_grid_init_field(grid *grid) {
     }
 }
 
-int lcg_grid_update_field(grid *grid) {
-    int res;
-    double constant = -4 * M_PI / grid->h;
+int maze_lcg_grid_update_field(grid *grid) {
+    void (*precond)(double *, double *, int, int, int);
 
-    if ( ! grid->pb_enabled) {
-        constant /= grid->eps_s;  // Scale by the dielectric constant if not using PB explicitly
+    switch (grid->precond_type) {
+        case PRECOND_TYPE_NONE:
+            precond = NULL;
+            break;
+        case PRECOND_TYPE_JACOBI:
+            precond = precond_jacobi_apply;
+            break;
+        case PRECOND_TYPE_MG:
+            precond = precond_mg_apply;
+            break;
+        case PRECOND_TYPE_SSOR:
+            precond = precond_ssor_apply;
+            break;
+        case PRECOND_TYPE_BLOCKJACOBI:
+            precond = precond_blockjacobi_apply;
+            break;
+        default:
+            break;
     }
 
-    memcpy(grid->phi_p, grid->phi_n, grid->size * sizeof(double));  // phi_prev = phi_n
-    
-    // y = constant * q
-    memcpy(grid->y, grid->q, grid->size * sizeof(double));
-    dscal(grid->y, constant, grid->size);
+    int res;
 
     if (grid->pb_enabled) {
-        res = conj_grad_pb(
-            grid->y, grid->phi_p, grid->phi_n, grid->tol, grid->n_local, grid->n,
+        res = verlet_poisson_pb(
+            grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
+            grid->n_local, grid->n,
             grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
         );
-    } else { 
-        res = conj_grad(grid->y, grid->phi_p, grid->phi_n, grid->tol, grid->n_local, grid->n);
+    } else {
+        // Using fact that h is only used in (4 * pi / h) factor so multiplying by eps means:
+        // sigma_p = M.phi + 4 * pi * rho / h  ->  sigma_p = M.phi + 4 * pi * rho / (h * eps)
+        res = verlet_poisson(
+            grid->tol, grid->h * grid->eps_s, grid->phi_n, grid->phi_p, grid->q, grid->y,
+            grid->n_local, grid->n,
+            precond
+        );
     }
     return res;
 }   
 
-double lcg_grid_update_charges(grid *grid, particles *p) {
+double maze_lcg_grid_update_charges(grid *grid, particles *p) {
     return update_charges(
         grid->n, p->n_p, grid->h, p->num_neighbors,
         p->pos, p->neighbors, p->charges, grid->q,

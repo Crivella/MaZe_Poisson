@@ -20,7 +20,7 @@ class CSVOutputFile(BaseOutputFile):
 
     def write_data(self, iter: int, solver = None, mode: str = 'a', mpi_bypass: bool = False):
         if not self.enabled:
-            # Needed when the get_data method needs to be called on all ranks to avoid MPI deadlock
+            # Needed when the get_data method needs to be called on all ranks to avoid MPI deadlock/desyncs
             if self._enabled and mpi_bypass:
                 self.get_data(iter, solver)
             return
@@ -44,13 +44,19 @@ class CSVOutputFile(BaseOutputFile):
 
 class EnergyCSVOutputFile(CSVOutputFile):
     name = 'energy'
+    # headers = ['iter', 'K', 'V_notelec', 'V_elec', 'DeltaG_nonpolar']
     headers = ['iter', 'K', 'V_notelec']
+    
     def get_data(self, iter: int, solver):
         kin = capi.get_kinetic_energy()
+        # deltaG_elec = capi.get_energy_elec()  # Needs mpi_bypass=True
+
         return pd.DataFrame({
             'iter': [iter],
             'K': [kin],
-            'V_notelec': [solver.potential_notelec]
+            'V_notelec': [solver.potential_notelec],
+            # 'V_elec': [deltaG_elec],
+            # 'DeltaG_nonpolar': [solver.energy_nonpolar],
         })
 
 class MomentumCSVOutputFile(CSVOutputFile):
@@ -66,14 +72,41 @@ class MomentumCSVOutputFile(CSVOutputFile):
             'Pz': [momentum[2]]
         })
 
-class ForcesCSVOutputFile(CSVOutputFile):
-    name = 'forces'
+class TotForcesCSVOutputFile(CSVOutputFile):
+    name = 'forces_tot'
     headers = ['iter', 'Fx', 'Fy', 'Fz']
     def get_data(self, iter: int, solver):
         forces = np.empty((solver.N_p, 3), dtype=np.float64)
         capi.get_fcs_tot(forces)
         df = pd.DataFrame(forces.sum(axis=0).reshape(1,3), columns=['Fx', 'Fy', 'Fz'])
         df['iter'] = iter
+        return df
+
+class ForcesPBoltzCSVOutputFile(CSVOutputFile):
+    name = 'forces_pb'
+    headers = [
+        'iter', 'particle',
+        'Fx_RF', 'Fy_RF', 'Fz_RF',
+        'Fx_DB', 'Fy_DB', 'Fz_DB', 'Fx_IB', 'Fy_IB', 'Fz_IB', 'Fx_NP', 'Fy_NP', 'Fz_NP'
+        ]
+    def get_data(self, iter: int, solver):
+        df = pd.DataFrame()
+        forces = np.empty((solver.N_p, 3), dtype=np.float64)
+
+        capi.get_fcs_elec(forces)
+        df[['Fx_RF', 'Fy_RF', 'Fz_RF']] = forces
+
+        capi.get_fcs_db(forces)
+        df[['Fx_DB', 'Fy_DB', 'Fz_DB']] = forces
+
+        capi.get_fcs_ib(forces)
+        df[['Fx_IB', 'Fy_IB', 'Fz_IB']] = forces
+
+        capi.get_fcs_np(forces)
+        df[['Fx_NP', 'Fy_NP', 'Fz_NP']] = forces
+
+        df['iter'] = iter
+        df['particle'] = range(solver.N_p)
         return df
 
 class TemperatureCSVOutputFile(CSVOutputFile):
@@ -100,7 +133,7 @@ class SolutesCSVOutputFile(CSVOutputFile):
         capi.get_fcs_elec(tmp)
         df[['fx_elec', 'fy_elec', 'fz_elec']] = tmp
 
-        tmp = np.empty(solver.N_p, dtype=np.int64)
+        tmp = np.empty(solver.N_p, dtype=np.float64)
         capi.get_charges(tmp)
         df['charge'] = tmp
 
@@ -120,7 +153,7 @@ class PerformanceCSVOutputFile(CSVOutputFile):
 
 class RestartCSVOutputFile(CSVOutputFile):
     name = 'restart'
-    headers = ['charge', 'mass', 'x', 'y', 'z', 'vx', 'vy', 'vz']
+    headers = ['type', 'x', 'y', 'z', 'vx', 'vy', 'vz']
     def get_data(self, iter: int, solver):
         df = pd.DataFrame()
 
@@ -130,12 +163,9 @@ class RestartCSVOutputFile(CSVOutputFile):
         capi.get_vel(tmp)
         df[['vx', 'vy', 'vz']] = tmp
 
-        tmp = np.empty(solver.N_p, dtype=np.int64)
-        capi.get_charges(tmp)
-        df['charge'] = tmp
-        tmp = np.empty(solver.N_p, dtype=np.float64)
-        capi.get_masses(tmp)
-        df['mass'] = tmp / conv_mass
+        tmp = np.empty(solver.N_p, dtype=np.int32)
+        capi.get_types(tmp)
+        df['type'] = [solver.types_num_to_str[t] for t in tmp]
 
         return df
 
@@ -161,7 +191,8 @@ OutputFiles.register_format(
         'momentum': MomentumCSVOutputFile,
         'temperature': TemperatureCSVOutputFile,
         'solute': SolutesCSVOutputFile,
-        'tot_force': ForcesCSVOutputFile,
+        'tot_force': TotForcesCSVOutputFile,
+        'forces_pb': ForcesPBoltzCSVOutputFile,
         'restart': RestartCSVOutputFile,
         'restart_field': RestartFieldCSVOutputFile
     }

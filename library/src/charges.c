@@ -41,7 +41,7 @@ double spread_spline_cubic(double x, double L, double h) {
 
 double update_charges(
     int n_grid, int n_p, double h, int num_neigh,
-    double *pos, long int *neighbors, long int *charges, double *q,
+    double *pos, long int *neighbors, double *charges, double *q,
     double (*g)(double, double, double)
 ) {
     int nn3 = num_neigh * 3;
@@ -57,7 +57,7 @@ double update_charges(
 
     double L = n_grid * h;
     double q_tot = 0.0;
-    long int chg;
+    double chg;
     double app, upd;
 
     #pragma omp parallel for
@@ -99,7 +99,7 @@ double update_charges(
 
 double update_charges(
     int n_grid, int n_p, double h, int num_neigh,
-    double *pos, long int *neighbors, long int *charges, double *q,
+    double *pos, long int *neighbors, double *charges, double *q,
     double (*g)(double, double, double)
 ) {
     int nn3 = num_neigh * 3;
@@ -112,7 +112,7 @@ double update_charges(
 
     double L = n_grid * h;
     double q_tot = 0.0;
-    long int chg;
+    double chg;
     double app, upd;
 
     #pragma omp parallel for

@@ -1,6 +1,7 @@
 import atexit
 import json
 import os
+import time
 from abc import ABC, abstractmethod
 from io import StringIO
 
@@ -76,11 +77,14 @@ class OutputFiles:
     temperature = None
     solute = None
     tot_force = None
+    forces_pb = None
     restart = None
     restart_field = None
 
-    files = ['performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force']
+    files = ['performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force', 'forces_pb']
     files_restart = ['restart', 'restart_field']
+
+    with_mpi_bypass = ['energy', 'restart_field']
 
     format_classes = {}
 
@@ -92,7 +96,20 @@ class OutputFiles:
         self.fmt = oset.format
 
         if not os.path.exists(self.base_path) and get_enabled_io():
-            os.makedirs(self.base_path, exist_ok=True)
+            try:
+                os.makedirs(self.base_path, exist_ok=True)
+            except:
+                pass
+
+        cnt = 0
+        while not os.path.exists(self.base_path):
+            cnt += 1
+            time.sleep(0.5)
+            if cnt > 10:
+                raise ValueError(f"Failed to create output directory {self.base_path} after 10 attempts")
+
+        if not os.path.isdir(self.base_path):
+            raise ValueError(f"Output path {self.base_path} is not a directory")
 
         self.out_stride = oset.stride
         self.out_flushstride = (oset.flushstride or 0) * oset.stride
@@ -130,19 +147,15 @@ class OutputFiles:
                 for name in self.files:
                     file = getattr(self, name)
                     if file:
-                        file.write_data(itr, solver)
+                        file.write_data(itr, solver, mpi_bypass=(name in self.with_mpi_bypass))
                 if force or (self.out_flushstride and itr % self.out_flushstride == 0):
                     self.flush()
         if self.restart_step == itr:
-            # for name in self.files_restart:
-            #     file = getattr(self, name)
-            #     if file:
-            #         file.write_data(itr, solver, mode='w')
-            #         file.flush()
-            self.restart.write_data(itr, solver, mode='w')
-            self.restart_field.write_data(itr, solver, mode='w', mpi_bypass=True)
-            self.restart.flush()
-            self.restart_field.flush()
+            for name in self.files_restart:
+                file = getattr(self, name)
+                if file:
+                    file.write_data(itr, solver, mode='w', mpi_bypass=(name in self.with_mpi_bypass))
+                    file.flush()
 
     @classmethod
     def register_format(cls, name: str, classes: dict):

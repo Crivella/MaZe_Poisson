@@ -1,8 +1,10 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 
 #include "mpi_base.h"
+#include "linalg.h"
 
 // /*
 // Compute the forces on each particle by computing the field from the potential using finite differences.
@@ -23,7 +25,7 @@
 // */
 double compute_force_fd(
     int n_grid, int n_p, double h, int num_neigh,
-    double *phi, long int *neighbors, long int *charges, double *pos, double *forces,
+    double *phi, long int *neighbors, double *charges, double *pos, double *forces,
     double (*g)(double, double, double)
 ) {
     int nn3 = num_neigh * 3;
@@ -103,19 +105,19 @@ Compute the particle-particle forces using the tabulated Tosi-Fumi potential
 @param n_p: the number of particles
 @param L: the size of the box
 @param pos: the positions of the particles (n_p, 3)
-@param B: the parameter B of the potential
-@param params: the parameters of the potential [A, C, D, sigma, alpha, beta] (6, n_p, n_p)
+@param params: the parameters of the potential [A, B, C, D, sigma, alpha, beta] (7, n_p, n_p)
 @param r_cut: the cutoff radius
 @param forces: the output forces on each particle (n_p, 3)
 */
-double compute_tf_forces(int n_p, double L, double *pos, double B, double *params, double r_cut, double *forces) {
+double compute_tf_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces) {
     int ip, jp;
     int n_p2 = 2 * n_p;
     long int n_p_pow2 = n_p * n_p;
     long int idx1, idx2;
 
     double *A = params;
-    double *C = A + n_p_pow2;
+    double *B = A + n_p_pow2;
+    double *C = B + n_p_pow2;
     double *D = C + n_p_pow2;
     double *sigma_TF = D + n_p_pow2;
     double *alpha = sigma_TF + n_p_pow2;
@@ -125,9 +127,9 @@ double compute_tf_forces(int n_p, double L, double *pos, double B, double *param
     double r_diff[3];
     double r_mag, f_mag, V_mag;
     double potential_energy = 0.0;
-    double a, c, d, sigma, al, be;
+    double a, b, c, d, sigma, al, be;
 
-    #pragma omp parallel for private(app, ip, jp, r_diff, r_mag, f_mag, V_mag, a, c, d, sigma, al, be, idx1, idx2) reduction(+:potential_energy)
+    #pragma omp parallel for private(app, ip, jp, r_diff, r_mag, f_mag, V_mag, a, b, c, d, sigma, al, be, idx1, idx2) reduction(+:potential_energy)
     for (int i = 0; i < n_p; i++) {
         r_mag = 0.0;
         ip = i * 3;
@@ -162,14 +164,15 @@ double compute_tf_forces(int n_p, double L, double *pos, double B, double *param
                 
             idx2 = idx1 + j;
             a = A[idx2];
+            b = B[idx2];
             c = C[idx2];
             d = D[idx2];
             sigma = sigma_TF[idx2];
             al = alpha[idx2];
             be = beta[idx2];
 
-            f_mag = B * a * exp(B * (sigma - r_mag)) - 6 * c / pow(r_mag, 7) - 8 * d / pow(r_mag, 9) - al;
-            V_mag = a * exp(B * (sigma - r_mag)) - c / pow(r_mag, 6) - d / pow(r_mag, 8) + al * r_mag + be;
+            f_mag = b * a * exp(b * (sigma - r_mag)) - 6 * c / pow(r_mag, 7) - 8 * d / pow(r_mag, 9) - al;
+            V_mag = a * exp(b * (sigma - r_mag)) - c / pow(r_mag, 6) - d / pow(r_mag, 8) + al * r_mag + be;
 
             forces[ip] += f_mag * r_diff[0];
             forces[ip + 1] += f_mag * r_diff[1];
@@ -182,3 +185,71 @@ double compute_tf_forces(int n_p, double L, double *pos, double B, double *param
     return potential_energy / 2;
 }
 
+
+/*
+Compute the particle-particle forces using the SC repulsive potential
+
+@param n_p: the number of particles
+@param L: the size of the box
+@param pos: the positions of the particles (n_p, 3)
+@param params: the parameters of the potential [nu, d, B] (3)
+@param r_cut: the cutoff radius
+@param forces: the output forces on each particle (n_p, 3)
+*/
+double compute_sc_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces) {
+    int i, j, k, ip, jp;
+    double nu, d, B_nu, alpha, beta;
+    double potential_energy = 0.0;
+
+    int size = n_p * 3;
+
+    double app;
+    double r_diff[3];
+    double r_mag, f_mag, V_mag;
+    double d_over_r_pow;
+    double f_k;
+
+    nu    = params[0];
+    d     = params[1];
+    B_nu  = params[2];
+    alpha = params[3];
+    beta  = params[4];
+
+    memset(forces, 0, size * sizeof(double));
+
+    #pragma \
+        omp parallel private(i, j, k, ip, jp, r_diff, r_mag, f_mag, f_k, V_mag, d_over_r_pow) \
+        reduction(+:potential_energy, forces[:size])
+    for (i = 0; i < n_p; i++) {
+        ip = 3 * i;
+        for (j = i + 1; j < n_p; j++) {
+            jp = 3 * j;
+
+            r_mag = 0.0;
+            for (k = 0; k < 3; k++) {
+                app = pos[ip + k] - pos[jp + k];
+                app -= L * round(app / L);
+                r_mag += app * app;
+                r_diff[k] = app;
+            }
+
+            r_mag = sqrt(r_mag);
+            if (r_mag > r_cut) {
+                continue;
+            }
+
+            d_over_r_pow = pow(d / r_mag, nu);
+            V_mag = B_nu * d_over_r_pow + alpha * r_mag + beta;
+            f_mag = B_nu * nu * d_over_r_pow / r_mag - alpha;
+
+            for (k = 0; k < 3; k++) {
+                f_k = f_mag * r_diff[k] / r_mag;
+                forces[ip + k] += f_k;
+                forces[jp + k] -= f_k;
+            }
+
+            potential_energy += V_mag;
+        }
+    }
+    return potential_energy;
+}

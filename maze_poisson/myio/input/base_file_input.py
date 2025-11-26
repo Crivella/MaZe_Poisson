@@ -1,186 +1,148 @@
-from abc import ABC, abstractmethod
+from dataclasses import asdict, dataclass
 from functools import wraps
 
-import numpy as np
-
-from ...constants import a0, density, kB, m_Cl, m_Na, t_au
-from ..loggers import logger
+from ...constants import a0, kB, t_au
+from ...myio.loggers import logger
 
 
-class BaseSettings(ABC):
-    tocheck = []
-    def __init__(self):
-        self.defaults()
-
-    @abstractmethod
-    def defaults(self):
-        """Set default values."""
-
-    def validate(self):
-        """Check if all required values are set."""
-        missing = []
-        for key in self.tocheck:
-            if getattr(self, key, None) is None:
-                missing.append(key)
-        if missing:
-            raise ValueError(f"Missing required values: {missing}")
+class BaseFileInput:
+    @staticmethod
+    def normalize_ang_to_au(dct):
+        """Normalize Angstrom values to atomic units."""
+        normalized = {}
+        for key, value in dct.items():
+            if key.endswith('_ang'):
+                normalized[key.replace('_ang', '')] = value / a0
+            else:
+                normalized[key] = value
+        return normalized
 
     @classmethod
-    def from_dict(cls, data):
-        obj = cls()
-        for key, value in data.items():
-            setattr(obj, key, value)
-        return obj
-
-    def to_dict(self) -> dict:
-        """Convert the object to a dictionary."""
-        res = {k:v for k, v in self.__dict__.items() if not k.startswith('_') and v is not None}
-        for key in self.tocheck:
-            val = getattr(self, key, None)
-            if val:
-                res[key] = val
-        return res
-
-class OutputSettings(BaseSettings):
-    tocheck = []
-
-    def defaults(self):
-        """Set default values."""
-        # self.print_field = False
-        self.print_solute = False
-        self.print_performance = False
-        self.print_momentum = False
-        self.print_energy = False
-        self.print_temperature = False
-        self.print_tot_force = False
-        self.print_restart = False
-        self.print_restart_field = False
-        self.path = 'Outputs/'
-        self.format = 'csv'
-        self.stride = 50
-        self.flushstride = 0
-        self.debug = False
-        self.generate_restart_file = False
-        self.restart_step = None
-
-class GridSetting(BaseSettings):
-    tocheck = ['N', 'N_p', 'L', 'h', 'file', 'charge_assignment']
-    def defaults(self):
-        """Set default values."""
-        self._N = None
-        self.input_file = None
-        self.restart_file = None
-        self.restart_field_file = None
-        self._L = None
-        self._L_ang = None
-        self.h = None
-        self.charge_assignment = 'CIC'
-
-        self.precond = 'NONE'
-        self.smoother = 'LCG'
-        
-    @property
-    def N(self):
-        return self._N
+    def from_dict(cls, dct):
+        """Create an instance from a dictionary."""
+        dct = cls.normalize_ang_to_au(dct)
+        try:
+            new = cls(**dct)
+        except TypeError as e:
+            logger.error(f"Error creating {cls.__name__}: {e}")
+            exit(1)
+        return new
     
-    @N.setter
-    def N(self, value):
-        self._N = value
-        if self.L is not None:
-            self.h = self.L / value
-    @property
-    def N_p(self):
-        return self._N_p
+    @classmethod
+    def normalize_args(cls, dct):
+        """Normalize Angstrom values in the dictionary."""
+        dct = cls.normalize_ang_to_au(dct)
+        return dct
 
-    @N_p.setter
-    def N_p(self, value):
-        self._N_p = value
-        # self.L_ang = np.round((((value*(m_Cl + m_Na)) / (2*density))  **(1/3)) *1.e9, 4) # in A
-        # self.L = self.L_ang / a0 # in amu
-        # if self.N is not None:
-        #     self.h = self.L / self.N
+    def to_dict(self):
+        """Convert the instance to a dictionary."""
+        return asdict(self)
 
-    @property
-    def L(self):
-        return self._L
-    @L.setter
-    def L(self, value):
-        self._L = value
-        self._L_ang = value * a0
-        if self.N is not None:
-            self.h = value / self.N
-    @property
-    def L_ang(self):
-        return self._L_ang
-    @L_ang.setter
-    def L_ang(self, value):
-        self._L_ang = value
-        self._L = value / a0
-        if self.N is not None:
+    def __getattr__(self, key):
+        multiplier = 1.0
+        if '_ang' in key:
+            key = key.replace('_ang', '')
+            multiplier = a0
+        return super().__getattribute__(key) * multiplier
+
+@dataclass(kw_only=True)
+class OutputSettings(BaseFileInput):
+    print_solute: bool = False
+    print_performance: bool = False
+    print_momentum: bool = False
+    print_energy: bool = False
+    print_temperature: bool = False
+    print_tot_force: bool = False
+    print_forces_pb: bool = False
+    print_restart: bool = False
+    print_restart_field: bool = False
+
+    path: str = 'Outputs/'
+    format: str = 'csv'
+
+    stride: int = 50
+    flushstride: int = 5
+
+    debug: bool = False
+    restart_step: int = None
+
+@dataclass(kw_only=True)
+class GridSetting(BaseFileInput):
+    N: int
+    N_p: int
+    L: float
+    h: float = None
+    eps_s: float = 1.0  # Relative permittivity of the solvent (vacuum by default)
+
+    N_typs: int
+
+    particles_file: str = 'species.csv'  # File containing particle definitions
+    input_file: str
+
+    restart_field_file: str = None
+    cas: str = 'CIC'
+
+    precond: str = 'NONE'
+    smoother: str = 'LCG'
+
+    # Poisson-Boltzmann specific
+    I: float = None  # Ionic strength
+    w: float = None  # Width of the transition region in Angstroms
+            
+    def __post_init__(self):
+        """Post-initialization to set defaults."""
+        if self.h is None:
             self.h = self.L / self.N
+        elif self.N * self.h != self.L:
+            raise ValueError("N * h must equal L. Check your values.")
 
-    @property
-    def file(self):
-        return self.restart_file or self.input_file
+@dataclass(kw_only=True)
+class MDVariables(BaseFileInput):
+    N_steps: int  # Number of steps in the simulation
+    T: float  # Temperature in Kelvin
+    dt_fs: float  # Timestep in femtoseconds
 
-class MDVariables(BaseSettings):
-    tocheck = ['N_steps', 'T', 'dt']
-    def defaults(self):
-        """Set default values."""
-        self._T = None
-        self._kBT = None
-        self.dt = None
-        self.N_steps = None
+    init_steps: int = 0  # Initial steps before the main simulation
+    # init_steps_thermostat: int = None  # Initial steps before the main simulation
+    elec: bool = True # Whether to include electrostatic interactions
+    not_elec: bool = True  # Whether to include non-electrostatic interactions
 
-        self.init_steps = 0
-        self.thermostat = False
-        # self.preconditioning = True
-        self.rescale = False
-        self.elec = True
-        self.not_elec = True
-        self.potential = 'TF'
-        self.integrator = 'OVRVO'
-        self.method = 'FFT'
-        self.tol = 1e-7
-        self.gamma = 1e-3
-        self._invert_time = False
-    
-    @property
-    def T(self):
-        return self._T
+    potential: str = 'TF'  # Type of potential to use
+    potential_params_file: str = None  # File containing potential parameters
 
-    @T.setter
-    def T(self, value):
-        self._T = value
-        self._kBT = kB * value
-    
+    integrator: str = 'OVRVO'  # Integrator method
+    method: str = 'FFT'  # Method for solving the Poisson equation
+    tol: float = 1e-7  # Tolerance for convergence
+
+    thermostat: bool = False  # Whether to use a thermostat
+    gamma: float = 1e-3  # Damping coefficient for the thermostat
+
+    rescale: bool = False  # Whether to rescale velocities
+    invert_time: bool = False  # Whether to invert the time direction
+
+    # Poisson-Boltzmann specific
+    poisson_boltzmann: bool = False  # Whether to use Poisson-Boltzmann method
+    gamma_np: float = 0.0  # Non-polarization gamma in kcal/mol/A^2
+    beta_np: float = 0.0  # offset in kcal/mol
+    probe_radius: float = 1.4 / a0  # Probe radius in a.u.
+
+    def __post__init__(self):
+        """Post-initialization to set defaults."""
+        if self.dt_fs <= 0:
+            raise ValueError("dt_fs must be a positive value.")
+
     @property
     def kBT(self):
-        return self._kBT
+        return self.T * kB
 
     @property
-    def dt_fs(self):
-        return self._dt_fs
-
-    @dt_fs.setter
-    def dt_fs(self, value):
-        if value <= 0:
-            raise ValueError("Timestep must be positive.")
-        if self.invert_time:
-            value = -value
-        self._dt_fs = value
-        self.dt = value / t_au
+    def dt(self):
+        return self.dt_fs / t_au * (-1 if self.invert_time else 1)
 
     @property
-    def invert_time(self):
-        return self._invert_time
-    @invert_time.setter
-    def invert_time(self, value):
-        if value and self.dt_fs is not None and self.dt_fs > 0:
-            dt_fs = -self.dt_fs
-            self._dt_fs = dt_fs
-            self.dt = dt_fs / t_au
-        self._invert_time = value
+    def gamma_np_au(self):
+        """Return the non-polarization gamma in atomic units."""
+        return self.gamma_np * 0.0065934  # Convert to atomic units (a.u.)
 
 def mpi_file_loader(func):
     @wraps(func)
@@ -192,15 +154,3 @@ def mpi_file_loader(func):
         obj = func(*args, **kwargs)
         return obj
     return wrapper
-
-def validate_all(*args):
-    """Call validate on all objects and raise a ValueError if any fail."""
-    msg = []
-    for obj in args:
-        name = obj.__class__.__name__
-        try:
-            obj.validate()
-        except ValueError as e:
-            msg.append(f"{name}: {str(e)}")
-    if msg:
-        raise ValueError('\n'.join(msg))

@@ -2,14 +2,12 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "constants.h"
 #include "charges.h"
 #include "mpi_base.h"
 #include "mp_structs.h"
 #include "fftw_wrap.h"
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
 
 #ifdef __MPI
 void fft_grid_init_mpi(grid *grid) {

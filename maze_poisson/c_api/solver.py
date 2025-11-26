@@ -9,10 +9,11 @@ capi.register_function(
     'solver_initialize', None, []
 )
 
-# void solverinitialize_grid(int n_grid, double L, double h, double tol, int grid_type, int precond_type) {
+# void solverinitialize_grid(int n_grid, double L, double h, double tol, double eps, int grid_type, int precond_type) {
 capi.register_function(
     'solver_initialize_grid', None, [
         ctypes.c_int,
+        ctypes.c_double,
         ctypes.c_double,
         ctypes.c_double,
         ctypes.c_double,
@@ -21,22 +22,43 @@ capi.register_function(
     ],
 )
 
+# void solver_initialize_grid_pois_boltz(double I, double w, double kbar2) {
+capi.register_function(
+    'solver_initialize_grid_pois_boltz', None, [
+        ctypes.c_double,
+        ctypes.c_double,
+    ],
+)
+
 # void solverinitialize_particles(
-#     int n, double L, double h, int n_p, int pot_type, int cas_type,
-#     double *pos, double *vel, double *mass, long int *charges
+#     int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
+#     int *types, double *pos, double *vel, double *mass, double *charges,
+#     double *params
 # ) {
 capi.register_function(
     'solver_initialize_particles', None, [
         ctypes.c_int,
+        ctypes.c_int,
         ctypes.c_double,
         ctypes.c_double,
         ctypes.c_int,
         ctypes.c_int,
         ctypes.c_int,
+        npct.ndpointer(dtype=np.int32, ndim=1, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
-        npct.ndpointer(dtype=np.int64, ndim=1, flags='C_CONTIGUOUS'),
+        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
+capi.register_function(
+    'solver_initialize_particles_pois_boltz', None, [
+        ctypes.c_double,
+        ctypes.c_double,
+        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
     ],
 )
 
@@ -81,6 +103,11 @@ capi.register_function(
     'solver_update_field', ctypes.c_int, [],
 )
 
+# void solver_update_eps_k2() {
+capi.register_function(
+    'solver_update_eps_k2', None, [],
+)
+
 # void solver_compute_forces_elec() {
 capi.register_function(
     'solver_compute_forces_elec', None, [],
@@ -89,6 +116,11 @@ capi.register_function(
 # double solver_compute_forces_noel() {
 capi.register_function(
     'solver_compute_forces_noel', ctypes.c_double, [],
+)
+
+# double solver_compute_forces_pb() {
+capi.register_function(
+    'solver_compute_forces_pb', ctypes.c_double, [],
 )
 
 # void solver_compute_forces_tot() {

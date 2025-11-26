@@ -7,7 +7,7 @@ double spread_spline_cubic(double x, double L, double h);
 
 double update_charges(
     int n_grid, int n_p, double h, int num_neigh,
-    double *pos, long int *neighbors, long int *charges, double *q,
+    double *pos, long int *neighbors, double *charges, double *q,
     double (*g)(double, double, double)
 );
 

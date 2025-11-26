@@ -45,18 +45,26 @@ set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g")
 # Create the shared library
 add_library(maze_poisson MODULE
     src/linalg.c
-    src/laplace.c
-    src/forces.c
-    src/charges.c
-    src/fftw_wrap.c
     
     src/omp_base.c
     src/mpi_base.c
+
+    src/laplace.c
+    src/plcg.c
+    src/verlet.c
+    src/multigrid.c
+    src/fftw_wrap.c
+
+    src/forces.c
+    src/charges.c
 
     src/particles.c
 
     src/grid_general.c
     src/grid_lcg.c
+    src/grid_maze_lcg.c
+    src/grid_multigrid.c
+    src/grid_maze_multigrid.c
     src/grid_fft.c
     
     src/integrator_general.c
@@ -87,7 +95,7 @@ if(MP_MTUNE)
     target_compile_options(maze_poisson PRIVATE -mtune=native)
 endif()
 
-if (MP_AVX)
+if (MP_AVX AND NOT APPLE)
     target_compile_options(maze_poisson PRIVATE -mavx2)
 endif()
 
@@ -139,6 +147,8 @@ if (LAPACK_FOUND)
             message(WARNING "LAPACKE library not found")
         endif()
     endif()
+else()
+    message(WARNING "LAPACK not found, some features will be disabled")
 endif()
 
 # Set FFTW flags

@@ -9,10 +9,9 @@
 #include "verlet.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
-#include "multigrid.h"
 
 #ifdef __MPI
-void lcg_grid_init_mpi(grid *grid) {
+void maze_multigrid_grid_init_mpi(grid *grid) {
     mpi_data *mpid = get_mpi_data();
 
     int n = grid->n;
@@ -44,7 +43,7 @@ void lcg_grid_init_mpi(grid *grid) {
 
 #else  // __MPI
 
-void lcg_grid_init_mpi(grid *grid) {
+void maze_multigrid_grid_init_mpi(grid *grid) {
     mpi_data *mpid = get_mpi_data();
     mpid->n_loc = grid->n;
     mpid->n_start = 0;
@@ -52,13 +51,13 @@ void lcg_grid_init_mpi(grid *grid) {
 
 #endif  // __MPI
 
-void lcg_grid_init(grid * grid) {
+void maze_multigrid_grid_init(grid * grid) {
     int n_loc = grid->n_local;
     int n = grid->n;
 
     long int n2 = n * n;
 
-    lcg_grid_init_mpi(grid);
+    maze_multigrid_grid_init_mpi(grid);
 
     long int size = grid->n_local * n2;
     grid->size = size;
@@ -68,87 +67,80 @@ void lcg_grid_init(grid * grid) {
     grid->phi_p = mpi_grid_allocate(n_loc, n);
     grid->phi_n = mpi_grid_allocate(n_loc, n);
 
-    grid->init_field = lcg_grid_init_field;
-    grid->update_field = lcg_grid_update_field;
-    grid->update_charges = lcg_grid_update_charges;
+    memset(grid->phi_p, 0, size * sizeof(double));  // phi_p = 0
+    memset(grid->phi_n, 0, size * sizeof(double));  // phi_n = 0
 
-    switch (grid->precond_type) {
-        case PRECOND_TYPE_BLOCKJACOBI:
-            precond_blockjacobi_init();
-            break;
-        default:
-            break;
-    }
+    grid->init_field = maze_multigrid_grid_init_field;
+    grid->update_field = maze_multigrid_grid_update_field;
+    grid->update_charges = maze_multigrid_grid_update_charges;
 }
 
-void lcg_grid_cleanup(grid * grid) {
+void maze_multigrid_grid_cleanup(grid * grid) {
     free(grid->q);
-
-    switch (grid->precond_type) {
-        case PRECOND_TYPE_BLOCKJACOBI:
-            precond_blockjacobi_cleanup();
-            break;
-        default:
-            break;
-    }
 
     mpi_grid_free(grid->y, grid->n);
     mpi_grid_free(grid->phi_p, grid->n);
     mpi_grid_free(grid->phi_n, grid->n);
 }
 
-void lcg_grid_init_field(grid *grid) {
+void maze_multigrid_grid_init_field(grid *grid) {
     long int i;
 
-    double constant = -4 * M_PI / grid->h;
+    double *tmp = mpi_grid_allocate(grid->n_local, grid->n);
 
+    double constant = -4 * M_PI / grid->h;
     if ( ! grid->pb_enabled) {
         constant /= grid->eps_s;  // Scale by the dielectric constant if not using PB explicitly
     }
 
-
     memset(grid->y, 0, grid->size * sizeof(double));  // y = 0
-    memcpy(grid->phi_p, grid->phi_n, grid->size * sizeof(double));  // phi_prev = phi_n
-    // phi_n = constant * q
-    memcpy(grid->phi_n, grid->q, grid->size * sizeof(double));
-    dscal(grid->phi_n, constant, grid->size);
+    vec_copy(grid->phi_n, grid->phi_p, grid->size);  // phi_prev = phi_n
+    // phi_n = consant * q
+    vec_copy(grid->q, tmp, grid->size);
+    dscal(tmp, constant, grid->size);
 
     if (grid->pb_enabled) {
         conj_grad_pb(
-            grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n,
+            tmp, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n,
             grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
         );
     } else {
-        conj_grad(grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n);
+        conj_grad(tmp, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n);
     }
+
+    mpi_grid_free(tmp, grid->n);
 }
 
-int lcg_grid_update_field(grid *grid) {
-    int res;
-    double constant = -4 * M_PI / grid->h;
+int maze_multigrid_grid_update_field(grid *grid) {
+    int precond = 1;
 
-    if ( ! grid->pb_enabled) {
-        constant /= grid->eps_s;  // Scale by the dielectric constant if not using PB explicitly
+    switch (grid->precond_type) {
+        case PRECOND_TYPE_NONE:
+            precond = 0;
+            break;
+        default:
+            break;
     }
 
-    memcpy(grid->phi_p, grid->phi_n, grid->size * sizeof(double));  // phi_prev = phi_n
-    
-    // y = constant * q
-    memcpy(grid->y, grid->q, grid->size * sizeof(double));
-    dscal(grid->y, constant, grid->size);
+    int res;
 
     if (grid->pb_enabled) {
-        res = conj_grad_pb(
-            grid->y, grid->phi_p, grid->phi_n, grid->tol, grid->n_local, grid->n,
-            grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
-        );
-    } else { 
-        res = conj_grad(grid->y, grid->phi_p, grid->phi_n, grid->tol, grid->n_local, grid->n);
+        fprintf(stderr, "Maze Multigrid Poisson-Boltzmann not implemented yet.\n");
+        exit(1);
+    } 
+    if (precond) {
+        fprintf(stderr, "Maze Multigrid with preconditioner not implemented yet.\n");
+        exit(1);
     }
+
+    res = verlet_poisson_multigrid(
+        grid->tol, grid->h * grid->eps_s, grid->phi_n, grid->phi_p, grid->q, grid->y,
+        grid->n_local, grid->n
+    );  //tolerance scaled by 4*pi/h to guarantee correct sigma_p = A . phi . h/4pi + rho/eps 
     return res;
 }   
 
-double lcg_grid_update_charges(grid *grid, particles *p) {
+double maze_multigrid_grid_update_charges(grid *grid, particles *p) {
     return update_charges(
         grid->n, p->n_p, grid->h, p->num_neighbors,
         p->pos, p->neighbors, p->charges, grid->q,
