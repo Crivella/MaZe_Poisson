@@ -59,6 +59,17 @@ EXTERN_C double norm(double *u, long int n) {
     return cblas_dnrm2(n, u, 1);
 }
 
+EXTERN_C double norm_inf(double *u, long int n) {
+    double max_val = 0.0;
+    
+    // index of the maximum absolute value
+    CBLAS_INDEX idx = cblas_idamax((int)n, u, 1);
+    max_val = fabs(u[idx]);
+
+    allreduce_max(&max_val, 1);
+    return max_val;
+}
+
 /*
 Scale a vector by a constant x = alpha * x
 @param x: the vector to be scaled
@@ -177,6 +188,27 @@ Compute the Euclidean norm of a vector
 */
 EXTERN_C double norm(double *u, long int n) {
     return sqrt(ddot(u, u, n));
+}
+
+/*
+Compute the infinity norm (maximum absolute value) of a vector
+@param u: the vector
+@param n: the size of the vector
+@return the infinity norm of the vector
+*/
+EXTERN_C double norm_inf(double *u, long int n) {
+    long int i;
+    double max_val = 0.0;
+    double a; 
+
+    #pragma omp parallel for private(a) reduction(max:max_val)
+    for (i = 0; i < n; i++) {
+        a = fabs(u[i]);
+        if (a > max_val) max_val = a;
+    }
+
+    allreduce_max(&max_val, 1);
+    return max_val;
 }
 
 #endif // __LAPACK ///////////////////////////////////////////////////////////////////////////

@@ -25,6 +25,7 @@ void laplace_filter(double *u, double *u_new, int size1, int size2) {
     long int i, j, k;
     long int i0, i1, i2;
     long int j0, j1, j2;
+    long int k1, k2;
     long int n2 = size2 * size2;
 
     if (u == u_new) {
@@ -32,26 +33,40 @@ void laplace_filter(double *u, double *u_new, int size1, int size2) {
         exit(1);
     }
 
+    // Precompute neighbor indices for periodic BCs in j and k
+    int jprev[size2];
+    int jnext[size2];
+    int kprev[size2];
+    int knext[size2];
+    for (int t = 0; t < size2; ++t) {
+        kprev[t] = ((t - 1 + size2 ) % size2);
+        knext[t] = ((t + 1      ) % size2);
+        jprev[t] = kprev[t] * size2;
+        jnext[t] = knext[t] * size2;
+    }
+
     // Exchange the top and bottom slices
     mpi_grid_exchange_bot_top(u, size1, size2);
 
-    #pragma omp parallel for private(i, j, k, i0, i1, i2, j0, j1, j2)
+    #pragma omp parallel for private(i, j, k, i0, i1, i2, j0, j1, j2, k1, k2)
     for (i = 0; i < size1; i++) {
         i0 = i * n2;
         i1 = i0 + n2;
         i2 = i0 - n2;
         for (j = 0; j < size2; j++) {
             j0 = j * size2;
-            j1 = ((j+1) % size2) * size2;
-            j2 = ((j-1 + size2) % size2) * size2;
+            j1 = jnext[j];
+            j2 = jprev[j];
             for (k = 0; k < size2; k++) {
+                k1 = knext[k];
+                k2 = kprev[k];
                 u_new[i0 + j0 + k] = (
                     u[i1 + j0 + k] +
                     u[i2 + j0 + k] +
                     u[i0 + j1 + k] +
                     u[i0 + j2 + k] +
-                    u[i0 + j0 + ((k+1) % size2)] +
-                    u[i0 + j0 + ((k-1 + size2) % size2)] -
+                    u[i0 + j0 + k1] +
+                    u[i0 + j0 + k2] -
                     u[i0 + j0 + k] * 6.0
                     );
             }
@@ -76,6 +91,18 @@ EXTERN_C void laplace_filter_pb(
         exit(1);
     }
 
+    // Precompute neighbor indices for periodic BCs in j and k
+    int jprev[size2];
+    int jnext[size2];
+    int kprev[size2];
+    int knext[size2];
+    for (int t = 0; t < size2; ++t) {
+        kprev[t] = ((t - 1 + size2 ) % size2);
+        knext[t] = ((t + 1      ) % size2);
+        jprev[t] = kprev[t] * size2;
+        jnext[t] = knext[t] * size2;
+    }
+
     // Exchange the top and bottom slices
     mpi_grid_exchange_bot_top(u, size1, size2);
     mpi_grid_exchange_bot_top(eps_x, size1, size2);
@@ -89,11 +116,11 @@ EXTERN_C void laplace_filter_pb(
         i2 = i0 - n2;
         for (j = 0; j < size2; j++) {
             j0 = j * size2;
-            j1 = ((j+1) % size2) * size2;
-            j2 = ((j-1 + size2) % size2) * size2;
+            j1 = jnext[j];
+            j2 = jprev[j];
             for (k = 0; k < size2; k++) {
-                k1 = (k + 1) % size2;
-                k2 = (k - 1 + size2) % size2;
+                k1 = knext[k];
+                k2 = kprev[k];
                 idx0 = i0 + j0 + k;
                 idx_x = i2 + j0 + k;
                 idx_y = i0 + j2 + k;

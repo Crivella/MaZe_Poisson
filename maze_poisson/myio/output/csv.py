@@ -171,7 +171,7 @@ class RestartCSVOutputFile(CSVOutputFile):
 
 class RestartFieldCSVOutputFile(CSVOutputFile):
     name = 'restart_field'
-    headers = ['phi_prev', 'phi', 'phi_s', 'phi_s_prev']
+    headers = ['phi_prev', 'phi']
     def get_data(self, iter: int, solver):
         df = pd.DataFrame()
         tmp = np.empty((solver.N, solver.N, solver.N), dtype=np.float64)

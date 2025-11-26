@@ -19,6 +19,11 @@ cmake --install build  # Install the library
 
 ```
 
+compile in mode:
+- `-DCMAKE_BUILD_TYPE=Release` for optimized code
+- `-DCMAKE_BUILD_TYPE=Debug` for debug mode (without optimizations)
+- `-DCMAKE_BUILD_TYPE=RelWithDebInfo` for optimized code with debug info
+
 if from macOS:
 
 ```bash

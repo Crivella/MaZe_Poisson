@@ -1,10 +1,12 @@
 #ifndef __MP_STRUCTS_H
 #define __MP_STRUCTS_H
 
-#define GRID_TYPE_NUM 3
+#define GRID_TYPE_NUM 5
 #define GRID_TYPE_LCG 0
 #define GRID_TYPE_FFT 1
 #define GRID_TYPE_MGRID 2
+#define GRID_TYPE_MAZE_LCG 3
+#define GRID_TYPE_MAZE_MGRID 4
 
 #define PARTICLE_POTENTIAL_TYPE_NUM 3
 #define PARTICLE_POTENTIAL_TYPE_TF 0
@@ -55,11 +57,23 @@ void lcg_grid_init_field(grid *grid);
 int lcg_grid_update_field(grid *grid);
 double lcg_grid_update_charges(grid *grid, particles *p);
 
+void maze_lcg_grid_init(grid * grid);
+void maze_lcg_grid_cleanup(grid * grid);
+void maze_lcg_grid_init_field(grid *grid);
+int maze_lcg_grid_update_field(grid *grid);
+double maze_lcg_grid_update_charges(grid *grid, particles *p);
+
 void multigrid_grid_init(grid * grid);
 void multigrid_grid_cleanup(grid * grid);
 void multigrid_grid_init_field(grid *grid);
 int multigrid_grid_update_field(grid *grid);
 double multigrid_grid_update_charges(grid *grid, particles *p);
+
+void maze_multigrid_grid_init(grid * grid);
+void maze_multigrid_grid_cleanup(grid * grid);
+void maze_multigrid_grid_init_field(grid *grid);
+int maze_multigrid_grid_update_field(grid *grid);
+double maze_multigrid_grid_update_charges(grid *grid, particles *p);
 
 void fft_grid_init(grid * grid);
 void fft_grid_cleanup(grid * grid);

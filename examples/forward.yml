@@ -3,12 +3,19 @@
 grid_setting:
   N: 100
   N_p: 250 # at N_p=2, rescale=False
+  N_typs: 2                     # number of particle types
   L: 39.00697077
   # input_file: "input_files/input_coord250.csv"
-  restart_file: "restart_files/density_1.379/restart_N100_N_p_250_9999_iter1.csv"
+  input_file: "restart_files/density_1.379/restart_N100_N_p_250_9999_iter1.csv"
+  particles_file: "species.csv"
+
+  # cas: 'CIC'                    # charge assignment scheme 
+  # cas: 'SPL_QUADR'                    # charge assignment scheme 
+  cas: 'SPL_CUBIC'                    # charge assignment scheme 
 
 md_variables:
-  N_steps: 40000
+  # N_steps: 40000
+  N_steps: 1000
   T: 1550 # Kelvin
   dt_fs: 0.25 # in fs
   rescale: false # rescaling of the initial momenta to have tot momenta = 0, always true 
@@ -19,14 +26,26 @@ md_variables:
   not_elec: TRUE 
   invert_time: false
   # method: LCG
-  method: FFT
+  # method: "FFT"
+  # method: "LCG"
+  # method: "MAZE-LCG"
+  # method: "MULTIGRID"
+  method: "MAZE-MULTIGRID"
   integrator: OVRVO
+  # integrator: VERLET
+
+  potential: "TF"
+  # potential: "SC"
+  potential_params_file: "tosi_fumi.csv"
+  # potential_params_file: "input_files_pb2/sc_pot.csv"
 
 output_settings: 
   # path: 'forward_lcg/'
-  path: 'forward_fft/'
+  # path: 'forward_fft/'
+  path: 'forward_mazemg/'
 
   print_tot_force: true
+  print_performance: true       # print performance of the simulation
   print_solute: TRUE
   print_energy: TRUE 
   print_momentum: TRUE
@@ -35,9 +54,9 @@ output_settings:
   print_restart: true
   print_restart_field: false
 
-  stride: 20
-  flushstride: 5
-  restart_step: 40000
+  stride: 1
+  flushstride: 10
+  # restart_step: 40000
 
   # for eqm: N_steps=6000, init_steps=5000, True, True, True, false, false, false, false, true, true, true, true (ignore rescale)
   # for restart: N_steps=200, init_steps=0, False, True, True, true, false, false, true, true, true, true, false (ignore rescale)

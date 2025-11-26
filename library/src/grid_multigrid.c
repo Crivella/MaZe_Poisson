@@ -86,36 +86,31 @@ void multigrid_grid_cleanup(grid * grid) {
 void multigrid_grid_init_field(grid *grid) {
     long int i;
 
-    double *tmp = mpi_grid_allocate(grid->n_local, grid->n);
-
     double constant = -4 * M_PI / grid->h;
     if ( ! grid->pb_enabled) {
         constant /= grid->eps_s;  // Scale by the dielectric constant if not using PB explicitly
     }
 
     memset(grid->y, 0, grid->size * sizeof(double));  // y = 0
-    vec_copy(grid->phi_n, grid->phi_p, grid->size);  // phi_prev = phi_n
-    // phi_n = consant * q
-    vec_copy(grid->q, tmp, grid->size);
-    dscal(tmp, constant, grid->size);
-
+    memcpy(grid->phi_p, grid->phi_n, grid->size * sizeof(double));  // phi_prev = phi_n
+    // phi_n = constant * q
+    memcpy(grid->phi_n, grid->q, grid->size * sizeof(double));
+    dscal(grid->phi_n, constant, grid->size);
 
     if (grid->pb_enabled) {
-        fprintf(stderr, "Multigrid Poisson-Boltzmann not implemented yet.\n");
-        exit(1);
-    } else {
-        multigrid_apply(
-            tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start,
-            MG_SOLVE_SM1, MG_SOLVE_SM2, MG_SOLVE_SM3, MG_SOLVE_SM4
+        conj_grad_pb(
+            grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n,
+            grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
         );
+    } else {
+        conj_grad(grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n);
     }
-
-    mpi_grid_free(tmp, grid->n);
 }
 
 int multigrid_grid_update_field(grid *grid) {
+    int res = -1;
     int precond = 1;
-
+    
     switch (grid->precond_type) {
         case PRECOND_TYPE_NONE:
             precond = 0;
@@ -123,8 +118,6 @@ int multigrid_grid_update_field(grid *grid) {
         default:
             break;
     }
-
-    int res;
 
     if (grid->pb_enabled) {
         fprintf(stderr, "Multigrid Poisson-Boltzmann not implemented yet.\n");
@@ -134,10 +127,62 @@ int multigrid_grid_update_field(grid *grid) {
         fprintf(stderr, "Multigrid with preconditioner not implemented yet.\n");
         exit(1);
     }
-    res = verlet_poisson_multigrid(
-        grid->tol, grid->h * grid->eps_s, grid->phi_n, grid->phi_p, grid->q, grid->y,
-        grid->n_local, grid->n
-    );
+
+    long int n2 = grid->n * grid->n;
+    long int n3 = grid->n_local * n2;
+    
+    double tol = grid->tol;
+    double app;
+    int iter_conv = 0;
+
+    double *tmp = mpi_grid_allocate(grid->n_local, grid->n);
+    double *tmp2 = mpi_grid_allocate(grid->n_local, grid->n);
+
+    long int i;
+    #pragma omp parallel for private(app)
+    for (i = 0; i < n3; i++) {
+        app = grid->phi_n[i];
+        grid->phi_n[i] = 2 * app - grid->phi_p[i];
+        grid->phi_p[i] = app;
+    }
+    double constant = -4 * M_PI / grid->h;
+    if ( ! grid->pb_enabled) {
+        constant /= grid->eps_s;  // Scale by the dielectric constant if not using PB explicitly
+    }
+    
+    // phi_n = constant * q
+    vec_copy(grid->q, tmp, grid->size);
+    dscal(tmp, constant, grid->size);
+
+    // Questo pezzo non e' usato se vedi app e tmp2 vengono riscritti prima di essere letti
+    // Serve solo se abiliti il printf sotto
+    // laplace_filter(grid->phi_n, tmp2, grid->n_local, grid->n);  // tmp2 = A . phi
+    // daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . phi - (- 4pi/h q)
+    // app = norm_inf(tmp2, n3); 
+    // printf("\niter=%d \t res=%e\n", iter_conv,app);
+    
+    while(iter_conv < MG_ITER_LIMIT) {
+        // Here the b in A.x = b is always the same, what is updated in the loop is the starting guess for
+        // the field phi_n
+        multigrid_apply(tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start, MG_SOLVE_SM);
+
+         // Compute the residual
+        laplace_filter(grid->phi_n, tmp2, grid->n_local, grid->n);  // tmp2 = A . phi
+        daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A . phi - (- 4pi/h q)
+        
+        // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
+        app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
+        iter_conv++;
+        // printf("iter=%d \t res=%e\n", iter_conv,app);
+        if (app <= tol){
+            res = iter_conv;
+            break;
+        }
+    }
+
+    mpi_grid_free(tmp, grid->n);
+    mpi_grid_free(tmp2, grid->n);
+
     return res;
 }   
 

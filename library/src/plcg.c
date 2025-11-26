@@ -35,18 +35,19 @@ int conj_grad(double *b, double *x0, double *x, double tol, int size1, int size2
     // printf("Running conjugate gradient with %d elements\n", n3);
 
     double *r = (double *)malloc(n3 * sizeof(double));
-    double *Ap = (double *)malloc(n3 * sizeof(double));
-    double *p = mpi_grid_allocate(size1, size2);
     double alpha, beta, r_dot_v, rn_dot_rn, rn_dot_vn;
 
     // Allow for inplace computation by having b == x
     laplace_filter(x0, r, size1, size2);  // r = A . x
     daxpy(b, r, -1.0, n3);  // r = A . x - b
+
     if (x != x0)
     {
         vec_copy(x0, x, n3);  // Inplace copy
     }
 
+    double *Ap = (double *)malloc(n3 * sizeof(double));
+    double *p = mpi_grid_allocate(size1, size2);
     // p = -v = -(P^-1 . r) = - ( -r / 6.0 ) = r / 6.0
     vec_copy(r, p, n3);  // p = r
     dscal(p, 1.0 / 6.0, n3);  // p = r / 6.0
@@ -64,11 +65,13 @@ int conj_grad(double *b, double *x0, double *x, double tol, int size1, int size2
         daxpy(Ap, r, alpha, n3);  // r_new = r + alpha * Ap
 
         rn_dot_rn = ddot(r, r, n3);  // <r_new, r_new>
-        if (sqrt(rn_dot_rn) <= tol) {
+        // if (sqrt(rn_dot_rn) <= tol) {
+        if (norm_inf(r, n3) <= tol) {
+            // printf("iter = %d - res = %lf\n", iter, norm_inf(r, n3));
             res = iter;
             break;
         }
-
+    
         rn_dot_vn = - rn_dot_rn / 6.0;  // <r_new, v_new>
         beta = rn_dot_vn / r_dot_v;  // beta = <r_new, v_new> / <r, v>
         r_dot_v = rn_dot_vn;  // <r, v> = <r_new, v_new>
@@ -137,7 +140,8 @@ int conj_grad_precond(
         daxpy(Ap, r, alpha, n3);  // r_new = r + alpha * Ap
 
         rn_dot_rn = ddot(r, r, n3);  // <r_new, r_new>
-        if (sqrt(rn_dot_rn) <= tol) {
+        // if (sqrt(rn_dot_rn) <= tol) {
+        if (norm_inf(r, n3) <= tol) {
             res = iter;
             break;
         }
@@ -210,11 +214,12 @@ EXTERN_C int conj_grad_pb(
         daxpy(Ap, r, alpha, n3);  // r_new = r + alpha * Ap
 
         rn_dot_rn = ddot(r, r, n3);  // <r_new, r_new>
-        if (sqrt(rn_dot_rn) <= tol) {
+        // if (sqrt(rn_dot_rn) <= tol) {
+        if (norm_inf(r, n3) <= tol) {
             res = iter;
             break;
         }
-
+        
         rn_dot_vn = - rn_dot_rn / 6.0;  // <r_new, v_new>
         beta = rn_dot_vn / r_dot_v;  // beta = <r_new, v_new> / <r, v>
         r_dot_v = rn_dot_vn;  // <r, v> = <r_new, v_new>

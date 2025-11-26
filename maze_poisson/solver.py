@@ -21,6 +21,9 @@ np.random.seed(42)
 method_grid_map: Dict[str, int] = {
     # 'LCG': 0,
     # 'FFT': 1,
+    # 'MULTIGRID': 2,
+    # 'MAZE-LCG': 3,
+    # 'MAZE-MULTIGRID': 4
 }
 
 integrator_map: Dict[str, int] = {
@@ -321,7 +324,7 @@ class SolverMD(Logger):
         """Initialize the first 2 steps for the MD and forces."""
         self.logger.info("Initializing MD (first 2 steps)...")
         ffile = self.gset.restart_field_file
-        if ffile is None or self.mdv.invert_time:
+        if ffile is None or self.mdv.invert_time==False:
             # STEP 0 Verlet
             # self.logger.debug("Running first step of MD loop (Verlet)...")
             self.update_charges()
@@ -481,7 +484,7 @@ class SolverMD(Logger):
         from .constants import density
         self.logger.info(f'Running a MD simulation with:')
         self.logger.info(f'  N_p = {self.N_p}, N_steps = {self.mdv.N_steps}, tol = {self.mdv.tol}')
-        self.logger.info(f'  N = {self.N}, L [A] = {self.L / cst.a0}, h [A] = {self.h / cst.a0}')
+        self.logger.info(f'  N = {self.N}, L [A] = {self.L * cst.a0}, h [A] = {self.h / cst.a0}')
         self.logger.info(f'  density = {density} g/cm^3')
         self.logger.info(f'  Solvent dielectric constant: {self.gset.eps_s}')
         self.logger.info(f'  Solver: {self.mdv.method},  Preconditioner: {self.gset.precond}')
