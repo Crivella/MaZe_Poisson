@@ -30,7 +30,6 @@ dependencies = [
     "scipy",
     # "matplotlib",
     "pandas",
-    "tqdm",
     "pyyaml",
     "click",
 ]
@@ -39,11 +38,12 @@ dependencies = [
 # Source = "https://github.com/XXX"
 
 [project.optional-dependencies]
-# fancy = [
-#     "tqdm",
-# ]
+fancy = [
+    "tqdm",
+]
 plotting = [
     "matplotlib",
+    "Pillow",
     "PyQt5",
 ]
 tests = [
@@ -74,7 +74,7 @@ exclude = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-log_cli = 1
+log_cli = true
 
 [tool.pylint.main]
 load-plugins = [

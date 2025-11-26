@@ -1,0 +1,64 @@
+# N_p : [128,250,432,686,1024,1458 | 2000, 2626, 3456, 4394]
+# At N_p=2, N_steps>10,000
+grid_setting:
+  # N: 50
+  N: 100
+  N_p: 250 # at N_p=2, rescale=False
+  N_typs: 2
+  L: 39.00697077
+  # restart_file: "forward_lcg/restart.csv"
+  # restart_file: "forward_fft/restart.csv"
+  input_file: "forward_mazemg/restart.csv"
+  particles_file: "species.csv"
+
+  # cas: 'CIC'                    # charge assignment scheme 
+  # cas: 'SPL_QUADR'                    # charge assignment scheme 
+  cas: 'SPL_CUBIC'                    # charge assignment scheme 
+
+md_variables:
+  # N_steps: 13000
+  N_steps: 1000
+  T: 1550 # Kelvin
+  dt_fs: 0.25 # in fs
+  rescale: false # rescaling of the initial momenta to have tot momenta = 0, always true 
+  tol: 1.e-10
+  # tol: 1.e-7
+  init_steps: 0
+  thermostat: false
+  elec: TRUE 
+  not_elec: TRUE 
+  invert_time: true
+  # method: LCG
+  # method: "FFT"
+  # method: "LCG"
+  # method: "MAZE-LCG"
+  # method: "MULTIGRID"
+  method: "MAZE-MULTIGRID"
+  integrator: OVRVO
+  # integrator: VERLET
+  
+  potential: "TF"
+  # potential: "SC"
+  potential_params_file: "tosi_fumi.csv"
+  # potential_params_file: "input_files_pb2/sc_pot.csv"
+
+output_settings: 
+  path: 'backward_mazemg/'
+  # path: 'backward_fft/'
+
+  print_tot_force: true
+  print_performance: true       # print performance of the simulation
+  print_solute: TRUE
+  print_energy: TRUE 
+  print_momentum: TRUE
+  print_temperature: TRUE
+
+  print_restart: false
+  print_restart_field: false
+
+  stride: 1
+  flushstride: 10
+  # restart_step: 0
+
+  # for eqm: N_steps=6000, init_steps=5000, True, True, True, false, false, false, false, true, true, true, true (ignore rescale)
+  # for restart: N_steps=200, init_steps=0, False, True, True, true, false, false, true, true, true, true, false (ignore rescale)

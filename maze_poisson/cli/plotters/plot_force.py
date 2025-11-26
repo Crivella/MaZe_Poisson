@@ -42,11 +42,11 @@ def plot_forcemod(filename, dt):
     plt.ylabel('Total force on x axis (a.u.)')
     plt.xlabel('t (a.u.)')
     plt.axhline(np.mean(Fmod), label='avg = '+str(np.mean(Fmod)))
-    plt.title('Total force acting on the system for dt = ' + str(dt) + ' and N = ' + str(N), 'and N_p = ', str(N_p))
+    # plt.title('Total force acting on the system for dt = ' + str(dt) + ' and N = ' + str(N), 'and N_p = ', str(N_p))
     title = 'force_totmod_N_' + str(N) + '_dt_' + str(dt)
     name = title + ".pdf"
     plt.legend()
-    plt.savefig(name, format='pdf')
+    # plt.savefig(name, format='pdf')
     plt.show()
 
 def plot_force_allN(folder, N_list, dt):

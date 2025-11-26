@@ -1,20 +1,14 @@
 import click
 
-from ..input import initialize_from_yaml
+# from ..input import initialize_from_yaml
+from ..myio.input import load_file
+from ..solver import SolverMD
 from .maze import maze
 
 
 @maze.group()
 def run():
     pass
-
-# @run.command()
-# # @click.argument('N_p', type=int)
-# # @click.argument('N', type=int)
-# # @click.argument('N_steps', type=int)
-# # @click.argument('L', type=float)
-# def main_maze(N_p, N, N_steps, L):
-#     main_Maze(N_p, N, N_steps, L)
 
 @run.command()
 @click.argument(
@@ -23,10 +17,20 @@ def run():
     required=True,
     metavar='YAML_INPUT_FILE',
     )
-def main_maze_md(filename):
-    gs, os, ms = initialize_from_yaml(filename)
-    _main_maze_md(gs, os, ms)
+@click.option(
+    '-v',
+    '--verbose',
+    is_flag=True,
+    help='Enable verbose logging',
+    )
+def md(filename, verbose):
+    try:
+        gs, os, ms = load_file(filename)
+    except ValueError as e:
+        click.echo(e)
+        return
+    if verbose:
+        os.debug = True
 
-def _main_maze_md(*args):
-    from .runners.main_Maze_md import main as main_Maze_md
-    main_Maze_md(*args)
+    solver = SolverMD(gs, ms, os)
+    solver.run()
