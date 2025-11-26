@@ -97,7 +97,7 @@ def time_vs_N3(np):
 
 @plot.command()
 @Np_option
-def iter_vs_N3(np):
+def n_iter_vs_N3(np):
     plot_convNgrid(np)
     
 @plot.command()
@@ -114,14 +114,17 @@ def visualize(filename):
     visualize_particles(filename)
 
 @plot.command()
-# SANITY CHECK GRAPH
-def iter_vs_thread():
-    iter_vs_threads()
-
-@plot.command()
 def time_vs_thread():
     time_vs_threads()
 
 @plot.command()
-def iters_vs_tol():
+def strong_scaling_vs_thread():
+    strong_scaling_vs_threads()
+
+@plot.command()
+def weak_scaling_vs_thread():
+    weak_scaling_vs_threads()
+
+@plot.command()
+def iter_vs_tols():
     iter_vs_tol()
