@@ -7,6 +7,10 @@
 #include "constants.h"
 #include "mpi_base.h"
 #include "linalg.h"
+#include "mp_structs.h"
+
+#define EPS_FIELD_TOL 1e-1
+#define EPS_FIELD_MAX_ITER 500
 
 #ifdef __cplusplus
 #define EXTERN_C extern "C"                                                           
@@ -265,6 +269,95 @@ EXTERN_C int verlet_pb_multigrid(
 
     if (res == -1) {
         fprintf(stderr, "Warning: Multigrid did not converge after 1000 iterations.\n");    
+    }
+
+    return res;
+}
+
+EXTERN_C int verlet_pb_multigrid_eps_field(
+    double tol, double h, double* phi, double* phi_prev, double* q, double* y,
+    int size1, int size2, double *eps_x, double *eps_y, double *eps_z, double *k2_screen,
+    grid *grid_ctx
+) {
+    if (grid_ctx == NULL || grid_ctx->kBT <= 0.0) {
+        mpi_printf("Warning: field-dependent dielectric requested without valid kBT. Running single PB solve.\n");
+    }
+    int res = -1;
+    int iter_conv = 0;
+
+    long int i;
+    long int n3 = (long int)size1 * size2 * size2;
+
+    double app, constant;
+    double *tmp = (double*)malloc(n3 * sizeof(double));
+    double *tmp2 = (double*)malloc(n3 * sizeof(double));
+
+    // Provisional Verlet update
+    #pragma omp parallel for private(app)
+    for (i = 0; i < n3; i++) {
+        app = phi[i];
+        phi[i] = 2 * app - phi_prev[i];
+        phi_prev[i] = app;
+    }
+
+    constant = (4 * M_PI) / h;
+
+    double max_diff = EPS_FIELD_TOL + 1.0;
+    int eps_iter = 0;
+
+    while (max_diff > EPS_FIELD_TOL && eps_iter < EPS_FIELD_MAX_ITER) {
+        if (grid_ctx != NULL && grid_ctx->kBT > 0.0) {
+            max_diff = grid_update_eps_field_dependent(grid_ctx, NULL, grid_ctx->kBT); 
+        } else {
+            max_diff = 0.0;  // Skip epsilon loop if no context
+        }
+
+        // Recompute sigma_p = A_pb . phi + 4*pi*q/h with updated eps
+        laplace_filter_pb(phi, tmp2, size1, size2, eps_x, eps_y, eps_z, k2_screen);
+        daxpy(q, tmp2, constant, n3);
+
+        res = -1;
+        iter_conv = 0;
+        while(iter_conv < MG_ITER_LIMIT_PB) { 
+            multigrid_pb_apply(tmp2, y, size1, size2, get_n_start(), MG_SOLVE_SM_PB, eps_x, eps_y, eps_z, k2_screen); //solve A_pb . y = sigma_p
+
+            laplace_filter_pb(y, tmp, size1, size2, eps_x, eps_y, eps_z, k2_screen);
+            daxpy(tmp2, tmp, -1., n3);  // res = A . y - sigma_p
+            app = norm_inf(tmp, n3);   // Compute norm_inf of residual
+            iter_conv++;
+            
+            // printf("\ny = %e \t iter=%d \t res=%e\n", norm_inf(y, n3), iter_conv,app);
+            
+            if (app <= tol){
+                res = iter_conv;
+                break;
+            }
+        }
+        daxpy(y, phi, -1.0, n3);  // phi = phi - y
+
+        eps_iter++;
+        mpi_printf("Field-dependent dielectric iteration %d: max diff = %e\n", eps_iter, max_diff);
+
+        /* Stop early if we were not actually iterating eps */
+        if (grid_ctx == NULL || grid_ctx->kBT <= 0.0) {
+            break;
+        }
+    }
+
+    free(tmp);
+    free(tmp2);
+
+    if (max_diff > EPS_FIELD_TOL && grid_ctx != NULL && grid_ctx->kBT > 0.0) {
+        mpi_printf("Warning: dielectric update did not converge after %d iterations (max diff = %e)\n", eps_iter, max_diff);
+    } else if (grid_ctx != NULL && grid_ctx->kBT > 0.0) {
+        mpi_printf(
+            "Field-dependent dielectric converged in %d iterations (max diff = %e)\n",
+            eps_iter, max_diff
+        );
+    }
+
+    if (res == -1) {
+        fprintf(stderr, "Warning: Multigrid did not converge after %d iterations.\n", MG_ITER_LIMIT_PB);
     }
 
     return res;

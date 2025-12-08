@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+
 #include "mpi_base.h"
 #include "mp_structs.h"
 
@@ -64,8 +65,10 @@ grid * grid_init(int n, double L, double h, double tol, double eps, double eps_i
 
     new->pb_enabled = 0;  // Poisson-Boltzmann not enabled by default
     new->nonpolar_enabled = 0; //nonpolar forces not enabled by default
+    new->eps_field_dep_enabled = 0; //field-dependent dielectric not enabled by default
     new->w = 0.0;  // Ionic boundary width
     new->kbar2 = 0.0;  // Screening factor
+    new->kBT = 0.0;
 
     new->k2 = NULL;  // Screening factor
     new->eps_x = NULL;  // Dielectric constant in x direction
@@ -82,12 +85,16 @@ grid * grid_init(int n, double L, double h, double tol, double eps, double eps_i
     return new;
 }
 
-void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled) {
+void grid_pb_init(
+    grid *grid, double w, double kbar2, int nonpolar_enabled, int eps_field_dep_enabled, double kBT
+) {
     // Initialize the grid for Poisson-Boltzmann simulations
     grid->pb_enabled = 1;  // Enable Poisson-Boltzmann
     grid->nonpolar_enabled = nonpolar_enabled; //nonpolar forces ON/OFF
+    grid->eps_field_dep_enabled = eps_field_dep_enabled; //field-dependent dielectric not enabled by default
     grid->w = w;
     grid->kbar2 = kbar2;
+    grid->kBT = kBT;
 
     // Initialize the solvent potential and dielectric constant arrays
     int n = grid->n;
@@ -299,6 +306,89 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
         eps_z[i] += eps_int;  // Update z dielectric constant
     }
 }    
+
+double grid_update_eps_field_dependent(grid *g, particles *p, double kBT) {
+    int n = g->n;
+    double h = g->h;
+
+    double eps_s   = g->eps_s;
+    double eps_int = g->eps_int;
+
+    long int n2   = (long int)n * (long int)n;
+    long int size = g->size;
+
+    double *eps_x = g->eps_x;
+    double *eps_y = g->eps_y;
+    double *eps_z = g->eps_z;
+    double *phi_n = g->phi_n;
+    
+    double alpha = 1;  /* Was 10: keep small to reduce nonlinearity in eps(E) response */
+    double E02       = 4 * alpha * kBT * alpha * kBT;
+    // printf("E02 for field-dependent dielectric update: %e\n", E02);
+    double inv_E02   = 1.0 / E02;
+    double inv_two_h = 1.0 / (2.0 * h);
+    double inv_h     = 1.0 / h;
+    double delta_eps = eps_s - eps_int;
+
+    double max_diff = 0.0;
+
+    #pragma omp parallel for reduction(max:max_diff)
+    for (long int idx = 0; idx < size; idx++) {
+        long int ix = idx / n2;
+        long int iy = (idx % n2) / n;
+        long int iz = idx % n;
+
+        long int ixp = ix + 1; if (ixp == n) ixp = 0;
+        long int ixm = ix - 1; if (ixm < 0)  ixm = n - 1;
+        long int iyp = iy + 1; if (iyp == n) iyp = 0;
+        long int iym = iy - 1; if (iym < 0)  iym = n - 1;
+        long int izp = iz + 1; if (izp == n) izp = 0;
+        long int izm = iz - 1; if (izm < 0)  izm = n - 1;
+
+        double phi_ijk     = phi_n[idx];
+        double phi_iplus1  = phi_n[ixp * n2 + iy  * n + iz];
+        double phi_iminus1 = phi_n[ixm * n2 + iy  * n + iz];
+        double phi_jplus1  = phi_n[ix  * n2 + iyp * n + iz];
+        double phi_jminus1 = phi_n[ix  * n2 + iym * n + iz];
+        double phi_kplus1  = phi_n[ix  * n2 + iy  * n + izp];
+        double phi_kminus1 = phi_n[ix  * n2 + iy  * n + izm];
+
+        double Ex_half = (phi_iplus1  - phi_ijk) * inv_h;
+        double Ey_half = (phi_jplus1  - phi_ijk) * inv_h;
+        double Ez_half = (phi_kplus1  - phi_ijk) * inv_h;
+
+        double Ex = (phi_iplus1  - phi_iminus1) * inv_two_h;
+        double Ey = (phi_jplus1  - phi_jminus1) * inv_two_h;
+        double Ez = (phi_kplus1  - phi_kminus1) * inv_two_h;
+
+        double E_mag_x2 = Ex_half * Ex_half + Ey * Ey + Ez * Ez;
+        double E_mag_y2 = Ex * Ex + Ey_half * Ey_half + Ez * Ez;
+        double E_mag_z2 = Ex * Ex + Ey * Ey + Ez_half * Ez_half;
+        
+        double new_x = eps_int + delta_eps / (1.0 + E_mag_x2 * inv_E02);
+        double new_y = eps_int + delta_eps / (1.0 + E_mag_y2 * inv_E02);
+        double new_z = eps_int + delta_eps / (1.0 + E_mag_z2 * inv_E02);
+        // printf("index %ld: Ex^2=%e, (Ex/E0)^2=%e,  eps(E)=%lf\n", idx, E_mag_x2, E_mag_x2 * inv_E02, new_x);
+
+        double dx = fabs(new_x - eps_x[idx]);
+        double dy = fabs(new_y - eps_y[idx]);
+        double dz = fabs(new_z - eps_z[idx]);
+
+        double local_max = dx;
+        if (dy > local_max) local_max = dy;
+        if (dz > local_max) local_max = dz;
+
+        if (local_max > max_diff){
+            max_diff = local_max;
+            // mpi_printf("Max dielectric change updated: %e at index %ld\n", max_diff, idx);
+        }
+        eps_x[idx] = new_x;
+        eps_y[idx] = new_y;
+        eps_z[idx] = new_z;
+    }
+    // mpi_printf("\nMaximum dielectric constant change after update: %e\n", max_diff);
+    return max_diff;
+}
 
 /*Important, when called for IO must be called by all procs*/
 double grid_get_energy_elec(grid *g){

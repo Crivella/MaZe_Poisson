@@ -43,9 +43,11 @@ void solver_initialize_grid(
     g_grid = grid_init(n_grid, L, h, tol, eps, eps_int, grid_type, precond_type);
 }
 
-void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enabled) {
+void solver_initialize_grid_pois_boltz(
+    double w, double kbar2, int nonpolar_enabled, int eps_field_dep_enabled, double kBT
+) {
     // Initialize the solvent potential and dielectric constant arrays
-    grid_pb_init(g_grid, w, kbar2, nonpolar_enabled);
+    grid_pb_init(g_grid, w, kbar2, nonpolar_enabled, eps_field_dep_enabled, kBT);
 }
 
 void solver_initialize_particles(

@@ -46,9 +46,10 @@ void grid_free(grid *grid);
 void particles_free(particles *p);
 void integrator_free(integrator *integrator);
 
-void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled);
+void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled, int eps_field_dep_enabled, double kBT);
 void grid_pb_free(grid *grid);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
+double grid_update_eps_field_dependent(grid *grid, particles *particles, double kBT);
 double grid_get_energy_elec(grid *grid);
 
 void lcg_grid_init(grid * grid);
@@ -150,8 +151,10 @@ struct grid {
     // Poisson-Boltzmann specific
     int pb_enabled;  // Poisson-Boltzmann enabled
     int nonpolar_enabled; // Nonpolar forces enabled
+    int eps_field_dep_enabled; // Field-dependent dielectric enabled
     double w;  // Ionic boundary width
     double kbar2;  // Screening factor
+    double kBT;  // Thermal energy factor for field-dependent dielectric updates
 
     double *k2;  // Screening factor
     double *eps_x;  // Dielectric constant

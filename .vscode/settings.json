@@ -1,6 +1,8 @@
 {
     "cmake.sourceDirectory": "/Users/federica/Documents/PhD_project/GitHub/Code_Davide/MaZe_Poisson_J/library",
     "files.associations": {
-        "multigrid_pb.h": "c"
+        "multigrid_pb.h": "c",
+        "forces.h": "c",
+        "mp_structs.h": "c"
     }
 }

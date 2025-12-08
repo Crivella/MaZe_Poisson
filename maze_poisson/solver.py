@@ -152,14 +152,8 @@ class SolverMD(Logger):
                 eps_s * cst.eps0 * cst.kB_si * self.mdv.T
             ) * cst.BR ** 2 * self.h ** 2
             self.logger.info("Initializing grid for Poisson-Boltzmann.")
-
-            if self.mdv.nonpolar_forces:
-                nonpolar_enabled = 1
-            else:  
-                nonpolar_enabled = 0   
-
             capi.solver_initialize_grid_pois_boltz(
-                self.gset.w, kbar2, nonpolar_enabled
+                self.gset.w, kbar2, int(self.mdv.nonpolar_forces), int(self.mdv.field_dependent_dielectric), self.mdv.kBT
             )
 
     def get_tosi_fumi_params(self, particles) -> np.ndarray:
@@ -427,7 +421,6 @@ class SolverMD(Logger):
             self.logger.warning("Warning: CG did not converge.")
             # raise ValueError("Error CG did not converge.")
         return res
-
     @Clock('forces')
     def compute_forces(self):
         """Compute the forces on the particles."""
@@ -485,7 +478,11 @@ class SolverMD(Logger):
         self.integrator_part1()
         if self.mdv.elec:
             self.update_charges()
-            self.update_eps_k2()
+
+            if self.mdv.poisson_boltzmann and not self.mdv.field_dependent_dielectric:
+            # if self.mdv.poisson_boltzmann:
+                self.update_eps_k2()
+
             self.n_iters = self.update_field()
             self.t_iters = Clock.get_clock('field').last_call
         self.compute_forces()
@@ -558,5 +555,3 @@ class SolverMD(Logger):
             self.logger.info(f'  Ionic strength: {self.gset.I} M')
             self.logger.info(f'  Gamma NP: {self.mdv.gamma_np}')
             self.logger.info(f'  Beta NP: {self.mdv.beta_np}')
-
-

@@ -125,10 +125,18 @@ int maze_multigrid_grid_update_field(grid *grid) {
     int res;
 
     if (grid->pb_enabled) {
-           res = verlet_pb_multigrid(
-            grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
-            grid->n_local, grid->n, grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
-        );  
+        if (grid->eps_field_dep_enabled) {
+            res = verlet_pb_multigrid_eps_field(
+                grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
+                grid->n_local, grid->n, grid->eps_x, grid->eps_y, grid->eps_z, grid->k2,
+                grid
+            );
+        } else {
+            res = verlet_pb_multigrid(
+                grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
+                grid->n_local, grid->n, grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
+            );
+        }
     } else{
         res = verlet_poisson_multigrid(
             grid->tol, grid->h * grid->eps_s, grid->phi_n, grid->phi_p, grid->q, grid->y,
