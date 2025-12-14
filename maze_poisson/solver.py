@@ -73,6 +73,9 @@ class SolverMD(Logger):
         self.n_iters = 0
 
         self.energy_nonpolar = 0.0
+        self.energy_intra = 0.0
+        self.energy_elec = 0.0
+        self.energy_corr = 0.0
 
         if self.outset.print_restart:
             outset.restart_step = outset.restart_step or mdv.N_steps
@@ -234,6 +237,38 @@ class SolverMD(Logger):
 
         return sc_params_array
 
+    def validate_water_inputs(self, species_df: pd.DataFrame, coords_df: pd.DataFrame):
+        """Check that water-specific inputs are consistent when iswater flag is set."""
+        if not self.mdv.iswater:
+            return
+        required_col = 'type'
+        for name, df in [('species file', species_df), ('input file', coords_df)]:
+            if required_col not in df.columns:
+                raise ValueError(f"When iswater=True, the {name} must contain a '{required_col}' column.")
+
+        species_types = species_df['type'].astype(str).str.upper()
+        if not {'O', 'H'}.issubset(set(species_types)):
+            raise ValueError("When iswater=True, the species file must define both oxygen ('O') and hydrogen ('H').")
+
+        coord_types = coords_df['type'].astype(str).str.upper().to_numpy()
+        if len(coord_types) % 3 != 0:
+            raise ValueError("When iswater=True, the input file must list atoms in O-H-H triplets (row count must be a multiple of 3).")
+
+        unique_coord_types = set(coord_types)
+        if not unique_coord_types.issubset({'O', 'H'}):
+            extras = unique_coord_types.difference({'O', 'H'})
+            raise ValueError(f"When iswater=True, input file must contain only oxygen and hydrogen types; found extra types: {extras}.")
+
+        triplets = coord_types.reshape((-1, 3))
+        pattern = np.array(['O', 'H', 'H'])
+        mismatches = np.where((triplets != pattern).any(axis=1))[0]
+        if mismatches.size:
+            idx = mismatches[0]
+            raise ValueError(
+                f"When iswater=True, each molecule must be ordered as O-H-H in the 'type' column; "
+                f"molecule {idx} has types {triplets[idx].tolist()}."
+            )
+
     def get_lennard_jones_params(self, particles) -> np.ndarray:
         """Get the Lennard Jones parameters for the particles."""
         if self.mdv.potential_params_file is None:
@@ -277,6 +312,18 @@ class SolverMD(Logger):
         """Initialize the particles."""
         self.logger.info(f"Reading particle definitions from file: {self.gset.particles_file}")
         particles = pd.read_csv(self.gset.particles_file)
+        particles_for_validation = particles.copy() if self.mdv.iswater else None
+        # Normalize column name for type if provided with different casing
+        if 'type' not in particles.columns:
+            for col in particles.columns:
+                if col.lower() == 'type':
+                    particles.rename(columns={col: 'type'}, inplace=True)
+                    if particles_for_validation is not None:
+                        particles_for_validation.rename(columns={col: 'type'}, inplace=True)
+                    break
+
+        if self.mdv.iswater:
+            self.logger.info("Water mode enabled (SPC): expecting O-H-H triplets (types O,H,H) in input coordinates.")
         if len(particles) != self.gset.N_typs:
             raise ValueError(
                 f"Number of particle types in file ({len(particles)}) does not match N_typs ({self.gset.N_typs})."
@@ -306,6 +353,13 @@ class SolverMD(Logger):
         kBT = self.mdv.kBT
 
         df = pd.read_csv(start_file)
+        if 'type' not in df.columns:
+            for col in df.columns:
+                if col.lower() == 'type':
+                    df.rename(columns={col: 'type'}, inplace=True)
+                    break
+        if self.mdv.iswater:
+            self.validate_water_inputs(particles_for_validation, df)
         types = np.ascontiguousarray(particles.loc[df['type'], 'enum'].values, dtype=np.int32)
         pos = np.ascontiguousarray(df[['x', 'y', 'z']].values / cst.a0, dtype=np.float64)
         charges = np.ascontiguousarray(particles.loc[df['type'], 'charge'].values, dtype=np.float64)
@@ -340,7 +394,7 @@ class SolverMD(Logger):
 
         capi.solver_initialize_particles(
             self.N, self.N_typs, self.L, self.h, self.N_p,
-            pot_id, ca_scheme_id,
+            pot_id, ca_scheme_id, int(self.mdv.iswater),
             types, pos, vel, mass, charges,
             pot_params
         )
@@ -439,6 +493,14 @@ class SolverMD(Logger):
             self.compute_forces_pb()
         # self.logger.debug("Computing total forces...")
         capi.solver_compute_forces_tot()
+        if self.mdv.iswater:
+            self.energy_intra = capi.get_energy_intra()
+            self.energy_corr = capi.get_energy_intra_excl()
+        else:
+            self.energy_intra = 0.0
+            self.energy_corr = 0.0
+        # Electrostatic energy from the grid (not printed in energy.csv per request)
+        self.energy_elec = capi.get_energy_elec()
 
     @Clock('forces_field')
     def compute_forces_field(self):

@@ -181,6 +181,16 @@ capi.register_function(
     'get_energy_elec', ctypes.c_double, [],
 )
 
+# double get_energy_intra_excl() {
+capi.register_function(
+    'get_energy_intra_excl', ctypes.c_double, [],
+)
+
+# double get_energy_intra() {
+capi.register_function(
+    'get_energy_intra', ctypes.c_double, [],
+)
+
 # void get_momentum(double *recv) {
 capi.register_function(
     'get_momentum', None, [

@@ -10,4 +10,9 @@ double compute_tf_forces(int n_p, double L, double *pos, double *params, double 
 double compute_sc_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces);
 double compute_lj_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces);
 
+// Pairwise nonbonded contribution for intramolecular exclusions (applies opposite sign)
+double compute_lj_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces);
+double compute_tf_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces);
+double compute_sc_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces);
+
 #endif

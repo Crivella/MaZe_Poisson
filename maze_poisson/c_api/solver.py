@@ -46,6 +46,7 @@ capi.register_function(
         ctypes.c_int,
         ctypes.c_int,
         ctypes.c_int,
+        ctypes.c_int,
         npct.ndpointer(dtype=np.int32, ndim=1, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),

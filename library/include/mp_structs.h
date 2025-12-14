@@ -95,6 +95,8 @@ double particles_compute_forces_field(particles *p, grid *grid);
 double particles_compute_forces_tf(particles *p);
 double particles_compute_forces_lj(particles *p);
 double particles_compute_forces_sc(particles *p);
+double particles_compute_intramolecular_forces(particles *p);
+double get_energy_intra_excl();
 double particles_compute_forces_pb(particles *p, grid *grid);
 void particles_compute_forces_tot(particles *p);
 
@@ -179,13 +181,20 @@ struct particles {
 
     int pot_type;  // Type of the potential
     int cas_type;  // Type of the charge assignment scheme
+    int is_water;  // Flag to toggle water/SPC setup
 
     int *types;  // Particle types (n_p)
     double *pos;  // Particle positions (n_p x 3)
     double *vel;  // Particle velocities (n_p x 3)
     double *fcs_elec;  // Particle electric forces (n_p x 3)
     double *fcs_noel;  // Particle non-electric forces (n_p x 3)
+    double *fcs_intra; // Intramolecular forces total (n_p x 3)
+    double *fcs_intra_ba; // Intramolecular bond/angle forces (n_p x 3)
+    double *fcs_intra_excl; // Intramolecular exclusion correction forces (n_p x 3)
     double *fcs_tot;  // Particle total forces (n_p x 3)
+    double energy_intra; // Intramolecular energy total
+    double energy_intra_ba; // Intramolecular bond/angle energy
+    double energy_intra_excl; // Intramolecular exclusion correction energy
     double *mass;  // Particle masses (n_p)
     double *charges;  // Particle charges (n_p)
     long int *neighbors;  // Particle neighbors (n_p x 8 x 3)

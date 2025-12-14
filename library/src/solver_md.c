@@ -49,11 +49,15 @@ void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enab
 }
 
 void solver_initialize_particles(
-    int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
+    int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type, int is_water,
     int *types, double *pos, double *vel, double *mass, double *charges,
     double *pot_params
 ) {
     g_particles = particles_init(n, n_p, n_typ, L, h, cas_type);
+    g_particles->is_water = is_water;
+    if (g_particles->is_water) {
+        g_particles->fcs_intra = (double *)calloc(n_p * 3, sizeof(double));
+    }
 
     memcpy(g_particles->types, types, n_p * sizeof(int));
     memcpy(g_particles->pos, pos, n_p * 3 * sizeof(double));
@@ -150,7 +154,18 @@ double solver_compute_forces_pb() {
 }
 
 void solver_compute_forces_tot() {
+    if (g_particles->is_water) {
+        particles_compute_intramolecular_forces(g_particles);
+    }
     g_particles->compute_forces_tot(g_particles);
+}
+
+double get_energy_intra() {
+    return g_particles->energy_intra;
+}
+
+double get_energy_intra_excl() {
+    return g_particles->energy_intra_excl;
 }
 
 // void solver_compute_forces() {

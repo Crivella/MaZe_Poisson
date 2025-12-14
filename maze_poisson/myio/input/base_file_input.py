@@ -115,6 +115,8 @@ class MDVariables(BaseFileInput):
     method: str = 'FFT'  # Method for solving the Poisson equation
     tol: float = 1e-7  # Tolerance for convergence
 
+    iswater: bool = False  # Flag to toggle SPC water setup
+
     thermostat: bool = False  # Whether to use a thermostat
     gamma: float = 1e-3  # Damping coefficient for the thermostat
 

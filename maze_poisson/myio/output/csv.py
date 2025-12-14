@@ -45,7 +45,7 @@ class CSVOutputFile(BaseOutputFile):
 class EnergyCSVOutputFile(CSVOutputFile):
     name = 'energy'
     # headers = ['iter', 'K', 'V_notelec', 'V_elec', 'DeltaG_nonpolar']
-    headers = ['iter', 'K', 'V_notelec']
+    headers = ['iter', 'K', 'V_notelec', 'V_intra', 'E_corr']
     
     def get_data(self, iter: int, solver):
         kin = capi.get_kinetic_energy()
@@ -55,6 +55,8 @@ class EnergyCSVOutputFile(CSVOutputFile):
             'iter': [iter],
             'K': [kin],
             'V_notelec': [solver.potential_notelec],
+            'V_intra': [solver.energy_intra if solver.mdv.iswater else 0.0],
+            'E_corr': [solver.energy_corr],
             # 'V_elec': [deltaG_elec],
             # 'DeltaG_nonpolar': [solver.energy_nonpolar],
         })

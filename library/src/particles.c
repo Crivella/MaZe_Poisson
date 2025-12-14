@@ -73,12 +73,20 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
     p->L = L;
     p->h = h;
 
+    p->is_water = 0;
+
     p->types = (int *)malloc(n_p * sizeof(int));
     p->pos = (double *)malloc(n_p * 3 * sizeof(double));
     p->vel = (double *)malloc(n_p * 3 * sizeof(double));
     p->fcs_elec = (double *)calloc(n_p * 3, sizeof(double));
     p->fcs_noel = (double *)calloc(n_p * 3, sizeof(double));
+    p->fcs_intra = NULL; // Intramolecular forces total
+    p->fcs_intra_ba = NULL;  // Intramolecular bond/angle forces
+    p->fcs_intra_excl = NULL; // Intramolecular exclusion correction forces
     p->fcs_tot = (double *)calloc(n_p * 3, sizeof(double));
+    p->energy_intra = 0.0; // Intramolecular energy total
+    p->energy_intra_ba = 0.0; // Intramolecular bond/angle energy
+    p->energy_intra_excl = 0.0; // Intramolecular exclusion correction energy
     p->mass = (double *)malloc(n_p * sizeof(double));
     p->charges = (double *)malloc(n_p * sizeof(double));
 
@@ -142,6 +150,15 @@ void particles_free(particles *p) {
     free(p->vel);
     free(p->fcs_elec);
     free(p->fcs_noel);
+    if (p->fcs_intra != NULL) {
+        free(p->fcs_intra);
+    }
+    if (p->fcs_intra_ba != NULL) {
+        free(p->fcs_intra_ba);
+    }
+    if (p->fcs_intra_excl != NULL) {
+        free(p->fcs_intra_excl);
+    }
     free(p->fcs_tot);
     free(p->mass);
     free(p->charges);
@@ -402,6 +419,205 @@ double particles_compute_forces_sc(particles *p) {
 
 double particles_compute_forces_lj(particles *p) { 
     return compute_lj_forces(p->n_p, p->L, p->pos, p->lj_params, p->r_cut, p->fcs_noel);
+}
+
+double particles_compute_intramolecular_forces(particles *p) {
+    if (!p->is_water) {
+        return 0.0;
+    }
+
+    long int np = p->n_p;
+    double *pos = p->pos;
+    double *fcs = p->fcs_intra;
+    double *fcs_ba = p->fcs_intra_ba;
+    double *fcs_excl = p->fcs_intra_excl;
+    double L = p->L;
+    double r_cut = p->r_cut;
+    int pot_type = p->pot_type;
+    p->energy_intra = 0.0;
+    p->energy_intra_ba = 0.0;
+    p->energy_intra_excl = 0.0;
+    
+    double qO = p->charges[0];
+    double qH1 = p->charges[1];
+    double qH2 = p->charges[2];
+
+    if (fcs == NULL) {
+        fcs = (double *)calloc(np * 3, sizeof(double));
+        p->fcs_intra = fcs;
+    } else {
+        memset(fcs, 0, np * 3 * sizeof(double));
+    }
+    if (fcs_ba == NULL) {
+        fcs_ba = (double *)calloc(np * 3, sizeof(double));
+        p->fcs_intra_ba = fcs_ba;
+    } else {
+        memset(fcs_ba, 0, np * 3 * sizeof(double));
+    }
+    if (fcs_excl == NULL) {
+        fcs_excl = (double *)calloc(np * 3, sizeof(double));
+        p->fcs_intra_excl = fcs_excl;
+    } else {
+        memset(fcs_excl, 0, np * 3 * sizeof(double));
+    }
+
+    double energy_ba = 0.0;
+    double energy_excl = 0.0;
+
+    // Utility for minimum image
+    #define MIN_IMG(d) (d -= L * nearbyint(d / L))
+
+    #pragma omp parallel for reduction(+:energy_ba, energy_excl)
+    for (long int m = 0; m < np / 3; m++) {
+        long int iO = m * 3;
+
+        long int o3 = iO * 3;
+        long int h13 = (iO + 1) * 3;
+        long int h23 = (iO + 2) * 3;
+
+        // Vectors O->H1 and O->H2 with PBC
+        double r1x = pos[h13    ] - pos[o3    ];
+        double r1y = pos[h13 + 1] - pos[o3 + 1];
+        double r1z = pos[h13 + 2] - pos[o3 + 2];
+        MIN_IMG(r1x); MIN_IMG(r1y); MIN_IMG(r1z);
+
+        double r2x = pos[h23    ] - pos[o3    ];
+        double r2y = pos[h23 + 1] - pos[o3 + 1];
+        double r2z = pos[h23 + 2] - pos[o3 + 2];
+        MIN_IMG(r2x); MIN_IMG(r2y); MIN_IMG(r2z);
+
+        double r1 = sqrt(r1x * r1x + r1y * r1y + r1z * r1z) + 1e-15;
+        double r2 = sqrt(r2x * r2x + r2y * r2y + r2z * r2z) + 1e-15;
+
+        // Bond energies
+        double dr1 = r1 - r0;
+        double dr2 = r2 - r0;
+        double ebond = 0.5 * kb * (dr1 * dr1 + dr2 * dr2);
+
+        // Bond forces
+        double fb1 = -kb * dr1 / r1;
+        double fb2 = -kb * dr2 / r2;
+
+        double f1x = fb1 * r1x;
+        double f1y = fb1 * r1y;
+        double f1z = fb1 * r1z;
+
+        double f2x = fb2 * r2x;
+        double f2y = fb2 * r2y;
+        double f2z = fb2 * r2z;
+
+        // Angle
+        double cos_t = (r1x * r2x + r1y * r2y + r1z * r2z) / (r1 * r2);
+        if (cos_t > 1.0) cos_t = 1.0;
+        if (cos_t < -1.0) cos_t = -1.0;
+
+        double theta = acos(cos_t);
+        double dtheta = theta - theta0;
+
+        // Angle energy
+        double eangle = 0.5 * ka * dtheta * dtheta;
+
+        // Forces from angle term
+        double coef = ka * dtheta / (sin(theta) + 1e-15);
+        double v1x = r1x / r1, v1y = r1y / r1, v1z = r1z / r1;
+        double v2x = r2x / r2, v2y = r2y / r2, v2z = r2z / r2;
+
+
+        double fa1x = coef * (v2x - cos_t * v1x) / r1;
+        double fa1y = coef * (v2y - cos_t * v1y) / r1;
+        double fa1z = coef * (v2z - cos_t * v1z) / r1;
+
+        double fa2x = coef * (v1x - cos_t * v2x) / r2;
+        double fa2y = coef * (v1y - cos_t * v2y) / r2;
+        double fa2z = coef * (v1z - cos_t * v2z) / r2;
+
+        // Accumulate forces (bond + angle)
+        fcs_ba[h13    ] += f1x + fa1x;
+        fcs_ba[h13 + 1] += f1y + fa1y;
+        fcs_ba[h13 + 2] += f1z + fa1z;
+
+        fcs_ba[h23    ] += f2x + fa2x;
+        fcs_ba[h23 + 1] += f2y + fa2y;
+        fcs_ba[h23 + 2] += f2z + fa2z;
+
+        fcs_ba[o3    ] -= (f1x + f2x + fa1x + fa2x);
+        fcs_ba[o3 + 1] -= (f1y + f2y + fa1y + fa2y);
+        fcs_ba[o3 + 2] -= (f1z + f2z + fa1z + fa2z);
+
+        energy_ba += ebond + eangle;
+
+        // Subtract intramolecular Coulomb (O-H1, O-H2, H1-H2)
+        double hhx, hhy, hhz;
+        hhx = r2x - r1x;
+        hhy = r2y - r1y;
+        hhz = r2z - r1z;
+        MIN_IMG(hhx); MIN_IMG(hhy); MIN_IMG(hhz);
+
+        double inv_r, inv_r3, fac, ecoul;
+        // O-H1
+        inv_r = 1.0 / r1;
+        inv_r3 = inv_r * inv_r * inv_r;
+        fac = -qO * qH1 * inv_r3;
+        fcs_excl[o3    ] -= fac * r1x;
+        fcs_excl[o3 + 1] -= fac * r1y;
+        fcs_excl[o3 + 2] -= fac * r1z;
+        fcs_excl[h13    ] += fac * r1x;
+        fcs_excl[h13 + 1] += fac * r1y;
+        fcs_excl[h13 + 2] += fac * r1z;
+        energy_excl -= qO * qH1 * inv_r;
+
+        // O-H2
+        inv_r = 1.0 / r2;
+        inv_r3 = inv_r * inv_r * inv_r;
+        fac = -qO * qH2 * inv_r3;
+        fcs_excl[o3    ] -= fac * r2x;
+        fcs_excl[o3 + 1] -= fac * r2y;
+        fcs_excl[o3 + 2] -= fac * r2z;
+        fcs_excl[h23    ] += fac * r2x;
+        fcs_excl[h23 + 1] += fac * r2y;
+        fcs_excl[h23 + 2] += fac * r2z;
+        energy_excl -= qO * qH2 * inv_r;
+        
+        // H1-H2
+        inv_r = 1.0 / (sqrt(hhx * hhx + hhy * hhy + hhz * hhz) + 1e-15);
+        inv_r3 = inv_r * inv_r * inv_r;
+        fac = -qH1 * qH2 * inv_r3;
+        fcs_excl[h13    ] -= fac * hhx;
+        fcs_excl[h13 + 1] -= fac * hhy;
+        fcs_excl[h13 + 2] -= fac * hhz;
+        fcs_excl[h23    ] += fac * hhx;
+        fcs_excl[h23 + 1] += fac * hhy;
+        fcs_excl[h23 + 2] += fac * hhz;
+        energy_excl -= qH1 * qH2 * inv_r;
+
+        // Subtract intramolecular nonbonded according to chosen potential
+        if (pot_type == PARTICLE_POTENTIAL_TYPE_LJ) {
+            energy_excl -= compute_lj_pair_force_excl(iO, iO + 1, r1x, r1y, r1z, r_cut, np, p->lj_params, fcs_excl);
+            energy_excl -= compute_lj_pair_force_excl(iO, iO + 2, r2x, r2y, r2z, r_cut, np, p->lj_params, fcs_excl);
+            energy_excl -= compute_lj_pair_force_excl(iO + 1, iO + 2, hhx, hhy, hhz, r_cut, np, p->lj_params, fcs_excl);
+        } else if (pot_type == PARTICLE_POTENTIAL_TYPE_TF) {
+            energy_excl -= compute_tf_pair_force_excl(iO, iO + 1, r1x, r1y, r1z, r_cut, np, p->tf_params, fcs_excl);
+            energy_excl -= compute_tf_pair_force_excl(iO, iO + 2, r2x, r2y, r2z, r_cut, np, p->tf_params, fcs_excl);
+            energy_excl -= compute_tf_pair_force_excl(iO + 1, iO + 2, hhx, hhy, hhz, r_cut, np, p->tf_params, fcs_excl);
+        } else if (pot_type == PARTICLE_POTENTIAL_TYPE_SC) {
+            energy_excl -= compute_sc_pair_force_excl(iO, iO + 1, r1x, r1y, r1z, r_cut, np, p->sc_params, fcs_excl);
+            energy_excl -= compute_sc_pair_force_excl(iO, iO + 2, r2x, r2y, r2z, r_cut, np, p->sc_params, fcs_excl);
+            energy_excl -= compute_sc_pair_force_excl(iO + 1, iO + 2, hhx, hhy, hhz, r_cut, np, p->sc_params, fcs_excl);
+        }
+    }
+
+    #undef MIN_IMG
+
+    // Combine forces
+    long int size = np * 3;
+    for (long int i = 0; i < size; i++) {
+        fcs[i] = fcs_ba[i] + fcs_excl[i];
+    }
+
+    p->energy_intra_ba = energy_ba;
+    p->energy_intra_excl = energy_excl;
+    p->energy_intra = energy_ba + energy_excl;
+    return p->energy_intra;
 }
 
 double calc_h_ratio(double rad, double w2, double w3) {
@@ -792,6 +1008,9 @@ void particles_compute_forces_tot(particles *p) {
     if (p->fcs_np != NULL) {
         daxpy(p->fcs_np, p->fcs_tot, 1.0, size);
     }
+    if (p->is_water && p->fcs_intra != NULL) {
+        daxpy(p->fcs_intra, p->fcs_tot, 1.0, size);
+    }
 } 
 
 
@@ -855,4 +1074,3 @@ void particles_rescale_velocities(particles *p) {
 
     free(init_vel);
 }
-
