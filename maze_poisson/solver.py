@@ -455,6 +455,8 @@ class SolverMD(Logger):
     def md_loop_output(self, i: int, force: bool = False):
         """Output the data for the MD loop."""
         self.ofiles.output(i, self, force)
+        if self.outset.print_eps_map and (force or i % self.out_stride == 0):
+            self.save_eps_map(iter_idx=i)
 
     @Clock('charges')
     def update_charges(self):
@@ -512,6 +514,45 @@ class SolverMD(Logger):
         self.initialize()
         self.md_loop()
         self.md_loop_output(self.mdv.N_steps, force=True)
+        if self.outset.print_eps_map:
+            self.save_eps_map()
+
+    def save_eps_map(self, iter_idx: int | None = None, filename: str | None = None) -> str:
+        """Save the dielectric map (eps_x, eps_y, eps_z) to a compressed npz file.
+
+        iter_idx is stored in the file (and used in the default filename) so that
+        epsilon maps across steps can be stitched into an animation.
+        """
+        if not self.mdv.poisson_boltzmann:
+            raise ValueError("Epsilon map is available only when Poisson-Boltzmann is enabled.")
+
+        eps_x = np.empty((self.N, self.N, self.N), dtype=np.float64)
+        eps_y = np.empty_like(eps_x)
+        eps_z = np.empty_like(eps_x)
+        capi.get_eps_map(eps_x, eps_y, eps_z)
+
+        if filename is None:
+            if iter_idx is not None:
+                filename = os.path.join(self.outset.path, f'epsilon_map_step_{iter_idx:06d}.npz')
+            else:
+                filename = os.path.join(self.outset.path, 'epsilon_map.npz')
+        out_dir = os.path.dirname(filename)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+
+        np.savez_compressed(
+            filename,
+            eps_x=eps_x,
+            eps_y=eps_y,
+            eps_z=eps_z,
+            h=self.h,
+            L=self.L,
+            eps_s=self.gset.eps_s,
+            eps_int=self.gset.eps_int,
+            iter=iter_idx,
+        )
+        self.logger.info(f"Saved epsilon map to {filename}")
+        return filename
 
     def save_input(self):
         """Save the input parameters to a file."""

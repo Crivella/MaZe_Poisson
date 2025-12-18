@@ -319,6 +319,34 @@ void get_field_prev(double *recv) {
     mpi_grid_collect_buffer(ptr, recv, g_grid->n);
 }
 
+void get_eps_map(double *recv_x, double *recv_y, double *recv_z) {
+    long int n3 = (long) g_grid->n * g_grid->n * g_grid->n;
+
+    if (recv_x != NULL) {
+        if (g_grid->eps_x != NULL) {
+            mpi_grid_collect_buffer(g_grid->eps_x, recv_x, g_grid->n);
+        } else {
+            memset(recv_x, 0, n3 * sizeof(double));
+        }
+    }
+
+    if (recv_y != NULL) {
+        if (g_grid->eps_y != NULL) {
+            mpi_grid_collect_buffer(g_grid->eps_y, recv_y, g_grid->n);
+        } else {
+            memset(recv_y, 0, n3 * sizeof(double));
+        }
+    }
+
+    if (recv_z != NULL) {
+        if (g_grid->eps_z != NULL) {
+            mpi_grid_collect_buffer(g_grid->eps_z, recv_z, g_grid->n);
+        } else {
+            memset(recv_z, 0, n3 * sizeof(double));
+        }
+    }
+}
+
 // void get_field_s(double *recv) {
 //     if (g_grid->phi_s != NULL) {
 //         mpi_grid_collect_buffer(g_grid->phi_s, recv, g_grid->n);

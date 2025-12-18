@@ -56,6 +56,7 @@ class OutputSettings(BaseFileInput):
     print_forces_pb: bool = False
     print_restart: bool = False
     print_restart_field: bool = False
+    print_eps_map: bool = False
 
     path: str = 'Outputs/'
     format: str = 'csv'

@@ -164,6 +164,15 @@ capi.register_function(
     ],
 )
 
+# void get_eps_map(double *eps_x, double *eps_y, double *eps_z) {
+capi.register_function(
+    'get_eps_map', None, [
+        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    ],
+)
+
 # void get_q(double *recv) {
 capi.register_function(
     'get_q', None, [
