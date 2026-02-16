@@ -5,6 +5,7 @@
 
 #include "mpi_base.h"
 #include "linalg.h"
+#include "omp_base.h"
 
 // Pairwise nonbonded contribution for intramolecular exclusions (applies opposite sign)
 double compute_lj_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces);
@@ -28,8 +29,21 @@ double compute_forces_harmonic_bond(long int n_p, const double *pos, double *for
     double energy = 0.0;
     const double eps = 1e-15;
 
+    int nthreads = get_omp_max_threads();
+    if (nthreads < 1) {
+        nthreads = 1;
+    }
+    long int n3 = n_p * 3;
+    // Thread-local accumulation to avoid OpenMP races; reduce into `forces` at the end.
+    double **forces_thr = (double **)malloc((size_t)nthreads * sizeof(double *));
+    for (int t = 0; t < nthreads; t++) {
+        forces_thr[t] = (double *)calloc((size_t)n3, sizeof(double));
+    }
+
     #pragma omp parallel for reduction(+:energy)
     for (long int m = 0; m < n_p / 3; m++) {
+        int tid = get_omp_thread_num();
+        double *fcs = forces_thr[tid];
         if (size > 1 && (m % size) != rank) {
             continue;
         }
@@ -47,12 +61,12 @@ double compute_forces_harmonic_bond(long int n_p, const double *pos, double *for
         } else {
             fab = 0.0;
         }
-        forces[iH1 * 3    ] += dx * fab;
-        forces[iH1 * 3 + 1] += dy * fab;
-        forces[iH1 * 3 + 2] += dz * fab;
-        forces[iO * 3    ] -= dx * fab;
-        forces[iO * 3 + 1] -= dy * fab;
-        forces[iO * 3 + 2] -= dz * fab;
+        fcs[iH1 * 3    ] += dx * fab;
+        fcs[iH1 * 3 + 1] += dy * fab;
+        fcs[iH1 * 3 + 2] += dz * fab;
+        fcs[iO * 3    ] -= dx * fab;
+        fcs[iO * 3 + 1] -= dy * fab;
+        fcs[iO * 3 + 2] -= dz * fab;
         energy += 0.5 * k * (dr - r0_val) * (dr - r0_val);
 
         // O - H2
@@ -63,14 +77,20 @@ double compute_forces_harmonic_bond(long int n_p, const double *pos, double *for
         } else {
             fab = 0.0;
         }
-        forces[iH2 * 3    ] += dx * fab;
-        forces[iH2 * 3 + 1] += dy * fab;
-        forces[iH2 * 3 + 2] += dz * fab;
-        forces[iO * 3    ] -= dx * fab;
-        forces[iO * 3 + 1] -= dy * fab;
-        forces[iO * 3 + 2] -= dz * fab;
+        fcs[iH2 * 3    ] += dx * fab;
+        fcs[iH2 * 3 + 1] += dy * fab;
+        fcs[iH2 * 3 + 2] += dz * fab;
+        fcs[iO * 3    ] -= dx * fab;
+        fcs[iO * 3 + 1] -= dy * fab;
+        fcs[iO * 3 + 2] -= dz * fab;
         energy += 0.5 * k * (dr - r0_val) * (dr - r0_val);
     }
+
+    for (int t = 0; t < nthreads; t++) {
+        daxpy(forces_thr[t], forces, 1.0, n3);
+        free(forces_thr[t]);
+    }
+    free(forces_thr);
 
     return energy;
 }
@@ -79,8 +99,21 @@ double compute_forces_harmonic_angle(long int n_p, const double *pos, double *fo
     double energy = 0.0;
     const double eps = 1e-15;
 
+    int nthreads = get_omp_max_threads();
+    if (nthreads < 1) {
+        nthreads = 1;
+    }
+    long int n3 = n_p * 3;
+    // Thread-local accumulation to avoid OpenMP races; reduce into `forces` at the end.
+    double **forces_thr = (double **)malloc((size_t)nthreads * sizeof(double *));
+    for (int t = 0; t < nthreads; t++) {
+        forces_thr[t] = (double *)calloc((size_t)n3, sizeof(double));
+    }
+
     #pragma omp parallel for reduction(+:energy)
     for (long int m = 0; m < n_p / 3; m++) {
+        int tid = get_omp_thread_num();
+        double *fcs = forces_thr[tid];
         if (size > 1 && (m % size) != rank) {
             continue;
         }
@@ -128,31 +161,37 @@ double compute_forces_harmonic_angle(long int n_p, const double *pos, double *fo
         double fbc = -(dudtheta * dacosdz * dzdbc) / drbc;
 
         // ab contribution (O-H1)
-        forces[iH1 * 3    ] += dxab * fab;
-        forces[iH1 * 3 + 1] += dyab * fab;
-        forces[iH1 * 3 + 2] += dzab * fab;
-        forces[iO * 3    ] -= dxab * fab;
-        forces[iO * 3 + 1] -= dyab * fab;
-        forces[iO * 3 + 2] -= dzab * fab;
+        fcs[iH1 * 3    ] += dxab * fab;
+        fcs[iH1 * 3 + 1] += dyab * fab;
+        fcs[iH1 * 3 + 2] += dzab * fab;
+        fcs[iO * 3    ] -= dxab * fab;
+        fcs[iO * 3 + 1] -= dyab * fab;
+        fcs[iO * 3 + 2] -= dzab * fab;
 
         // ac contribution (O-H2)
-        forces[iH2 * 3    ] += dxac * fac;
-        forces[iH2 * 3 + 1] += dyac * fac;
-        forces[iH2 * 3 + 2] += dzac * fac;
-        forces[iO * 3    ] -= dxac * fac;
-        forces[iO * 3 + 1] -= dyac * fac;
-        forces[iO * 3 + 2] -= dzac * fac;
+        fcs[iH2 * 3    ] += dxac * fac;
+        fcs[iH2 * 3 + 1] += dyac * fac;
+        fcs[iH2 * 3 + 2] += dzac * fac;
+        fcs[iO * 3    ] -= dxac * fac;
+        fcs[iO * 3 + 1] -= dyac * fac;
+        fcs[iO * 3 + 2] -= dzac * fac;
 
         // bc contribution (H1-H2)
-        forces[iH2 * 3    ] += dxbc * fbc;
-        forces[iH2 * 3 + 1] += dybc * fbc;
-        forces[iH2 * 3 + 2] += dzbc * fbc;
-        forces[iH1 * 3    ] -= dxbc * fbc;
-        forces[iH1 * 3 + 1] -= dybc * fbc;
-        forces[iH1 * 3 + 2] -= dzbc * fbc;
+        fcs[iH2 * 3    ] += dxbc * fbc;
+        fcs[iH2 * 3 + 1] += dybc * fbc;
+        fcs[iH2 * 3 + 2] += dzbc * fbc;
+        fcs[iH1 * 3    ] -= dxbc * fbc;
+        fcs[iH1 * 3 + 1] -= dybc * fbc;
+        fcs[iH1 * 3 + 2] -= dzbc * fbc;
 
         energy += 0.5 * k * (theta - theta0_val) * (theta - theta0_val);
     }
+
+    for (int t = 0; t < nthreads; t++) {
+        daxpy(forces_thr[t], forces, 1.0, n3);
+        free(forces_thr[t]);
+    }
+    free(forces_thr);
 
     return energy;
 }
@@ -306,6 +345,17 @@ double compute_tf_forces(int n_p, double L, double *pos, double *params, double 
             r_diff[2] = app;
             r_mag += app * app;
             r_mag = sqrt(r_mag);
+            if (!isfinite(r_mag) || r_mag <= 1e-12) {
+                mpi_fprintf(
+                    stderr,
+                    "Error: TF r_mag non-finite or too small (i=%d j=%d r=%e). "
+                    "pos_i=(%e %e %e) pos_j=(%e %e %e)\n",
+                    i, j, r_mag,
+                    pos[ip], pos[ip + 1], pos[ip + 2],
+                    pos[jp], pos[jp + 1], pos[jp + 2]
+                );
+                exit(1);
+            }
             if (r_mag > r_cut) {
                 continue;
             }
@@ -512,6 +562,9 @@ double compute_lj_forces(int n_p, double L, double *pos, double *params, double 
             r_diff[2] = app;
             r_mag += app * app;
             r_mag = sqrt(r_mag);
+            if (!isfinite(r_mag) || r_mag <= 1e-12) {
+                continue;
+            }
             if (r_mag > r_cut) {
                 continue;
             }
@@ -524,6 +577,14 @@ double compute_lj_forces(int n_p, double L, double *pos, double *params, double 
             epsilon = epsilon_lj[idx2];
             al = alpha[idx2];
             be = beta[idx2];
+            if (!isfinite(sigma) || !isfinite(epsilon) || !isfinite(al) || !isfinite(be)) {
+                mpi_fprintf(
+                    stderr,
+                    "Error: LJ params non-finite (i=%d j=%d sigma=%e epsilon=%e alpha=%e beta=%e)\n",
+                    i, j, sigma, epsilon, al, be
+                );
+                exit(1);
+            }
 
             //write f_mag and V_mag for lennard-jones potential
             f_mag = 4 * epsilon * (12 * pow(sigma / r_mag, 12) - 6 * pow(sigma / r_mag, 6)) / r_mag - al;
@@ -589,6 +650,9 @@ double compute_sc_forces(int n_p, double L, double *pos, double *params, double 
             }
 
             r_mag = sqrt(r_mag);
+            if (!isfinite(r_mag) || r_mag <= 1e-12) {
+                continue;
+            }
             if (r_mag > r_cut) {
                 continue;
             }

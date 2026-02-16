@@ -9,6 +9,7 @@
 #include "forces.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
+#include "omp_base.h"
 
 #define NUM_NEIGH_CIC 8
 #define NUM_NEIGH_SPLINE 64
@@ -267,7 +268,7 @@ void particles_init_potential_lj(particles *p, double *pot_params) {
             inj = in + j;
             typ2 = p->types[j];
 
-            idx = (typ1 * n_typ + typ2) * 4;  // Assuming pot_params is structured as [sigma, epsilon, alpha, beta] for each type pair
+            idx = (typ1 * n_typ + typ2) * 2;  // pot_params is structured as [sigma, epsilon] for each type pair
 
             sigma = pot_params[idx + 0];
             epsilon = pot_params[idx + 1];
@@ -643,8 +644,19 @@ double particles_compute_forces_electrostatic_correction_spread(particles *p, gr
 
     // Intramolecular correction from spread charges:
     // loop over unique atom pairs in each molecule (O-H1, O-H2, H1-H2).
+    int nthreads = get_omp_max_threads();
+    if (nthreads < 1) {
+        nthreads = 1;
+    }
+    double **f_thr = (double **)malloc((size_t)nthreads * sizeof(double *));
+    for (int t = 0; t < nthreads; t++) {
+        f_thr[t] = (double *)calloc((size_t)size, sizeof(double));
+    }
+
     #pragma omp parallel for reduction(+:energy_corr)
     for (long int m = 0; m < np / 3; m++) {
+        int tid = get_omp_thread_num();
+        double *fcs = f_thr[tid];
         if (size_mpi > 1 && (m % size_mpi) != rank) {
             continue;
         }
@@ -718,17 +730,22 @@ double particles_compute_forces_electrostatic_correction_spread(particles *p, gr
                         force_mag = -(qg1 * qg2) / (r2 * r);
                         energy_corr -= (qg1 * qg2) / r;
 
-                        fcs_corr[fa    ] += force_mag * dx;
-                        fcs_corr[fa + 1] += force_mag * dy;
-                        fcs_corr[fa + 2] += force_mag * dz;
-                        fcs_corr[fb    ] -= force_mag * dx;
-                        fcs_corr[fb + 1] -= force_mag * dy;
-                        fcs_corr[fb + 2] -= force_mag * dz;
+                        fcs[fa    ] += force_mag * dx;
+                        fcs[fa + 1] += force_mag * dy;
+                        fcs[fa + 2] += force_mag * dz;
+                        fcs[fb    ] -= force_mag * dx;
+                        fcs[fb + 1] -= force_mag * dy;
+                        fcs[fb + 2] -= force_mag * dz;
                     }
                 }
             }
         }
     }
+    for (int t = 0; t < nthreads; t++) {
+        daxpy(f_thr[t], fcs_corr, 1.0, size);
+        free(f_thr[t]);
+    }
+    free(f_thr);
     #ifdef __MPI
     if (size_mpi > 1) {
         allreduce_sum(fcs_corr, np * 3);
@@ -773,8 +790,19 @@ double particles_compute_forces_electrostatic_correction_spread_self(particles *
     }
 
     // Add same-atom chargelet-chargelet contributions (j1 != j2).
+    int nthreads = get_omp_max_threads();
+    if (nthreads < 1) {
+        nthreads = 1;
+    }
+    double **f_thr = (double **)malloc((size_t)nthreads * sizeof(double *));
+    for (int t = 0; t < nthreads; t++) {
+        f_thr[t] = (double *)calloc((size_t)(np * 3), sizeof(double));
+    }
+
     #pragma omp parallel for reduction(+:energy_corr)
     for (long int ia = 0; ia < np; ia++) {
+        int tid = get_omp_thread_num();
+        double *fcs = f_thr[tid];
         if (size_mpi > 1 && (ia % size_mpi) != rank) {
             continue;
         }
@@ -827,13 +855,18 @@ double particles_compute_forces_electrostatic_correction_spread_self(particles *
                 double r = sqrt(r2);
                 double force_mag = -(qg1 * qg2) / (r2 * r);
 
-                fcs_corr[fa    ] += force_mag * dx;
-                fcs_corr[fa + 1] += force_mag * dy;
-                fcs_corr[fa + 2] += force_mag * dz;
+                fcs[fa    ] += force_mag * dx;
+                fcs[fa + 1] += force_mag * dy;
+                fcs[fa + 2] += force_mag * dz;
                 energy_corr -= (qg1 * qg2) / r;
             }
         }
     }
+    for (int t = 0; t < nthreads; t++) {
+        daxpy(f_thr[t], fcs_corr, 1.0, np * 3);
+        free(f_thr[t]);
+    }
+    free(f_thr);
 
     #ifdef __MPI
     if (size_mpi > 1) {
@@ -878,8 +911,19 @@ double particles_compute_forces_electrostatic_correction_sr(particles *p, grid *
     // Utility for minimum image
     #define MIN_IMG(d) (d -= L * nearbyint(d / L))
 
+    int nthreads = get_omp_max_threads();
+    if (nthreads < 1) {
+        nthreads = 1;
+    }
+    double **f_thr = (double **)malloc((size_t)nthreads * sizeof(double *));
+    for (int t = 0; t < nthreads; t++) {
+        f_thr[t] = (double *)calloc((size_t)n3, sizeof(double));
+    }
+
     #pragma omp parallel for reduction(+:energy_corr)
     for (long int m = 0; m < np / 3; m++) {
+        int tid = get_omp_thread_num();
+        double *fcs = f_thr[tid];
         if (size_mpi > 1 && (m % size_mpi) != rank) {
             continue;
         }
@@ -917,40 +961,46 @@ double particles_compute_forces_electrostatic_correction_sr(particles *p, grid *
         inv_r = 1.0 / r1;
         inv_r3 = inv_r * inv_r * inv_r;
         fac = -qO * qH1 * inv_r3;
-        fcs_corr[o3    ] -= fac * r1x;
-        fcs_corr[o3 + 1] -= fac * r1y;
-        fcs_corr[o3 + 2] -= fac * r1z;
-        fcs_corr[h13    ] += fac * r1x;
-        fcs_corr[h13 + 1] += fac * r1y;
-        fcs_corr[h13 + 2] += fac * r1z;
+        fcs[o3    ] -= fac * r1x;
+        fcs[o3 + 1] -= fac * r1y;
+        fcs[o3 + 2] -= fac * r1z;
+        fcs[h13    ] += fac * r1x;
+        fcs[h13 + 1] += fac * r1y;
+        fcs[h13 + 2] += fac * r1z;
         energy_corr -= qO * qH1 * inv_r;
 
         // O-H2
         inv_r = 1.0 / r2;
         inv_r3 = inv_r * inv_r * inv_r;
         fac = -qO * qH2 * inv_r3;
-        fcs_corr[o3    ] -= fac * r2x;
-        fcs_corr[o3 + 1] -= fac * r2y;
-        fcs_corr[o3 + 2] -= fac * r2z;
-        fcs_corr[h23    ] += fac * r2x;
-        fcs_corr[h23 + 1] += fac * r2y;
-        fcs_corr[h23 + 2] += fac * r2z;
+        fcs[o3    ] -= fac * r2x;
+        fcs[o3 + 1] -= fac * r2y;
+        fcs[o3 + 2] -= fac * r2z;
+        fcs[h23    ] += fac * r2x;
+        fcs[h23 + 1] += fac * r2y;
+        fcs[h23 + 2] += fac * r2z;
         energy_corr -= qO * qH2 * inv_r;
 
         // H1-H2
         inv_r = 1.0 / (sqrt(hhx * hhx + hhy * hhy + hhz * hhz) + 1e-15);
         inv_r3 = inv_r * inv_r * inv_r;
         fac = -qH1 * qH2 * inv_r3;
-        fcs_corr[h13    ] -= fac * hhx;
-        fcs_corr[h13 + 1] -= fac * hhy;
-        fcs_corr[h13 + 2] -= fac * hhz;
-        fcs_corr[h23    ] += fac * hhx;
-        fcs_corr[h23 + 1] += fac * hhy;
-        fcs_corr[h23 + 2] += fac * hhz;
+        fcs[h13    ] -= fac * hhx;
+        fcs[h13 + 1] -= fac * hhy;
+        fcs[h13 + 2] -= fac * hhz;
+        fcs[h23    ] += fac * hhx;
+        fcs[h23 + 1] += fac * hhy;
+        fcs[h23 + 2] += fac * hhz;
         energy_corr -= qH1 * qH2 * inv_r;
     }
 
     #undef MIN_IMG
+
+    for (int t = 0; t < nthreads; t++) {
+        daxpy(f_thr[t], fcs_corr, 1.0, n3);
+        free(f_thr[t]);
+    }
+    free(f_thr);
 
     #ifdef __MPI
     if (size_mpi > 1) {

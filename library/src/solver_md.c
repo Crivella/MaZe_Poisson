@@ -33,6 +33,7 @@ static int qn_hist_initialized = 0;
 static int q_fail_pending = 0;
 static long int q_fail_step = -1;
 
+
 static double solver_total_charge_from_particles(void) {
     double q_local = 0.0;
     int n_p = g_particles->n_p;
@@ -427,6 +428,28 @@ void solver_initialize_particles(
     int *types, double *pos, double *vel, double *mass, double *charges,
     double *pot_params
 ) {
+    if (is_water) {
+        if (n_p % 3 != 0) {
+            mpi_fprintf(stderr, "Error: iswater=True but n_p=%d is not a multiple of 3.\n", n_p);
+            exit(1);
+        }
+        int t0 = types[0];
+        int t1 = types[1];
+        int t2 = types[2];
+        for (int m = 1; m < n_p / 3; m++) {
+            int i = m * 3;
+            if (types[i] != t0 || types[i + 1] != t1 || types[i + 2] != t2) {
+                mpi_fprintf(
+                    stderr,
+                    "Error: iswater=True but atom ordering is inconsistent at molecule %d. "
+                    "Expected repeating triplets [%d,%d,%d].\n",
+                    m, t0, t1, t2
+                );
+                exit(1);
+            }
+        }
+    }
+
     g_particles = particles_init(n, n_p, n_typ, L, h, cas_type);
     g_particles->is_water = is_water;
     if (g_particles->is_water) {

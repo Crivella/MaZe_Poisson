@@ -81,6 +81,7 @@ class SolverMD(Logger):
         self.energy_intra = 0.0
         self.energy_elec = 0.0
         self.energy_corr = 0.0
+        self.potential_notelec = 0.0
 
         if self.outset.print_restart:
             outset.restart_step = outset.restart_step or mdv.N_steps
