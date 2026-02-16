@@ -51,6 +51,11 @@ precond_map: Dict[str, int] = {
     # 'BLOCKJACOBI': 4,  # Symmetric Successive Over-Relaxation
 }
 
+elec_corr_map: Dict[str, int] = {
+    'SPREAD': 0,
+    'SR': 1,
+}
+
 class SolverMD(Logger):
     """Base class for all solver classes."""
 
@@ -100,6 +105,7 @@ class SolverMD(Logger):
     def initialize(self):
         """Initialize the solver."""
         capi.solver_initialize()
+        capi.solver_set_output_path(self.outset.path.encode("utf-8"))
 
         self.initialize_str_maps()
 
@@ -398,7 +404,15 @@ class SolverMD(Logger):
             types, pos, vel, mass, charges,
             pot_params
         )
-
+        corr_key = self.mdv.electrostatic_correction.upper()
+        if corr_key not in elec_corr_map:
+            raise ValueError(
+                f"Electrostatic correction '{self.mdv.electrostatic_correction}' not recognized. "
+                f"Use one of: {', '.join(elec_corr_map.keys())}."
+            )
+        capi.solver_set_electrostatic_correction(elec_corr_map[corr_key])
+        if self.mdv.iswater:
+            self.logger.info(f"Electrostatic correction: {corr_key}")
         if self.mdv.poisson_boltzmann:
             if 'radius' not in particles.columns:
                 raise ValueError("Probe radius must be provided in the input file for Poisson-Boltzmann.")
@@ -491,14 +505,13 @@ class SolverMD(Logger):
             self.compute_forces_notelec()
         if self.mdv.poisson_boltzmann:
             self.compute_forces_pb()
-        # self.logger.debug("Computing total forces...")
-        capi.solver_compute_forces_tot()
         if self.mdv.iswater:
-            self.energy_intra = capi.get_energy_intra()
-            self.energy_corr = capi.get_energy_intra_excl()
+            self.energy_intra = capi.solver_compute_intramolecular_forces()
+            self.energy_corr = capi.solver_compute_forces_electrostatic_correction()
         else:
             self.energy_intra = 0.0
             self.energy_corr = 0.0
+        capi.solver_compute_forces_tot()
         # Electrostatic energy from the grid (not printed in energy.csv per request)
         self.energy_elec = capi.get_energy_elec()
 
@@ -594,14 +607,15 @@ class SolverMD(Logger):
         from .constants import density
         self.logger.info(f'Running a MD simulation with:')
         self.logger.info(f'  N_p = {self.N_p}, N_steps = {self.mdv.N_steps}, tol = {self.mdv.tol}')
-        self.logger.info(f'  N = {self.N}, L [A] = {self.L * cst.a0}, h [A] = {self.h / cst.a0}')
+        self.logger.info(f'  N = {self.N}, L [A] = {self.L * cst.a0}, h [A] = {self.h * cst.a0}')
         self.logger.info(f'  density = {density} g/cm^3')
         self.logger.info(f'  Solvent dielectric constant: {self.gset.eps_s}')
         self.logger.info(f'  Solver: {self.mdv.method},  Preconditioner: {self.gset.precond}')
         self.logger.info(f'  Charge assignment scheme: {self.gset.cas}')
         # self.logger.info(f'  Preconditioning: {self.mdv.preconditioning}')
-        self.logger.info(f'  Integrator: {self.mdv.integrator}, dt = {self.mdv.dt}')
+        self.logger.info(f'  Integrator: {self.mdv.integrator}, dt = {self.mdv.dt} au = {self.mdv.dt * cst.t_au} fs')
         self.logger.info(f'  Potential: {self.mdv.potential}')
+        self.logger.info(f'  Electrostatic correction: {self.mdv.electrostatic_correction}')
         self.logger.info(f'  Elec: {self.mdv.elec}    NotElec: {self.mdv.not_elec}')
         self.logger.info(f'  Temperature: {self.mdv.T} K,  Thermostat: {self.mdv.thermostat},  Gamma: {self.mdv.gamma}')
         self.logger.info(f'  Velocity rescaling: {self.mdv.rescale}')
@@ -620,5 +634,3 @@ class SolverMD(Logger):
             self.logger.info(f'  Ionic strength: {self.gset.I} M')
             self.logger.info(f'  Gamma NP: {self.mdv.gamma_np}')
             self.logger.info(f'  Beta NP: {self.mdv.beta_np}')
-
-

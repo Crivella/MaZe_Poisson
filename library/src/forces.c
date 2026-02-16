@@ -11,6 +11,152 @@ double compute_lj_pair_force_excl(long int ia, long int ib, double vx, double vy
 double compute_tf_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces);
 double compute_sc_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces);
 
+static inline void pbc_displacement(const double *pos, long int ia, long int ib, double L, double *dx, double *dy, double *dz, double *dr2) {
+    double x = pos[ib * 3]     - pos[ia * 3];
+    double y = pos[ib * 3 + 1] - pos[ia * 3 + 1];
+    double z = pos[ib * 3 + 2] - pos[ia * 3 + 2];
+    x -= L * nearbyint(x / L);
+    y -= L * nearbyint(y / L);
+    z -= L * nearbyint(z / L);
+    *dx = x;
+    *dy = y;
+    *dz = z;
+    *dr2 = x * x + y * y + z * z;
+}
+
+double compute_forces_harmonic_bond(long int n_p, const double *pos, double *forces, double L, double k, double r0_val, int rank, int size) {
+    double energy = 0.0;
+    const double eps = 1e-15;
+
+    #pragma omp parallel for reduction(+:energy)
+    for (long int m = 0; m < n_p / 3; m++) {
+        if (size > 1 && (m % size) != rank) {
+            continue;
+        }
+        long int iO = m * 3;
+        long int iH1 = iO + 1;
+        long int iH2 = iO + 2;
+
+        double dx, dy, dz, dr2, dr, fab;
+
+        // O - H1
+        pbc_displacement(pos, iO, iH1, L, &dx, &dy, &dz, &dr2);
+        dr = sqrt(dr2);
+        if (dr2 > eps) {
+            fab = -k * (dr - r0_val) / dr;
+        } else {
+            fab = 0.0;
+        }
+        forces[iH1 * 3    ] += dx * fab;
+        forces[iH1 * 3 + 1] += dy * fab;
+        forces[iH1 * 3 + 2] += dz * fab;
+        forces[iO * 3    ] -= dx * fab;
+        forces[iO * 3 + 1] -= dy * fab;
+        forces[iO * 3 + 2] -= dz * fab;
+        energy += 0.5 * k * (dr - r0_val) * (dr - r0_val);
+
+        // O - H2
+        pbc_displacement(pos, iO, iH2, L, &dx, &dy, &dz, &dr2);
+        dr = sqrt(dr2);
+        if (dr2 > eps) {
+            fab = -k * (dr - r0_val) / dr;
+        } else {
+            fab = 0.0;
+        }
+        forces[iH2 * 3    ] += dx * fab;
+        forces[iH2 * 3 + 1] += dy * fab;
+        forces[iH2 * 3 + 2] += dz * fab;
+        forces[iO * 3    ] -= dx * fab;
+        forces[iO * 3 + 1] -= dy * fab;
+        forces[iO * 3 + 2] -= dz * fab;
+        energy += 0.5 * k * (dr - r0_val) * (dr - r0_val);
+    }
+
+    return energy;
+}
+
+double compute_forces_harmonic_angle(long int n_p, const double *pos, double *forces, double L, double k, double theta0_val, int rank, int size) {
+    double energy = 0.0;
+    const double eps = 1e-15;
+
+    #pragma omp parallel for reduction(+:energy)
+    for (long int m = 0; m < n_p / 3; m++) {
+        if (size > 1 && (m % size) != rank) {
+            continue;
+        }
+        long int iO = m * 3;
+        long int iH1 = iO + 1;
+        long int iH2 = iO + 2;
+
+        double dxab, dyab, dzab, drab2, drab;
+        double dxac, dyac, dzac, drac2, drac;
+        double dxbc, dybc, dzbc, drbc2, drbc;
+
+        pbc_displacement(pos, iO, iH1, L, &dxab, &dyab, &dzab, &drab2);
+        pbc_displacement(pos, iO, iH2, L, &dxac, &dyac, &dzac, &drac2);
+        pbc_displacement(pos, iH1, iH2, L, &dxbc, &dybc, &dzbc, &drbc2);
+
+        drab = sqrt(drab2);
+        drac = sqrt(drac2);
+        drbc = sqrt(drbc2);
+        if (drab2 < eps || drac2 < eps || drbc2 < eps) {
+            continue;
+        }
+
+        double cos_theta = (drab2 + drac2 - drbc2) / (2.0 * drab * drac);
+        if (cos_theta > 1.0) {
+            cos_theta = 1.0;
+        } else if (cos_theta < -1.0) {
+            cos_theta = -1.0;
+        }
+        double theta = acos(cos_theta);
+
+        double dudtheta = k * (theta - theta0_val);
+        double dacosdz;
+        if (cos_theta * cos_theta == 1.0) {
+            dacosdz = 0.0;
+        } else {
+            dacosdz = -1.0 / sqrt(1.0 - cos_theta * cos_theta);
+        }
+
+        double dzdab = (drab2 - drac2 + drbc2) / (2.0 * drab2 * drac);
+        double dzdac = (drac2 - drab2 + drbc2) / (2.0 * drac2 * drab);
+        double dzdbc = -drbc / (drac * drab);
+
+        double fab = -(dudtheta * dacosdz * dzdab) / drab;
+        double fac = -(dudtheta * dacosdz * dzdac) / drac;
+        double fbc = -(dudtheta * dacosdz * dzdbc) / drbc;
+
+        // ab contribution (O-H1)
+        forces[iH1 * 3    ] += dxab * fab;
+        forces[iH1 * 3 + 1] += dyab * fab;
+        forces[iH1 * 3 + 2] += dzab * fab;
+        forces[iO * 3    ] -= dxab * fab;
+        forces[iO * 3 + 1] -= dyab * fab;
+        forces[iO * 3 + 2] -= dzab * fab;
+
+        // ac contribution (O-H2)
+        forces[iH2 * 3    ] += dxac * fac;
+        forces[iH2 * 3 + 1] += dyac * fac;
+        forces[iH2 * 3 + 2] += dzac * fac;
+        forces[iO * 3    ] -= dxac * fac;
+        forces[iO * 3 + 1] -= dyac * fac;
+        forces[iO * 3 + 2] -= dzac * fac;
+
+        // bc contribution (H1-H2)
+        forces[iH2 * 3    ] += dxbc * fbc;
+        forces[iH2 * 3 + 1] += dybc * fbc;
+        forces[iH2 * 3 + 2] += dzbc * fbc;
+        forces[iH1 * 3    ] -= dxbc * fbc;
+        forces[iH1 * 3 + 1] -= dybc * fbc;
+        forces[iH1 * 3 + 2] -= dzbc * fbc;
+
+        energy += 0.5 * k * (theta - theta0_val) * (theta - theta0_val);
+    }
+
+    return energy;
+}
+
 // /*
 // Compute the forces on each particle by computing the field from the potential using finite differences.
 // New version computes the field only where the particles are located.

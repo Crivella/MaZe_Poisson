@@ -9,6 +9,13 @@ capi.register_function(
     'solver_initialize', None, []
 )
 
+# void solver_set_output_path(const char *path) {
+capi.register_function(
+    'solver_set_output_path', None, [
+        ctypes.c_char_p,
+    ],
+)
+
 # void solverinitialize_grid(int n_grid, double L, double h, double tol, double eps, int grid_type, int precond_type) {
 capi.register_function(
     'solver_initialize_grid', None, [
@@ -53,6 +60,13 @@ capi.register_function(
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void solver_set_electrostatic_correction(int corr_type) {
+capi.register_function(
+    'solver_set_electrostatic_correction', None, [
+        ctypes.c_int,
     ],
 )
 
@@ -124,6 +138,16 @@ capi.register_function(
 # double solver_compute_forces_pb() {
 capi.register_function(
     'solver_compute_forces_pb', ctypes.c_double, [],
+)
+
+# double solver_compute_intramolecular_forces() {
+capi.register_function(
+    'solver_compute_intramolecular_forces', ctypes.c_double, [],
+)
+
+# double solver_compute_forces_electrostatic_correction() {
+capi.register_function(
+    'solver_compute_forces_electrostatic_correction', ctypes.c_double, [],
 )
 
 # void solver_compute_forces_tot() {

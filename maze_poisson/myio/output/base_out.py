@@ -77,11 +77,13 @@ class OutputFiles:
     temperature = None
     solute = None
     tot_force = None
+    force_components = None
+    force_components_particle = None
     forces_pb = None
     restart = None
     restart_field = None
 
-    files = ['performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force', 'forces_pb']
+    files = ['performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force', 'force_components', 'force_components_particle', 'forces_pb']
     files_restart = ['restart', 'restart_field']
 
     with_mpi_bypass = ['energy', 'restart_field']

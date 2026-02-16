@@ -53,6 +53,8 @@ class OutputSettings(BaseFileInput):
     print_energy: bool = False
     print_temperature: bool = False
     print_tot_force: bool = False
+    print_force_components: bool = False
+    print_force_components_particle: bool = False
     print_forces_pb: bool = False
     print_restart: bool = False
     print_restart_field: bool = False
@@ -65,6 +67,7 @@ class OutputSettings(BaseFileInput):
 
     debug: bool = False
     restart_step: int = None
+    force_components_particle: int = 2
 
 @dataclass(kw_only=True)
 class GridSetting(BaseFileInput):
@@ -116,6 +119,7 @@ class MDVariables(BaseFileInput):
     tol: float = 1e-7  # Tolerance for convergence
 
     iswater: bool = False  # Flag to toggle SPC water setup
+    electrostatic_correction: str = 'SR'  # SPREAD | SR 
 
     thermostat: bool = False  # Whether to use a thermostat
     gamma: float = 1e-3  # Damping coefficient for the thermostat

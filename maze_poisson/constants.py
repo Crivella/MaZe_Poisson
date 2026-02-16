@@ -23,7 +23,7 @@ m_Cl = m_Cl_amu * amu_to_kg
 kJmol_to_hartree = 0.0003808798
 
 # STUFF TO BE MADE INTO INPUTS FROM USER
-density = 1.3793 # this is the new value, g/cm^3
+density = 1.012 #1.3793 # this is the new value, g/cm^3
 ref_L=20.64
 ref_N=100
 

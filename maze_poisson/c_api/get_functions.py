@@ -94,6 +94,20 @@ capi.register_function(
     ],
 )
 
+# void get_fcs_intra(double *recv) {
+capi.register_function(
+    'get_fcs_intra', None, [
+        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void get_fcs_corr(double *recv) {
+capi.register_function(
+    'get_fcs_corr', None, [
+        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+    ],
+)
+
 # void get_fcs_db(double *recv) {
 capi.register_function(
     'get_fcs_db', None, [
@@ -181,9 +195,9 @@ capi.register_function(
     'get_energy_elec', ctypes.c_double, [],
 )
 
-# double get_energy_intra_excl() {
+# double get_energy_corr() {
 capi.register_function(
-    'get_energy_intra_excl', ctypes.c_double, [],
+    'get_energy_corr', ctypes.c_double, [],
 )
 
 # double get_energy_intra() {

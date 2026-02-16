@@ -1,6 +1,8 @@
 #ifndef __MP_STRUCTS_H
 #define __MP_STRUCTS_H
 
+#include <stdio.h>
+
 #define GRID_TYPE_NUM 5
 #define GRID_TYPE_LCG 0
 #define GRID_TYPE_FFT 1
@@ -96,7 +98,8 @@ double particles_compute_forces_tf(particles *p);
 double particles_compute_forces_lj(particles *p);
 double particles_compute_forces_sc(particles *p);
 double particles_compute_intramolecular_forces(particles *p);
-double get_energy_intra_excl();
+double particles_compute_forces_electrostatic_correction_spread(particles *p, grid *g);
+double particles_compute_forces_electrostatic_correction_sr(particles *p, grid *g);
 double particles_compute_forces_pb(particles *p, grid *grid);
 void particles_compute_forces_tot(particles *p);
 
@@ -104,6 +107,13 @@ double particles_get_temperature(particles *p);
 double particles_get_kinetic_energy(particles *p);
 void particles_get_momentum(particles *p, double *out);
 void particles_rescale_velocities(particles *p);
+void particles_rescale_momenta(particles *p);
+void particles_zero_linear(particles *p);
+
+void solver_set_output_path(const char *path);
+FILE *solver_open_not_converged_log(void);
+const char *solver_get_output_path(void);
+long int solver_get_field_step(void);
 
 void ovrvo_integrator_init(integrator *integrator);
 void ovrvo_integrator_part1(integrator *integrator, particles *p);
@@ -189,12 +199,10 @@ struct particles {
     double *fcs_elec;  // Particle electric forces (n_p x 3)
     double *fcs_noel;  // Particle non-electric forces (n_p x 3)
     double *fcs_intra; // Intramolecular forces total (n_p x 3)
-    double *fcs_intra_ba; // Intramolecular bond/angle forces (n_p x 3)
-    double *fcs_intra_excl; // Intramolecular exclusion correction forces (n_p x 3)
+    double *fcs_corr; // Electrostatic correction forces (n_p x 3)
     double *fcs_tot;  // Particle total forces (n_p x 3)
     double energy_intra; // Intramolecular energy total
-    double energy_intra_ba; // Intramolecular bond/angle energy
-    double energy_intra_excl; // Intramolecular exclusion correction energy
+    double energy_corr; // Intramolecular exclusion correction energy
     double *mass;  // Particle masses (n_p)
     double *charges;  // Particle charges (n_p)
     long int *neighbors;  // Particle neighbors (n_p x 8 x 3)
@@ -228,12 +236,15 @@ struct particles {
     double  (*compute_forces_noel)( particles *);
     void    (*compute_forces_tot)( particles *);
     double  (*compute_forces_pb)( particles *, grid *);
+    double (*compute_intramolecular_forces)( particles *);
+    double (*compute_forces_electrostatic_correction)( particles *, grid *);
 
     double  (*get_temperature)( particles *);
     double  (*get_kinetic_energy)( particles *);
     void    (*get_momentum)( particles *, double *);
 
     void    (*rescale_velocities)( particles *);
+    void    (*rescale_momenta)( particles *);
 };
 
 struct integrator {

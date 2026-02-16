@@ -121,7 +121,7 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
         }
         // smooth(in, out, s1, s2, sm_iter);
         // printf("Solving exact at depth %d with CG\n", depth);
-        cg_coarse(in, out, s1, s2, 50, 1e-5); //prima era 1e-4
+        cg_coarse(in, out, s1, s2, MG_CG_ITER_LIMIT, MG_CG_TOL); //prima era 1e-4
         // conj_grad(in, out, out, 1e-5, s1, s2);
         return depth;
     }
