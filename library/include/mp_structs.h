@@ -46,7 +46,7 @@ void grid_free(grid *grid);
 void particles_free(particles *p);
 void integrator_free(integrator *integrator);
 
-void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled, int eps_field_dep_enabled, double kBT);
+void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled, int eps_field_dep_enabled, double kBT, double eps_field_alpha);
 void grid_pb_free(grid *grid);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
 double grid_update_eps_field_dependent(grid *grid, particles *particles, double kBT);
@@ -155,6 +155,7 @@ struct grid {
     double w;  // Ionic boundary width
     double kbar2;  // Screening factor
     double kBT;  // Thermal energy factor for field-dependent dielectric updates
+    double eps_field_alpha;  // Alpha parameter in eps(E) model (Hu & Wei Eq. S2)
 
     double *k2;  // Screening factor
     double *eps_x;  // Dielectric constant
@@ -163,6 +164,7 @@ struct grid {
 
     double tol;  // Tolerance for the LCG
     long int n_iters;  // Number of iterations for convergence of the LCG
+    int eps_phi_iters;  // Iterations for eps-phi self-consistency (field-dependent dielectric)
 
     void    (*free)( grid *);
     void    (*init_field)( grid *);

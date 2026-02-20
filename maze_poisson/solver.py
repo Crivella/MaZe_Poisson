@@ -71,6 +71,7 @@ class SolverMD(Logger):
         self.thermostat = mdv.thermostat
 
         self.n_iters = 0
+        self.eps_phi_iters = 0
 
         self.energy_nonpolar = 0.0
 
@@ -153,7 +154,12 @@ class SolverMD(Logger):
             ) * cst.BR ** 2 * self.h ** 2
             self.logger.info("Initializing grid for Poisson-Boltzmann.")
             capi.solver_initialize_grid_pois_boltz(
-                self.gset.w, kbar2, int(self.mdv.nonpolar_forces), int(self.mdv.field_dependent_dielectric), self.mdv.kBT
+                self.gset.w,
+                kbar2,
+                int(self.mdv.nonpolar_forces),
+                int(self.mdv.field_dependent_dielectric),
+                self.mdv.kBT,
+                self.mdv.eps_field_alpha,
             )
 
     def get_tosi_fumi_params(self, particles) -> np.ndarray:
@@ -487,6 +493,10 @@ class SolverMD(Logger):
 
             self.n_iters = self.update_field()
             self.t_iters = Clock.get_clock('field').last_call
+            if self.mdv.field_dependent_dielectric:
+                self.eps_phi_iters = capi.get_eps_phi_iters()
+            else:
+                self.eps_phi_iters = 0
         self.compute_forces()
         self.integrator_part2()
 
@@ -523,6 +533,9 @@ class SolverMD(Logger):
         iter_idx is stored in the file (and used in the default filename) so that
         epsilon maps across steps can be stitched into an animation.
         """
+        # Disabled: do not write epsilon map files
+        return ""
+
         if not self.mdv.poisson_boltzmann:
             raise ValueError("Epsilon map is available only when Poisson-Boltzmann is enabled.")
 

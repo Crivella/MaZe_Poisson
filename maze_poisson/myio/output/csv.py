@@ -143,12 +143,13 @@ class SolutesCSVOutputFile(CSVOutputFile):
 
 class PerformanceCSVOutputFile(CSVOutputFile):
     name =  'performance'
-    headers = ['iter', 'time', 'n_iters']
+    headers = ['iter', 'time', 'n_iters', 'eps_phi_iters']
     def get_data(self, iter: int, solver):
         return pd.DataFrame({
             'iter': [iter],
             'time': [solver.t_iters],
-            'n_iters': [solver.n_iters]
+            'n_iters': [solver.n_iters],
+            'eps_phi_iters': [solver.eps_phi_iters],
         })
 
 class RestartCSVOutputFile(CSVOutputFile):

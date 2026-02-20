@@ -173,6 +173,11 @@ capi.register_function(
     ],
 )
 
+# int get_eps_phi_iters() {
+capi.register_function(
+    'get_eps_phi_iters', ctypes.c_int, [],
+)
+
 # void get_q(double *recv) {
 capi.register_function(
     'get_q', None, [

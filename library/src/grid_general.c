@@ -69,6 +69,7 @@ grid * grid_init(int n, double L, double h, double tol, double eps, double eps_i
     new->w = 0.0;  // Ionic boundary width
     new->kbar2 = 0.0;  // Screening factor
     new->kBT = 0.0;
+    new->eps_field_alpha = 1.0;
 
     new->k2 = NULL;  // Screening factor
     new->eps_x = NULL;  // Dielectric constant in x direction
@@ -79,6 +80,7 @@ grid * grid_init(int n, double L, double h, double tol, double eps, double eps_i
 
     new->tol = tol;
     new->n_iters = 0;
+    new->eps_phi_iters = 0;
 
     new->free = grid_free;
 
@@ -86,7 +88,7 @@ grid * grid_init(int n, double L, double h, double tol, double eps, double eps_i
 }
 
 void grid_pb_init(
-    grid *grid, double w, double kbar2, int nonpolar_enabled, int eps_field_dep_enabled, double kBT
+    grid *grid, double w, double kbar2, int nonpolar_enabled, int eps_field_dep_enabled, double kBT, double eps_field_alpha
 ) {
     // Initialize the grid for Poisson-Boltzmann simulations
     grid->pb_enabled = 1;  // Enable Poisson-Boltzmann
@@ -95,6 +97,7 @@ void grid_pb_init(
     grid->w = w;
     grid->kbar2 = kbar2;
     grid->kBT = kBT;
+    grid->eps_field_alpha = eps_field_alpha;
 
     // Initialize the solvent potential and dielectric constant arrays
     int n = grid->n;
@@ -309,6 +312,7 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
 
 double grid_update_eps_field_dependent(grid *g, particles *p, double kBT) {
     int n = g->n;
+    int n_local = g->n_local;
     double h = g->h;
 
     double eps_s   = g->eps_s;
@@ -322,15 +326,18 @@ double grid_update_eps_field_dependent(grid *g, particles *p, double kBT) {
     double *eps_z = g->eps_z;
     double *phi_n = g->phi_n;
     
-    double alpha = 1;  /* Was 10: keep small to reduce nonlinearity in eps(E) response */
-    double E02       = 4 * alpha * kBT * alpha * kBT;
-    // printf("E02 for field-dependent dielectric update: %e\n", E02);
-    double inv_E02   = 1.0 / E02;
+    double alpha = g->eps_field_alpha;  /* Hu & Wei Eq. S2 parameter (user-configurable) */
+    // Hu & Wei SI (Eq. S2, n=1): eps = eps_m + (eps_s-eps_m)/(1 + (alpha/(2 kBT)) * |grad phi|^2)
+    // The previous implementation used 1/(2*alpha*kBT)^2, which is not consistent with Eq. S2.
+    double inv_E0 = alpha / (2.0 * kBT);
     double inv_two_h = 1.0 / (2.0 * h);
     double inv_h     = 1.0 / h;
     double delta_eps = eps_s - eps_int;
 
     double max_diff = 0.0;
+
+    // Ensure halo planes of phi are available for local boundary gradients
+    mpi_grid_exchange_bot_top(phi_n, n_local, n);
 
     #pragma omp parallel for reduction(max:max_diff)
     for (long int idx = 0; idx < size; idx++) {
@@ -338,8 +345,12 @@ double grid_update_eps_field_dependent(grid *g, particles *p, double kBT) {
         long int iy = (idx % n2) / n;
         long int iz = idx % n;
 
-        long int ixp = ix + 1; if (ixp == n) ixp = 0;
-        long int ixm = ix - 1; if (ixm < 0)  ixm = n - 1;
+        // x-direction uses halo planes (no local wrap)
+        long int ixp = ix + 1;
+        long int ixm = ix - 1;
+        if (ixp == n_local) ixp = n_local;  // top halo plane
+        if (ixm < 0)        ixm = -1;       // bottom halo plane
+
         long int iyp = iy + 1; if (iyp == n) iyp = 0;
         long int iym = iy - 1; if (iym < 0)  iym = n - 1;
         long int izp = iz + 1; if (izp == n) izp = 0;
@@ -365,9 +376,9 @@ double grid_update_eps_field_dependent(grid *g, particles *p, double kBT) {
         double E_mag_y2 = Ex * Ex + Ey_half * Ey_half + Ez * Ez;
         double E_mag_z2 = Ex * Ex + Ey * Ey + Ez_half * Ez_half;
         
-        double new_x = eps_int + delta_eps / (1.0 + E_mag_x2 * inv_E02);
-        double new_y = eps_int + delta_eps / (1.0 + E_mag_y2 * inv_E02);
-        double new_z = eps_int + delta_eps / (1.0 + E_mag_z2 * inv_E02);
+        double new_x = eps_int + delta_eps / (1.0 + E_mag_x2 * inv_E0);
+        double new_y = eps_int + delta_eps / (1.0 + E_mag_y2 * inv_E0);
+        double new_z = eps_int + delta_eps / (1.0 + E_mag_z2 * inv_E0);
         // printf("index %ld: Ex^2=%e, (Ex/E0)^2=%e,  eps(E)=%lf\n", idx, E_mag_x2, E_mag_x2 * inv_E02, new_x);
 
         double dx = fabs(new_x - eps_x[idx]);
@@ -386,6 +397,7 @@ double grid_update_eps_field_dependent(grid *g, particles *p, double kBT) {
         eps_y[idx] = new_y;
         eps_z[idx] = new_z;
     }
+    allreduce_max(&max_diff, 1);
     // mpi_printf("\nMaximum dielectric constant change after update: %e\n", max_diff);
     return max_diff;
 }

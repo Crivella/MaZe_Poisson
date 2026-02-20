@@ -24,13 +24,14 @@ capi.register_function(
 )
 
 # void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enabled,
-#     int eps_field_dep_enabled, double kBT) {
+#     int eps_field_dep_enabled, double kBT, double eps_field_alpha) {
 capi.register_function(
     'solver_initialize_grid_pois_boltz', None, [
         ctypes.c_double,
         ctypes.c_double,
         ctypes.c_int,
         ctypes.c_int,
+        ctypes.c_double,
         ctypes.c_double,
     ],
 )

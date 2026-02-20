@@ -44,10 +44,10 @@ void solver_initialize_grid(
 }
 
 void solver_initialize_grid_pois_boltz(
-    double w, double kbar2, int nonpolar_enabled, int eps_field_dep_enabled, double kBT
+    double w, double kbar2, int nonpolar_enabled, int eps_field_dep_enabled, double kBT, double eps_field_alpha
 ) {
     // Initialize the solvent potential and dielectric constant arrays
-    grid_pb_init(g_grid, w, kbar2, nonpolar_enabled, eps_field_dep_enabled, kBT);
+    grid_pb_init(g_grid, w, kbar2, nonpolar_enabled, eps_field_dep_enabled, kBT, eps_field_alpha);
 }
 
 void solver_initialize_particles(
@@ -131,12 +131,17 @@ void solver_set_field_prev(double *phi) {
 }
 
 int solver_update_field() {
+    g_grid->eps_phi_iters = 0;
     return g_grid->update_field(g_grid);
 }
 
 void solver_update_eps_k2() {
     // Update the dielectric constant and screening factor based on the grid's transition state
     grid_update_eps_and_k2(g_grid, g_particles);
+}
+
+int get_eps_phi_iters() {
+    return g_grid ? g_grid->eps_phi_iters : 0;
 }
 
 void solver_compute_forces_elec() {
@@ -323,27 +328,15 @@ void get_eps_map(double *recv_x, double *recv_y, double *recv_z) {
     long int n3 = (long) g_grid->n * g_grid->n * g_grid->n;
 
     if (recv_x != NULL) {
-        if (g_grid->eps_x != NULL) {
-            mpi_grid_collect_buffer(g_grid->eps_x, recv_x, g_grid->n);
-        } else {
-            memset(recv_x, 0, n3 * sizeof(double));
-        }
+        memset(recv_x, 0, n3 * sizeof(double));
     }
 
     if (recv_y != NULL) {
-        if (g_grid->eps_y != NULL) {
-            mpi_grid_collect_buffer(g_grid->eps_y, recv_y, g_grid->n);
-        } else {
-            memset(recv_y, 0, n3 * sizeof(double));
-        }
+        memset(recv_y, 0, n3 * sizeof(double));
     }
 
     if (recv_z != NULL) {
-        if (g_grid->eps_z != NULL) {
-            mpi_grid_collect_buffer(g_grid->eps_z, recv_z, g_grid->n);
-        } else {
-            memset(recv_z, 0, n3 * sizeof(double));
-        }
+        memset(recv_z, 0, n3 * sizeof(double));
     }
 }
 

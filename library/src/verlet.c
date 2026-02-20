@@ -336,7 +336,7 @@ EXTERN_C int verlet_pb_multigrid_eps_field(
         daxpy(y, phi, -1.0, n3);  // phi = phi - y
 
         eps_iter++;
-        mpi_printf("Field-dependent dielectric iteration %d: max diff = %e\n", eps_iter, max_diff);
+        // mpi_printf("Field-dependent dielectric iteration %d: max diff = %e\n", eps_iter, max_diff);
 
         /* Stop early if we were not actually iterating eps */
         if (grid_ctx == NULL || grid_ctx->kBT <= 0.0) {
@@ -349,11 +349,15 @@ EXTERN_C int verlet_pb_multigrid_eps_field(
 
     if (max_diff > EPS_FIELD_TOL && grid_ctx != NULL && grid_ctx->kBT > 0.0) {
         mpi_printf("Warning: dielectric update did not converge after %d iterations (max diff = %e)\n", eps_iter, max_diff);
-    } else if (grid_ctx != NULL && grid_ctx->kBT > 0.0) {
-        mpi_printf(
-            "Field-dependent dielectric converged in %d iterations (max diff = %e)\n",
-            eps_iter, max_diff
-        );
+    }// else if (grid_ctx != NULL && grid_ctx->kBT > 0.0) {
+        // mpi_printf(
+        //     "Field-dependent dielectric converged in %d iterations (max diff = %e)\n",
+        //     eps_iter, max_diff
+        // );
+    // }
+
+    if (grid_ctx != NULL) {
+        grid_ctx->eps_phi_iters = eps_iter;
     }
 
     if (res == -1) {
