@@ -315,20 +315,23 @@ class SolverMD(Logger):
         lj_params_array = np.ascontiguousarray(lj_params_array.flatten(), dtype=np.float64)
 
         return lj_params_array
+
+    @staticmethod
+    def pd_ensure_lowercase(df: pd.DataFrame, column: str) -> pd.DataFrame:
+        """Ensure that a specified column in a DataFrame is lowercase."""
+        if column not in df.columns:
+            for col in df.columns:
+                if col.lower() == column.lower():
+                    df.rename(columns={col: column}, inplace=True)
+                    break
+        return df
     
     def initialize_particles(self):
         """Initialize the particles."""
         self.logger.info(f"Reading particle definitions from file: {self.gset.particles_file}")
         particles = pd.read_csv(self.gset.particles_file)
-        particles_for_validation = particles.copy() if self.mdv.iswater else None
         # Normalize column name for type if provided with different casing
-        if 'type' not in particles.columns:
-            for col in particles.columns:
-                if col.lower() == 'type':
-                    particles.rename(columns={col: 'type'}, inplace=True)
-                    if particles_for_validation is not None:
-                        particles_for_validation.rename(columns={col: 'type'}, inplace=True)
-                    break
+        particles = self.pd_ensure_lowercase(particles, 'type')
 
         if self.mdv.iswater:
             self.logger.info("Water mode enabled (SPC): expecting O-H-H triplets (types O,H,H) in input coordinates.")
@@ -360,26 +363,8 @@ class SolverMD(Logger):
         start_file = self.gset.input_file
         kBT = self.mdv.kBT
 
-
         df = pd.read_csv(start_file)
-        if 'type' not in df.columns:
-            for col in df.columns:
-                if col.lower() == 'type':
-                    df.rename(columns={col: 'type'}, inplace=True)
-                    break
-
-        ################################################################################################################
-        # Water-specific initialization checks and setup
-        estatic_corr = self.mdv.electrostatic_correction.upper()
-        if estatic_corr not in elec_corr_map:
-            raise ValueError(
-                f"Electrostatic correction '{self.mdv.electrostatic_correction}' not recognized. "
-                f"Use one of: {', '.join(elec_corr_map.keys())}."
-            )
-        estatic_corr_id = elec_corr_map[estatic_corr]
-        self.validate_water_inputs(particles_for_validation, df)
-        capi.solver_initialize_particles_water(self.mdv.iswater, estatic_corr_id)
-        ################################################################################################################
+        df = self.pd_ensure_lowercase(df, 'type')
 
         types = np.ascontiguousarray(particles.loc[df['type'], 'enum'].values, dtype=np.int32)
         pos = np.ascontiguousarray(df[['x', 'y', 'z']].values / cst.a0, dtype=np.float64)
@@ -419,16 +404,19 @@ class SolverMD(Logger):
             types, pos, vel, mass, charges,
             pot_params
         )
-        # corr_key = self.mdv.electrostatic_correction.upper()
-        # if corr_key not in elec_corr_map:
-        #     raise ValueError(
-        #         f"Electrostatic correction '{self.mdv.electrostatic_correction}' not recognized. "
-        #         f"Use one of: {', '.join(elec_corr_map.keys())}."
-        #     )
-        # capi.solver_set_electrostatic_correction(elec_corr_map[corr_key])
+
         if self.mdv.iswater:
+            estatic_corr = self.mdv.electrostatic_correction.upper()
+            if estatic_corr not in elec_corr_map:
+                raise ValueError(
+                    f"Electrostatic correction '{self.mdv.electrostatic_correction}' not recognized. "
+                    f"Use one of: {', '.join(elec_corr_map.keys())}."
+                )
+            estatic_corr_id = elec_corr_map[estatic_corr]
             self.logger.info(f"Electrostatic correction: {estatic_corr_id}")
+            self.validate_water_inputs(particles, df)
             capi.solver_initialize_particles_water(self.mdv.iswater, estatic_corr_id)
+
         if self.mdv.poisson_boltzmann:
             if 'radius' not in particles.columns:
                 raise ValueError("Probe radius must be provided in the input file for Poisson-Boltzmann.")
