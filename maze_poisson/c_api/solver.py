@@ -62,13 +62,6 @@ capi.register_function(
     ],
 )
 
-# # void solver_set_electrostatic_correction(int corr_type) {
-# capi.register_function(
-#     'solver_set_electrostatic_correction', None, [
-#         ctypes.c_int,
-#     ],
-# )
-
 # void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
 capi.register_function(
     'solver_initialize_particles_pois_boltz', None, [

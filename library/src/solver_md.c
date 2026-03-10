@@ -24,26 +24,6 @@ static double solver_total_charge_from_particles(void) {
         q_local += g_particles->charges[i];
     }
 
-// #ifdef __MPI
-//     int size = get_size();
-//     if (size > 1) {
-//         double q_sum = q_local;
-//         allreduce_sum(&q_sum, 1);
-
-//         double q_max = q_local;
-//         allreduce_max(&q_max, 1);
-
-//         double q_min_neg = -q_local;
-//         allreduce_max(&q_min_neg, 1);
-//         double q_min = -q_min_neg;
-
-//         if (fabs(q_max - q_min) < 1e-12) {
-//             return q_max; // Particles replicated on each rank.
-//         }
-//         return q_sum; // Particles distributed across ranks.
-//     }
-// #endif
-
     return q_local;
 }
 
@@ -88,34 +68,7 @@ void solver_initialize_particles(
     int *types, double *pos, double *vel, double *mass, double *charges,
     double *pot_params
 ) {
-    // if (is_water) {
-    //     if (n_p % 3 != 0) {
-    //         mpi_fprintf(stderr, "Error: iswater=True but n_p=%d is not a multiple of 3.\n", n_p);
-    //         exit(1);
-    //     }
-    //     int t0 = types[0];
-    //     int t1 = types[1];
-    //     int t2 = types[2];
-    //     for (int m = 1; m < n_p / 3; m++) {
-    //         int i = m * 3;
-    //         if (types[i] != t0 || types[i + 1] != t1 || types[i + 2] != t2) {
-    //             mpi_fprintf(
-    //                 stderr,
-    //                 "Error: iswater=True but atom ordering is inconsistent at molecule %d. "
-    //                 "Expected repeating triplets [%d,%d,%d].\n",
-    //                 m, t0, t1, t2
-    //             );
-    //             exit(1);
-    //         }
-    //     }
-    // }
-
     g_particles = particles_init(n, n_p, n_typ, L, h, cas_type);
-    // g_particles->is_water = is_water;
-    // if (g_particles->is_water) {
-    //     g_particles->fcs_intra = (double *)calloc(n_p * 3, sizeof(double));
-    //     g_particles->fcs_corr = (double *)calloc(n_p * 3, sizeof(double));
-    // }
 
     memcpy(g_particles->types, types, n_p * sizeof(int));
     memcpy(g_particles->pos, pos, n_p * 3 * sizeof(double));
@@ -123,49 +76,8 @@ void solver_initialize_particles(
     memcpy(g_particles->mass, mass, n_p * sizeof(double));
     memcpy(g_particles->charges, charges, n_p * sizeof(double));
 
-// #ifdef __MPI
-//     int size = get_size();
-//     if (size > 1) {
-//         bcast_double(g_particles->pos, n_p * 3, 0);
-//         bcast_double(g_particles->vel, n_p * 3, 0);
-//         bcast_double(g_particles->mass, n_p, 0);
-//         bcast_double(g_particles->charges, n_p, 0);
-//     }
-// #endif
-    
     g_particles->init_potential(g_particles, pot_type, pot_params);
 }
-
-// void solver_set_electrostatic_correction(int corr_type) {
-//     if (g_particles == NULL) {
-//         return;
-//     }
-//     g_corr_type = corr_type;
-//     switch (corr_type) {
-//         case 0:
-//             g_particles->compute_forces_electrostatic_correction =
-//                 particles_compute_forces_electrostatic_correction_spread;
-//             break;
-//         case 1:
-//             g_particles->compute_forces_electrostatic_correction =
-//                 particles_compute_forces_electrostatic_correction_sr;
-//             break;
-//         default:
-//             mpi_fprintf(stderr, "Invalid electrostatic correction type %d\n", corr_type);
-//             exit(1);
-//     }
-// }
-
-// static const char *corr_type_name(void) {
-//     switch (g_corr_type) {
-//         case 0:
-//             return "SPREAD";
-//         case 1:
-//             return "SR";
-//         default:
-//             return "UNKNOWN";
-//     }
-// }
 
 void solver_initialize_particles_pois_boltz(double gamma_np, double beta_np, double *solv_radii) {
     particles_pb_init(g_particles, gamma_np, beta_np, solv_radii);
