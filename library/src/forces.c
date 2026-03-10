@@ -7,12 +7,9 @@
 #include "linalg.h"
 #include "omp_base.h"
 
-// Pairwise nonbonded contribution for intramolecular exclusions (applies opposite sign)
-double compute_lj_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces);
-double compute_tf_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces);
-double compute_sc_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces);
-
-static inline void pbc_displacement(const double *pos, long int ia, long int ib, double L, double *dx, double *dy, double *dz, double *dr2) {
+static inline void pbc_displacement(
+    const double *pos, long int ia, long int ib, double L, double *dx, double *dy, double *dz, double *dr2
+) {
     double x = pos[ib * 3]     - pos[ia * 3];
     double y = pos[ib * 3 + 1] - pos[ia * 3 + 1];
     double z = pos[ib * 3 + 2] - pos[ia * 3 + 2];
@@ -25,28 +22,34 @@ static inline void pbc_displacement(const double *pos, long int ia, long int ib,
     *dr2 = x * x + y * y + z * z;
 }
 
-double compute_forces_harmonic_bond(long int n_p, const double *pos, double *forces, double L, double k, double r0_val, int rank, int size) {
+double compute_forces_harmonic_bond(long int n_p, const double *pos, double *forces, double L, double k, double r0_val) {
     double energy = 0.0;
     const double eps = 1e-15;
 
-    int nthreads = get_omp_max_threads();
-    if (nthreads < 1) {
-        nthreads = 1;
-    }
     long int n3 = n_p * 3;
-    // Thread-local accumulation to avoid OpenMP races; reduce into `forces` at the end.
-    double **forces_thr = (double **)malloc((size_t)nthreads * sizeof(double *));
-    for (int t = 0; t < nthreads; t++) {
-        forces_thr[t] = (double *)calloc((size_t)n3, sizeof(double));
-    }
+    long int n_triplets = n_p / 3; // Assuming water-like molecules with 3 sites per molecule (O, H1, H2).
+    double *fcs = forces;
+    // int rank = get_rank();
+    // int size = get_size();
+
+    // int nthreads = get_omp_max_threads();
+    // if (nthreads < 1) {
+    //     nthreads = 1;
+    // }
+    // // Thread-local accumulation to avoid OpenMP races; reduce into `forces` at the end.
+    // double **forces_thr = (double **)malloc((size_t)nthreads * sizeof(double *));
+    // for (int t = 0; t < nthreads; t++) {
+    //     forces_thr[t] = (double *)calloc((size_t)n3, sizeof(double));
+    // }
+    memset(fcs, 0, n3 * sizeof(double));
 
     #pragma omp parallel for reduction(+:energy)
-    for (long int m = 0; m < n_p / 3; m++) {
-        int tid = get_omp_thread_num();
-        double *fcs = forces_thr[tid];
-        if (size > 1 && (m % size) != rank) {
-            continue;
-        }
+    for (long int m = 0; m < n_triplets; m++) {
+        // int tid = get_omp_thread_num();
+        // double *fcs = forces_thr[tid];
+        // if (size > 1 && (m % size) != rank) {
+        //     continue;
+        // }
         long int iO = m * 3;
         long int iH1 = iO + 1;
         long int iH2 = iO + 2;
@@ -64,9 +67,9 @@ double compute_forces_harmonic_bond(long int n_p, const double *pos, double *for
         fcs[iH1 * 3    ] += dx * fab;
         fcs[iH1 * 3 + 1] += dy * fab;
         fcs[iH1 * 3 + 2] += dz * fab;
-        fcs[iO * 3    ] -= dx * fab;
-        fcs[iO * 3 + 1] -= dy * fab;
-        fcs[iO * 3 + 2] -= dz * fab;
+        fcs[iO  * 3    ] -= dx * fab;
+        fcs[iO  * 3 + 1] -= dy * fab;
+        fcs[iO  * 3 + 2] -= dz * fab;
         energy += 0.5 * k * (dr - r0_val) * (dr - r0_val);
 
         // O - H2
@@ -80,43 +83,50 @@ double compute_forces_harmonic_bond(long int n_p, const double *pos, double *for
         fcs[iH2 * 3    ] += dx * fab;
         fcs[iH2 * 3 + 1] += dy * fab;
         fcs[iH2 * 3 + 2] += dz * fab;
-        fcs[iO * 3    ] -= dx * fab;
-        fcs[iO * 3 + 1] -= dy * fab;
-        fcs[iO * 3 + 2] -= dz * fab;
+        fcs[iO  * 3    ] -= dx * fab;
+        fcs[iO  * 3 + 1] -= dy * fab;
+        fcs[iO  * 3 + 2] -= dz * fab;
         energy += 0.5 * k * (dr - r0_val) * (dr - r0_val);
     }
 
-    for (int t = 0; t < nthreads; t++) {
-        daxpy(forces_thr[t], forces, 1.0, n3);
-        free(forces_thr[t]);
-    }
-    free(forces_thr);
+    // for (int t = 0; t < nthreads; t++) {
+    //     daxpy(forces_thr[t], forces, 1.0, n3);
+    //     free(forces_thr[t]);
+    // }
+    // free(forces_thr);
+
+    // allreduce_sum(forces, n3);
 
     return energy;
 }
 
-double compute_forces_harmonic_angle(long int n_p, const double *pos, double *forces, double L, double k, double theta0_val, int rank, int size) {
+double compute_forces_harmonic_angle(long int n_p, const double *pos, double *forces, double L, double k, double theta0_val) {
     double energy = 0.0;
     const double eps = 1e-15;
 
-    int nthreads = get_omp_max_threads();
-    if (nthreads < 1) {
-        nthreads = 1;
-    }
     long int n3 = n_p * 3;
-    // Thread-local accumulation to avoid OpenMP races; reduce into `forces` at the end.
-    double **forces_thr = (double **)malloc((size_t)nthreads * sizeof(double *));
-    for (int t = 0; t < nthreads; t++) {
-        forces_thr[t] = (double *)calloc((size_t)n3, sizeof(double));
-    }
+    long int n_triplets = n_p / 3; // Assuming water-like molecules with 3 sites per molecule (O, H1, H2).
+    double *fcs = forces;
+
+    // int nthreads = get_omp_max_threads();
+    // if (nthreads < 1) {
+    //     nthreads = 1;
+    // }
+    // // Thread-local accumulation to avoid OpenMP races; reduce into `forces` at the end.
+    // double **forces_thr = (double **)malloc((size_t)nthreads * sizeof(double *));
+    // for (int t = 0; t < nthreads; t++) {
+    //     forces_thr[t] = (double *)calloc((size_t)n3, sizeof(double));
+    // }
+
+    memset(fcs, 0, n3 * sizeof(double));
 
     #pragma omp parallel for reduction(+:energy)
-    for (long int m = 0; m < n_p / 3; m++) {
-        int tid = get_omp_thread_num();
-        double *fcs = forces_thr[tid];
-        if (size > 1 && (m % size) != rank) {
-            continue;
-        }
+    for (long int m = 0; m < n_triplets; m++) {
+        // int tid = get_omp_thread_num();
+        // double *fcs = forces_thr[tid];
+        // if (size > 1 && (m % size) != rank) {
+        //     continue;
+        // }
         long int iO = m * 3;
         long int iH1 = iO + 1;
         long int iH2 = iO + 2;
@@ -164,17 +174,17 @@ double compute_forces_harmonic_angle(long int n_p, const double *pos, double *fo
         fcs[iH1 * 3    ] += dxab * fab;
         fcs[iH1 * 3 + 1] += dyab * fab;
         fcs[iH1 * 3 + 2] += dzab * fab;
-        fcs[iO * 3    ] -= dxab * fab;
-        fcs[iO * 3 + 1] -= dyab * fab;
-        fcs[iO * 3 + 2] -= dzab * fab;
+        fcs[iO  * 3    ] -= dxab * fab;
+        fcs[iO  * 3 + 1] -= dyab * fab;
+        fcs[iO  * 3 + 2] -= dzab * fab;
 
         // ac contribution (O-H2)
         fcs[iH2 * 3    ] += dxac * fac;
         fcs[iH2 * 3 + 1] += dyac * fac;
         fcs[iH2 * 3 + 2] += dzac * fac;
-        fcs[iO * 3    ] -= dxac * fac;
-        fcs[iO * 3 + 1] -= dyac * fac;
-        fcs[iO * 3 + 2] -= dzac * fac;
+        fcs[iO  * 3    ] -= dxac * fac;
+        fcs[iO  * 3 + 1] -= dyac * fac;
+        fcs[iO  * 3 + 2] -= dzac * fac;
 
         // bc contribution (H1-H2)
         fcs[iH2 * 3    ] += dxbc * fbc;
@@ -187,11 +197,11 @@ double compute_forces_harmonic_angle(long int n_p, const double *pos, double *fo
         energy += 0.5 * k * (theta - theta0_val) * (theta - theta0_val);
     }
 
-    for (int t = 0; t < nthreads; t++) {
-        daxpy(forces_thr[t], forces, 1.0, n3);
-        free(forces_thr[t]);
-    }
-    free(forces_thr);
+    // for (int t = 0; t < nthreads; t++) {
+    //     daxpy(forces_thr[t], forces, 1.0, n3);
+    //     free(forces_thr[t]);
+    // }
+    // free(forces_thr);
 
     return energy;
 }
@@ -386,128 +396,134 @@ double compute_tf_forces(int n_p, double L, double *pos, double *params, double 
     return potential_energy / 2;
 }
 
-double compute_lj_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces) {
-    double r2 = vx * vx + vy * vy + vz * vz;
-    double r = sqrt(r2);
-    if (r > r_cut || r < 1e-15) {
-        return 0.0;
-    }
-    long int ia3 = ia * 3;
-    long int ib3 = ib * 3;
-    long int idx = ia * np + ib;
-    double sigma = params[idx];
-    double epsilon = params[idx + np * np];
-    double alpha = params[idx + 2 * np * np];
-    double beta = params[idx + 3 * np * np];
+// double compute_lj_pair_force_excl(
+//     long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces
+// ) {
+//     double r2 = vx * vx + vy * vy + vz * vz;
+//     double r = sqrt(r2);
+//     if (r > r_cut || r < 1e-15) {
+//         return 0.0;
+//     }
+//     long int ia3 = ia * 3;
+//     long int ib3 = ib * 3;
+//     long int idx = ia * np + ib;
+//     double sigma = params[idx];
+//     double epsilon = params[idx + np * np];
+//     double alpha = params[idx + 2 * np * np];
+//     double beta = params[idx + 3 * np * np];
 
-    double inv_r = 1.0 / r;
-    double sr = sigma * inv_r;
-    double sr2 = sr * sr;
-    double sr6 = sr2 * sr2 * sr2;
-    double sr12 = sr6 * sr6;
+//     double inv_r = 1.0 / r;
+//     double sr = sigma * inv_r;
+//     double sr2 = sr * sr;
+//     double sr6 = sr2 * sr2 * sr2;
+//     double sr12 = sr6 * sr6;
 
-    double f_mag = 4 * epsilon * (12 * sr12 - 6 * sr6) * inv_r - alpha;
-    double V_mag = 4 * epsilon * (sr12 - sr6) + alpha * r + beta;
+//     double f_mag = 4 * epsilon * (12 * sr12 - 6 * sr6) * inv_r - alpha;
+//     double V_mag = 4 * epsilon * (sr12 - sr6) + alpha * r + beta;
 
-    double fx = -f_mag * vx * inv_r;
-    double fy = -f_mag * vy * inv_r;
-    double fz = -f_mag * vz * inv_r;
+//     double fx = -f_mag * vx * inv_r;
+//     double fy = -f_mag * vy * inv_r;
+//     double fz = -f_mag * vz * inv_r;
 
-    forces[ia3    ] += fx;
-    forces[ia3 + 1] += fy;
-    forces[ia3 + 2] += fz;
+//     forces[ia3    ] += fx;
+//     forces[ia3 + 1] += fy;
+//     forces[ia3 + 2] += fz;
 
-    forces[ib3    ] -= fx;
-    forces[ib3 + 1] -= fy;
-    forces[ib3 + 2] -= fz;
+//     forces[ib3    ] -= fx;
+//     forces[ib3 + 1] -= fy;
+//     forces[ib3 + 2] -= fz;
 
-    return V_mag;
-}
+//     return V_mag;
+// }
 
-double compute_tf_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces) {
-    double r2 = vx * vx + vy * vy + vz * vz;
-    double r = sqrt(r2);
-    if (r > r_cut || r < 1e-15) {
-        return 0.0;
-    }
-    long int ia3 = ia * 3;
-    long int ib3 = ib * 3;
-    long int idx = ia * np + ib;
-    double *A = params;
-    double *B = A + np * np;
-    double *C = B + np * np;
-    double *D = C + np * np;
-    double *sigma = D + np * np;
-    double *alpha = sigma + np * np;
-    double *beta = alpha + np * np;
+// double compute_tf_pair_force_excl(
+//     long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces
+// ) {
+//     double r2 = vx * vx + vy * vy + vz * vz;
+//     double r = sqrt(r2);
+//     if (r > r_cut || r < 1e-15) {
+//         return 0.0;
+//     }
+//     long int ia3 = ia * 3;
+//     long int ib3 = ib * 3;
+//     long int idx = ia * np + ib;
+//     double *A = params;
+//     double *B = A + np * np;
+//     double *C = B + np * np;
+//     double *D = C + np * np;
+//     double *sigma = D + np * np;
+//     double *alpha = sigma + np * np;
+//     double *beta = alpha + np * np;
 
-    double a = A[idx];
-    double b = B[idx];
-    double c = C[idx];
-    double d = D[idx];
-    double sig = sigma[idx];
-    double al = alpha[idx];
-    double be = beta[idx];
+//     double a = A[idx];
+//     double b = B[idx];
+//     double c = C[idx];
+//     double d = D[idx];
+//     double sig = sigma[idx];
+//     double al = alpha[idx];
+//     double be = beta[idx];
 
-    double exp_term = exp(b * (sig - r));
-    double r6 = r2 * r2 * r2;
-    double r7 = r6 * r;
-    double r8 = r7 * r;
-    double r9 = r8 * r;
+//     double exp_term = exp(b * (sig - r));
+//     double r6 = r2 * r2 * r2;
+//     double r7 = r6 * r;
+//     double r8 = r7 * r;
+//     double r9 = r8 * r;
 
-    double f_mag = b * a * exp_term - 6.0 * c / r7 - 8.0 * d / r9 - al;
-    double V_mag = a * exp_term - c / r6 - d / r8 + al * r + be;
+//     double f_mag = b * a * exp_term - 6.0 * c / r7 - 8.0 * d / r9 - al;
+//     double V_mag = a * exp_term - c / r6 - d / r8 + al * r + be;
 
-    double inv_r = 1.0 / r;
-    double fx = -f_mag * vx * inv_r;
-    double fy = -f_mag * vy * inv_r;
-    double fz = -f_mag * vz * inv_r;
+//     double inv_r = 1.0 / r;
+//     double fx = -f_mag * vx * inv_r;
+//     double fy = -f_mag * vy * inv_r;
+//     double fz = -f_mag * vz * inv_r;
 
-    forces[ia3    ] += fx;
-    forces[ia3 + 1] += fy;
-    forces[ia3 + 2] += fz;
+//     forces[ia3    ] += fx;
+//     forces[ia3 + 1] += fy;
+//     forces[ia3 + 2] += fz;
 
-    forces[ib3    ] -= fx;
-    forces[ib3 + 1] -= fy;
-    forces[ib3 + 2] -= fz;
+//     forces[ib3    ] -= fx;
+//     forces[ib3 + 1] -= fy;
+//     forces[ib3 + 2] -= fz;
 
-    return V_mag;
-}
+//     return V_mag;
+// }
 
-double compute_sc_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces) {
-    double r2 = vx * vx + vy * vy + vz * vz;
-    double r = sqrt(r2);
-    if (r > r_cut || r < 1e-15) {
-        return 0.0;
-    }
-    long int ia3 = ia * 3;
-    long int ib3 = ib * 3;
+// double compute_sc_pair_force_excl(
+//     long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces
+// ) {
+//     double r2 = vx * vx + vy * vy + vz * vz;
+//     double r = sqrt(r2);
+//     if (r > r_cut || r < 1e-15) {
+//         return 0.0;
+//     }
+//     long int ia3 = ia * 3;
+//     long int ib3 = ib * 3;
 
-    double nu    = params[0];
-    double d     = params[1];
-    double B_nu  = params[2];
-    double alpha = params[3];
-    double beta  = params[4];
+//     double nu    = params[0];
+//     double d     = params[1];
+//     double B_nu  = params[2];
+//     double alpha = params[3];
+//     double beta  = params[4];
 
-    double d_over_r_pow = pow(d / r, nu);
-    double V_mag = B_nu * d_over_r_pow + alpha * r + beta;
-    double f_mag = B_nu * nu * d_over_r_pow / r - alpha;
+//     double d_over_r_pow = pow(d / r, nu);
+//     double V_mag = B_nu * d_over_r_pow + alpha * r + beta;
+//     double f_mag = B_nu * nu * d_over_r_pow / r - alpha;
 
-    double inv_r = 1.0 / r;
-    double fx = -f_mag * vx * inv_r;
-    double fy = -f_mag * vy * inv_r;
-    double fz = -f_mag * vz * inv_r;
+//     double inv_r = 1.0 / r;
+//     double fx = -f_mag * vx * inv_r;
+//     double fy = -f_mag * vy * inv_r;
+//     double fz = -f_mag * vz * inv_r;
 
-    forces[ia3    ] += fx;
-    forces[ia3 + 1] += fy;
-    forces[ia3 + 2] += fz;
+//     forces[ia3    ] += fx;
+//     forces[ia3 + 1] += fy;
+//     forces[ia3 + 2] += fz;
 
-    forces[ib3    ] -= fx;
-    forces[ib3 + 1] -= fy;
-    forces[ib3 + 2] -= fz;
+//     forces[ib3    ] -= fx;
+//     forces[ib3 + 1] -= fy;
+//     forces[ib3 + 2] -= fz;
 
-    return V_mag;
-}
+//     return V_mag;
+// }
 
 /*
 Compute the particle-particle forces using the tabulated Lennard-Jones potential
@@ -563,6 +579,8 @@ double compute_lj_forces(int n_p, double L, double *pos, double *params, double 
             r_mag += app * app;
             r_mag = sqrt(r_mag);
             if (!isfinite(r_mag) || r_mag <= 1e-12) {
+                // TODO: The first one is redundnat with the next check
+                //  The second one should never happen?
                 continue;
             }
             if (r_mag > r_cut) {
@@ -651,6 +669,8 @@ double compute_sc_forces(int n_p, double L, double *pos, double *params, double 
 
             r_mag = sqrt(r_mag);
             if (!isfinite(r_mag) || r_mag <= 1e-12) {
+                // TODO: The first one is redundnat with the next check
+                //  The second one should never happen?
                 continue;
             }
             if (r_mag > r_cut) {

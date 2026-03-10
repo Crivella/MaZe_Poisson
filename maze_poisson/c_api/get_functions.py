@@ -42,6 +42,18 @@ capi.register_function(
     ],
 )
 
+# int get_water_electrostatic_type_num() {
+capi.register_function(
+    'get_water_electrostatic_type_num', ctypes.c_int, [],
+)
+
+# char *get_water_electrostatic_type_str(int n) {
+capi.register_function(
+    'get_water_electrostatic_type_str', ctypes.c_char_p, [
+        ctypes.c_int,
+    ],
+)
+
 # int get_integrator_type_num() {
 capi.register_function(
     'get_integrator_type_num', ctypes.c_int, [],

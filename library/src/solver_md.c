@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <float.h>
 
+#include "debug_log.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
 #include "omp_base.h"
@@ -15,23 +15,6 @@ integrator *g_integrator = NULL;
 grid *g_grid = NULL;
 
 double q_tot = 0.0;
-static int field_not_converged = 0;
-static long int field_update_calls = 0;
-static long int charge_update_calls = 0;
-static int g_corr_type = -1;
-static char g_output_dir[4096] = ".";
-static double *qn_hist_prev = NULL;
-static double *qn_hist_curr = NULL;
-static double *qn_fail_prev = NULL;
-static double *qn_fail_curr = NULL;
-static long int *ng_hist_prev = NULL;
-static long int *ng_hist_curr = NULL;
-static long int *ng_fail_prev = NULL;
-static long int *ng_fail_curr = NULL;
-static long int qn_hist_size = 0;
-static int qn_hist_initialized = 0;
-static int q_fail_pending = 0;
-static long int q_fail_step = -1;
 
 
 static double solver_total_charge_from_particles(void) {
@@ -41,355 +24,32 @@ static double solver_total_charge_from_particles(void) {
         q_local += g_particles->charges[i];
     }
 
-#ifdef __MPI
-    int size = get_size();
-    if (size > 1) {
-        double q_sum = q_local;
-        allreduce_sum(&q_sum, 1);
+// #ifdef __MPI
+//     int size = get_size();
+//     if (size > 1) {
+//         double q_sum = q_local;
+//         allreduce_sum(&q_sum, 1);
 
-        double q_max = q_local;
-        allreduce_max(&q_max, 1);
+//         double q_max = q_local;
+//         allreduce_max(&q_max, 1);
 
-        double q_min_neg = -q_local;
-        allreduce_max(&q_min_neg, 1);
-        double q_min = -q_min_neg;
+//         double q_min_neg = -q_local;
+//         allreduce_max(&q_min_neg, 1);
+//         double q_min = -q_min_neg;
 
-        if (fabs(q_max - q_min) < 1e-12) {
-            return q_max; // Particles replicated on each rank.
-        }
-        return q_sum; // Particles distributed across ranks.
-    }
-#endif
+//         if (fabs(q_max - q_min) < 1e-12) {
+//             return q_max; // Particles replicated on each rank.
+//         }
+//         return q_sum; // Particles distributed across ranks.
+//     }
+// #endif
 
     return q_local;
-}
-
-static void dump_charge_assignment_diagnostics(double q_ref, double q_tot_loc) {
-    if (g_particles == NULL || g_grid == NULL) {
-        return;
-    }
-
-    int n_p = g_particles->n_p;
-    int nn3 = g_particles->num_neighbors * 3;
-    double *pos = g_particles->pos;
-    double *charges = g_particles->charges;
-    long int *neighbors = g_particles->neighbors;
-    double (*g)(double, double, double) = g_particles->charges_spread_func;
-    double h = g_grid->h;
-    double L = g_grid->n * h;
-
-    double min_sum = DBL_MAX;
-    double max_sum = -DBL_MAX;
-    int bad = 0;
-    int nan_pos = 0;
-
-    mpi_printf("Charge assignment diagnostics: q_ref=%.6f q_tot_loc=%.6f n_p=%d nn=%d\n",
-               q_ref, q_tot_loc, n_p, g_particles->num_neighbors);
-
-    int reported = 0;
-    for (int i = 0; i < n_p; i++) {
-        int i1 = i * 3;
-        int i2 = i * nn3;
-
-        double px = pos[i1 + 0];
-        double py = pos[i1 + 1];
-        double pz = pos[i1 + 2];
-
-        if (isnan(px) || isnan(py) || isnan(pz)) {
-            nan_pos += 1;
-            continue;
-        }
-
-        double sum_w = 0.0;
-        for (int j = 0; j < nn3; j += 3) {
-            long int ni = neighbors[i2 + j + 0];
-            long int nj = neighbors[i2 + j + 1];
-            long int nk = neighbors[i2 + j + 2];
-            double app = g(px - ni * h, L, h) * g(py - nj * h, L, h) * g(pz - nk * h, L, h);
-            sum_w += app;
-        }
-
-        if (sum_w < min_sum) {
-            min_sum = sum_w;
-        }
-        if (sum_w > max_sum) {
-            max_sum = sum_w;
-        }
-
-        if (fabs(sum_w - 1.0) > 1e-3) {
-            bad += 1;
-            if (reported < 8) {
-                mpi_printf(
-                    "  bad particle i=%d q=%.6f sum_w=%.6f pos=(%.6f %.6f %.6f)\n",
-                    i, charges[i], sum_w, px, py, pz
-                );
-                reported += 1;
-            }
-        }
-    }
-
-    mpi_printf("  sum_w range: [%.6f, %.6f], bad=%d, nan_pos=%d\n",
-               min_sum, max_sum, bad, nan_pos);
-}
-
-void solver_set_output_path(const char *path) {
-    if (path == NULL || path[0] == '\0') {
-        g_output_dir[0] = '.';
-        g_output_dir[1] = '\0';
-        return;
-    }
-    snprintf(g_output_dir, sizeof(g_output_dir), "%s", path);
-}
-
-const char *solver_get_output_path(void) {
-    return g_output_dir;
-}
-
-long int solver_get_field_step(void) {
-    return field_update_calls;
-}
-
-FILE *solver_open_not_converged_log(void) {
-    char filename[8192];
-    snprintf(filename, sizeof(filename), "%s/not_converged.txt", g_output_dir);
-    return fopen(filename, "a");
 }
 
 static int using_cubic_spline_assignment(void) {
     return (g_particles != NULL && g_particles->cas_type == CHARGE_ASS_SCHEME_TYPE_SPLCUB);
 }
-
-static int ensure_q_neighbor_history_buffers(particles *p) {
-    if (p == NULL) {
-        return 1;
-    }
-    long int size = (long int)p->n_p * p->num_neighbors;
-    long int idx_size = size * 3;
-    if (qn_hist_size == size && qn_hist_prev != NULL && qn_hist_curr != NULL &&
-        qn_fail_prev != NULL && qn_fail_curr != NULL &&
-        ng_hist_prev != NULL && ng_hist_curr != NULL &&
-        ng_fail_prev != NULL && ng_fail_curr != NULL) {
-        return 0;
-    }
-
-    free(qn_hist_prev);
-    free(qn_hist_curr);
-    free(qn_fail_prev);
-    free(qn_fail_curr);
-    free(ng_hist_prev);
-    free(ng_hist_curr);
-    free(ng_fail_prev);
-    free(ng_fail_curr);
-    qn_hist_prev = NULL;
-    qn_hist_curr = NULL;
-    qn_fail_prev = NULL;
-    qn_fail_curr = NULL;
-    ng_hist_prev = NULL;
-    ng_hist_curr = NULL;
-    ng_fail_prev = NULL;
-    ng_fail_curr = NULL;
-    qn_hist_size = 0;
-    qn_hist_initialized = 0;
-
-    qn_hist_prev = (double *)malloc(size * sizeof(double));
-    qn_hist_curr = (double *)malloc(size * sizeof(double));
-    qn_fail_prev = (double *)malloc(size * sizeof(double));
-    qn_fail_curr = (double *)malloc(size * sizeof(double));
-    ng_hist_prev = (long int *)malloc(idx_size * sizeof(long int));
-    ng_hist_curr = (long int *)malloc(idx_size * sizeof(long int));
-    ng_fail_prev = (long int *)malloc(idx_size * sizeof(long int));
-    ng_fail_curr = (long int *)malloc(idx_size * sizeof(long int));
-    if (qn_hist_prev == NULL || qn_hist_curr == NULL || qn_fail_prev == NULL || qn_fail_curr == NULL ||
-        ng_hist_prev == NULL || ng_hist_curr == NULL || ng_fail_prev == NULL || ng_fail_curr == NULL) {
-        free(qn_hist_prev);
-        free(qn_hist_curr);
-        free(qn_fail_prev);
-        free(qn_fail_curr);
-        free(ng_hist_prev);
-        free(ng_hist_curr);
-        free(ng_fail_prev);
-        free(ng_fail_curr);
-        qn_hist_prev = NULL;
-        qn_hist_curr = NULL;
-        qn_fail_prev = NULL;
-        qn_fail_curr = NULL;
-        ng_hist_prev = NULL;
-        ng_hist_curr = NULL;
-        ng_fail_prev = NULL;
-        ng_fail_curr = NULL;
-        return 1;
-    }
-    qn_hist_size = size;
-    return 0;
-}
-
-static void capture_q_neighbor_snapshot(double *q_out, long int *idx_out) {
-    int n_p = g_particles->n_p;
-    int num_neighbors = g_particles->num_neighbors;
-    double L = g_particles->L;
-    double h = g_particles->h;
-    double *pos = g_particles->pos;
-    double *charges = g_particles->charges;
-    long int *neighbors = g_particles->neighbors;
-    double (*g)(double, double, double) = g_particles->charges_spread_func;
-
-    for (int ip = 0; ip < n_p; ip++) {
-        long int p3 = ip * 3;
-        long int n0 = (long int)ip * num_neighbors * 3;
-        long int o0 = (long int)ip * num_neighbors;
-        double px = pos[p3];
-        double py = pos[p3 + 1];
-        double pz = pos[p3 + 2];
-        double q = charges[ip];
-        for (int j = 0; j < num_neighbors; j++) {
-            long int idx3 = n0 + j * 3;
-            long int ni = neighbors[idx3];
-            long int nj = neighbors[idx3 + 1];
-            long int nk = neighbors[idx3 + 2];
-            long int out = o0 + j;
-            idx_out[out * 3] = ni;
-            idx_out[out * 3 + 1] = nj;
-            idx_out[out * 3 + 2] = nk;
-            q_out[out] = q * g(px - ni * h, L, h) * g(py - nj * h, L, h) * g(pz - nk * h, L, h);
-        }
-    }
-}
-
-static void dump_q_neighbor_triplet_csv(
-    const double *q_prev, const long int *ng_prev,
-    const double *q_curr, const long int *ng_curr,
-    const double *q_next, const long int *ng_next,
-    long int nonconv_step, long int next_step, int n_p, int num_neighbors
-) {
-    int rank = get_rank();
-    if (rank != 0) {
-        return;
-    }
-
-    char filename[8192];
-    snprintf(filename, sizeof(filename), "%s/q_cubic_context_step_%07ld.csv", g_output_dir, nonconv_step);
-    FILE *fp = fopen(filename, "w");
-    if (fp == NULL) {
-        return;
-    }
-    fprintf(fp, "nonconv_step,phase,grid_step,particle,neighbor,i,j,k,q_assigned,count\n");
-
-    long int n_entries = (long int)n_p * num_neighbors;
-    long int *ui = (long int *)malloc(n_entries * sizeof(long int));
-    long int *uj = (long int *)malloc(n_entries * sizeof(long int));
-    long int *uk = (long int *)malloc(n_entries * sizeof(long int));
-    double *uq = (double *)malloc(n_entries * sizeof(double));
-    int *ucnt = (int *)malloc(n_entries * sizeof(int));
-    int *up = (int *)malloc(n_entries * sizeof(int));
-    int *un = (int *)malloc(n_entries * sizeof(int));
-    if (ui == NULL || uj == NULL || uk == NULL || uq == NULL || ucnt == NULL || up == NULL || un == NULL) {
-        free(ui);
-        free(uj);
-        free(uk);
-        free(uq);
-        free(ucnt);
-        free(up);
-        free(un);
-        fclose(fp);
-        return;
-    }
-
-    const char *phase_names[3] = {"prev", "curr", "next"};
-    const long int phase_steps[3] = {nonconv_step - 1, nonconv_step, next_step};
-    const double *phase_q[3] = {q_prev, q_curr, q_next};
-    const long int *phase_ng[3] = {ng_prev, ng_curr, ng_next};
-
-    for (int ph = 0; ph < 3; ph++) {
-        long int nuniq = 0;
-        for (int ip = 0; ip < n_p; ip++) {
-            long int o0 = (long int)ip * num_neighbors;
-            for (int j = 0; j < num_neighbors; j++) {
-                long int idx = o0 + j;
-                long int ii = phase_ng[ph][idx * 3];
-                long int jj = phase_ng[ph][idx * 3 + 1];
-                long int kk = phase_ng[ph][idx * 3 + 2];
-                long int found = -1;
-                for (long int u = 0; u < nuniq; u++) {
-                    if (ui[u] == ii && uj[u] == jj && uk[u] == kk) {
-                        found = u;
-                        break;
-                    }
-                }
-                if (found >= 0) {
-                    uq[found] += phase_q[ph][idx];
-                    ucnt[found] += 1;
-                } else {
-                    ui[nuniq] = ii;
-                    uj[nuniq] = jj;
-                    uk[nuniq] = kk;
-                    uq[nuniq] = phase_q[ph][idx];
-                    ucnt[nuniq] = 1;
-                    up[nuniq] = ip;
-                    un[nuniq] = j;
-                    nuniq += 1;
-                }
-            }
-        }
-
-        for (long int u = 0; u < nuniq; u++) {
-            fprintf(fp, "%ld,%s,%ld,%d,%d,%ld,%ld,%ld,%.17e,%d\n",
-                    nonconv_step, phase_names[ph], phase_steps[ph], up[u], un[u],
-                    ui[u], uj[u], uk[u], uq[u], ucnt[u]);
-        }
-    }
-
-    free(ui);
-    free(uj);
-    free(uk);
-    free(uq);
-    free(ucnt);
-    free(up);
-    free(un);
-    fclose(fp);
-}
-
-static void dump_q_neighbor_triplet_csv_from_rank0(
-    const double *q_prev_local, const long int *ng_prev_local,
-    const double *q_curr_local, const long int *ng_curr_local,
-    const double *q_next_local, const long int *ng_next_local,
-    long int nonconv_step, long int next_step, int n_p, int num_neighbors
-) {
-    int rank = get_rank();
-    int size = get_size();
-    long int nvec = (long int)n_p * num_neighbors;
-    long int nidx = nvec * 3;
-
-    if (size <= 1) {
-        dump_q_neighbor_triplet_csv(
-            q_prev_local, ng_prev_local, q_curr_local, ng_curr_local, q_next_local, ng_next_local,
-            nonconv_step, next_step, n_p, num_neighbors
-        );
-        return;
-    }
-
-    // Current code path is primarily intended for serial debugging.
-    // For MPI, only rank 0 local portion will be written.
-    if (rank == 0) {
-        dump_q_neighbor_triplet_csv(
-            q_prev_local, ng_prev_local, q_curr_local, ng_curr_local, q_next_local, ng_next_local,
-            nonconv_step, next_step, n_p, num_neighbors
-        );
-    } else {
-        (void)nidx;
-        (void)nvec;
-        (void)ng_prev_local;
-        (void)ng_curr_local;
-        (void)ng_next_local;
-        (void)q_prev_local;
-        (void)q_curr_local;
-        (void)q_next_local;
-        (void)nonconv_step;
-        (void)next_step;
-        (void)n_p;
-        (void)num_neighbors;
-    }
-}
-
 
 void solver_initialize() {
     int size = init_mpi();
@@ -424,38 +84,38 @@ void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enab
 }
 
 void solver_initialize_particles(
-    int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type, int is_water,
+    int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
     int *types, double *pos, double *vel, double *mass, double *charges,
     double *pot_params
 ) {
-    if (is_water) {
-        if (n_p % 3 != 0) {
-            mpi_fprintf(stderr, "Error: iswater=True but n_p=%d is not a multiple of 3.\n", n_p);
-            exit(1);
-        }
-        int t0 = types[0];
-        int t1 = types[1];
-        int t2 = types[2];
-        for (int m = 1; m < n_p / 3; m++) {
-            int i = m * 3;
-            if (types[i] != t0 || types[i + 1] != t1 || types[i + 2] != t2) {
-                mpi_fprintf(
-                    stderr,
-                    "Error: iswater=True but atom ordering is inconsistent at molecule %d. "
-                    "Expected repeating triplets [%d,%d,%d].\n",
-                    m, t0, t1, t2
-                );
-                exit(1);
-            }
-        }
-    }
+    // if (is_water) {
+    //     if (n_p % 3 != 0) {
+    //         mpi_fprintf(stderr, "Error: iswater=True but n_p=%d is not a multiple of 3.\n", n_p);
+    //         exit(1);
+    //     }
+    //     int t0 = types[0];
+    //     int t1 = types[1];
+    //     int t2 = types[2];
+    //     for (int m = 1; m < n_p / 3; m++) {
+    //         int i = m * 3;
+    //         if (types[i] != t0 || types[i + 1] != t1 || types[i + 2] != t2) {
+    //             mpi_fprintf(
+    //                 stderr,
+    //                 "Error: iswater=True but atom ordering is inconsistent at molecule %d. "
+    //                 "Expected repeating triplets [%d,%d,%d].\n",
+    //                 m, t0, t1, t2
+    //             );
+    //             exit(1);
+    //         }
+    //     }
+    // }
 
     g_particles = particles_init(n, n_p, n_typ, L, h, cas_type);
-    g_particles->is_water = is_water;
-    if (g_particles->is_water) {
-        g_particles->fcs_intra = (double *)calloc(n_p * 3, sizeof(double));
-        g_particles->fcs_corr = (double *)calloc(n_p * 3, sizeof(double));
-    }
+    // g_particles->is_water = is_water;
+    // if (g_particles->is_water) {
+    //     g_particles->fcs_intra = (double *)calloc(n_p * 3, sizeof(double));
+    //     g_particles->fcs_corr = (double *)calloc(n_p * 3, sizeof(double));
+    // }
 
     memcpy(g_particles->types, types, n_p * sizeof(int));
     memcpy(g_particles->pos, pos, n_p * 3 * sizeof(double));
@@ -463,52 +123,56 @@ void solver_initialize_particles(
     memcpy(g_particles->mass, mass, n_p * sizeof(double));
     memcpy(g_particles->charges, charges, n_p * sizeof(double));
 
-#ifdef __MPI
-    int size = get_size();
-    if (size > 1) {
-        bcast_double(g_particles->pos, n_p * 3, 0);
-        bcast_double(g_particles->vel, n_p * 3, 0);
-        bcast_double(g_particles->mass, n_p, 0);
-        bcast_double(g_particles->charges, n_p, 0);
-    }
-#endif
+// #ifdef __MPI
+//     int size = get_size();
+//     if (size > 1) {
+//         bcast_double(g_particles->pos, n_p * 3, 0);
+//         bcast_double(g_particles->vel, n_p * 3, 0);
+//         bcast_double(g_particles->mass, n_p, 0);
+//         bcast_double(g_particles->charges, n_p, 0);
+//     }
+// #endif
     
     g_particles->init_potential(g_particles, pot_type, pot_params);
 }
 
-void solver_set_electrostatic_correction(int corr_type) {
-    if (g_particles == NULL) {
-        return;
-    }
-    g_corr_type = corr_type;
-    switch (corr_type) {
-        case 0:
-            g_particles->compute_forces_electrostatic_correction =
-                particles_compute_forces_electrostatic_correction_spread;
-            break;
-        case 1:
-            g_particles->compute_forces_electrostatic_correction =
-                particles_compute_forces_electrostatic_correction_sr;
-            break;
-        default:
-            mpi_fprintf(stderr, "Invalid electrostatic correction type %d\n", corr_type);
-            exit(1);
-    }
-}
+// void solver_set_electrostatic_correction(int corr_type) {
+//     if (g_particles == NULL) {
+//         return;
+//     }
+//     g_corr_type = corr_type;
+//     switch (corr_type) {
+//         case 0:
+//             g_particles->compute_forces_electrostatic_correction =
+//                 particles_compute_forces_electrostatic_correction_spread;
+//             break;
+//         case 1:
+//             g_particles->compute_forces_electrostatic_correction =
+//                 particles_compute_forces_electrostatic_correction_sr;
+//             break;
+//         default:
+//             mpi_fprintf(stderr, "Invalid electrostatic correction type %d\n", corr_type);
+//             exit(1);
+//     }
+// }
 
-static const char *corr_type_name(void) {
-    switch (g_corr_type) {
-        case 0:
-            return "SPREAD";
-        case 1:
-            return "SR";
-        default:
-            return "UNKNOWN";
-    }
-}
+// static const char *corr_type_name(void) {
+//     switch (g_corr_type) {
+//         case 0:
+//             return "SPREAD";
+//         case 1:
+//             return "SR";
+//         default:
+//             return "UNKNOWN";
+//     }
+// }
 
 void solver_initialize_particles_pois_boltz(double gamma_np, double beta_np, double *solv_radii) {
     particles_pb_init(g_particles, gamma_np, beta_np, solv_radii);
+}
+
+void solver_initialize_particles_water(int is_water, int corr_type) {
+    particles_water_init(g_particles, is_water, corr_type);
 }
 
 void solver_initialize_integrator(int n_p, double dt, double T, double gamma, int itg_type, int itg_enabled) {
@@ -531,60 +195,6 @@ void solver_initialize_integrator(int n_p, double dt, double T, double gamma, in
     }
 }
 
-static void dump_mpi_particle_consistency(void) {
-#ifdef __MPI
-    if (g_particles == NULL) {
-        return;
-    }
-    int size = get_size();
-    if (size <= 1) {
-        return;
-    }
-
-    int n_p = g_particles->n_p;
-    double *pos = g_particles->pos;
-    double *charges = g_particles->charges;
-
-    double sum_pos = 0.0;
-    double sum_pos2 = 0.0;
-    double sum_q = 0.0;
-    for (int i = 0; i < n_p; i++) {
-        int i1 = i * 3;
-        double x = pos[i1 + 0];
-        double y = pos[i1 + 1];
-        double z = pos[i1 + 2];
-        sum_pos += x + y + z;
-        sum_pos2 += x * x + y * y + z * z;
-        sum_q += charges[i];
-    }
-
-    double max_sum_pos = sum_pos;
-    double max_sum_pos2 = sum_pos2;
-    double max_sum_q = sum_q;
-    allreduce_max(&max_sum_pos, 1);
-    allreduce_max(&max_sum_pos2, 1);
-    allreduce_max(&max_sum_q, 1);
-
-    double min_sum_pos_neg = -sum_pos;
-    double min_sum_pos2_neg = -sum_pos2;
-    double min_sum_q_neg = -sum_q;
-    allreduce_max(&min_sum_pos_neg, 1);
-    allreduce_max(&min_sum_pos2_neg, 1);
-    allreduce_max(&min_sum_q_neg, 1);
-
-    double min_sum_pos = -min_sum_pos_neg;
-    double min_sum_pos2 = -min_sum_pos2_neg;
-    double min_sum_q = -min_sum_q_neg;
-
-    if (fabs(max_sum_pos - min_sum_pos) > 1e-8 ||
-        fabs(max_sum_pos2 - min_sum_pos2) > 1e-8 ||
-        fabs(max_sum_q - min_sum_q) > 1e-12) {
-        mpi_printf("MPI particle mismatch: sum_pos[min,max]=[%e,%e] sum_pos2[min,max]=[%e,%e] sum_q[min,max]=[%e,%e]\n",
-                   min_sum_pos, max_sum_pos, min_sum_pos2, max_sum_pos2, min_sum_q, max_sum_q);
-    }
-#endif
-}
-
 int solver_update_charges() {
     int res = 0;
     double q_tot_loc;
@@ -602,26 +212,26 @@ int solver_update_charges() {
         if (diff > 1e-2) {
             res = 1;
             printf("Charge conservation error: q_ref = %.6f, q_tot_loc = %.6f\n", q_ref, q_tot_loc);
-            dump_charge_assignment_diagnostics(q_ref, q_tot_loc);
-            dump_mpi_particle_consistency();
+            dump_charge_assignment_diagnostics(g_particles, g_grid, q_ref, q_tot_loc);
+            dump_mpi_particle_consistency(g_particles);
             exit(1);
         } else {
             mpi_printf("Charge conservation warning: q_ref = %.6f, q_tot_loc = %.6f\n", q_ref, q_tot_loc);
-            dump_mpi_particle_consistency();
+            dump_mpi_particle_consistency(g_particles);
         }
     }
 
     if (using_cubic_spline_assignment()) {
         if (ensure_q_neighbor_history_buffers(g_particles) == 0) {
             if (!qn_hist_initialized) {
-                capture_q_neighbor_snapshot(qn_hist_curr, ng_hist_curr);
+                capture_q_neighbor_snapshot(g_particles, qn_hist_curr, ng_hist_curr);
                 memcpy(qn_hist_prev, qn_hist_curr, qn_hist_size * sizeof(double));
                 memcpy(ng_hist_prev, ng_hist_curr, qn_hist_size * 3 * sizeof(long int));
                 qn_hist_initialized = 1;
             } else {
                 memcpy(qn_hist_prev, qn_hist_curr, qn_hist_size * sizeof(double));
                 memcpy(ng_hist_prev, ng_hist_curr, qn_hist_size * 3 * sizeof(long int));
-                capture_q_neighbor_snapshot(qn_hist_curr, ng_hist_curr);
+                capture_q_neighbor_snapshot(g_particles, qn_hist_curr, ng_hist_curr);
             }
 
             if (q_fail_pending) {
@@ -763,7 +373,7 @@ void solver_compute_forces_tot() {
                 fprintf(fp, "not converged: step=%ld q_tot=%e n_p=%d\n",
                         field_update_calls, q_tot, g_particles->n_p);
                 fprintf(fp, "corr_type=%s energy_corr=%e\n",
-                        corr_type_name(), g_particles->energy_corr);
+                        get_water_electrostatic_type_str(g_particles->corr_type), g_particles->energy_corr);
                 fprintf(fp, "Ptot %e %e %e\n", p[0], p[1], p[2]);
                 fprintf(fp, "Ftot %e %e %e\n", f_tot[0], f_tot[1], f_tot[2]);
                 fprintf(fp, "Felec %e %e %e\n", f_elec[0], f_elec[1], f_elec[2]);
@@ -897,27 +507,8 @@ void solver_finalize() {
         g_integrator->free(g_integrator);
         g_integrator = NULL;
     }
-    free(qn_hist_prev);
-    free(qn_hist_curr);
-    free(qn_fail_prev);
-    free(qn_fail_curr);
-    free(ng_hist_prev);
-    free(ng_hist_curr);
-    free(ng_fail_prev);
-    free(ng_fail_curr);
-    qn_hist_prev = NULL;
-    qn_hist_curr = NULL;
-    qn_fail_prev = NULL;
-    qn_fail_curr = NULL;
-    ng_hist_prev = NULL;
-    ng_hist_curr = NULL;
-    ng_fail_prev = NULL;
-    ng_fail_curr = NULL;
-    qn_hist_size = 0;
-    qn_hist_initialized = 0;
-    q_fail_pending = 0;
-    q_fail_step = -1;
 
+    finalize_debug_log();
     cleanup_mpi();
 }
 

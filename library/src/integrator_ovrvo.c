@@ -7,6 +7,14 @@
 #include "mpi_base.h"
 #include "omp_base.h"
 
+/*
+TODO: Was this really a problem?
+As far as i can tell the only thing that would happen here with the original code is that, for the same seed,
+the order in which the RNG numbers are generated could change so results might have slight inconsistencies w.r.t.
+OpenMP.
+Worst case i'd rather remove all the new stuff and disable open_mp for the OVRVO (it is not rlly a huge gain anyway)
+*/
+
 // Thread-local RNG using xorshift64* with Box-Muller for normals.
 // Each thread owns its own RNG state to avoid OpenMP data races.
 static unsigned long long *rng_state = NULL;

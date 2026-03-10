@@ -300,8 +300,24 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
     }
 }    
 
+/*Important, when called for IO must be called by all procs*/
 /* Stub: electrostatic energy not used in output */
 double grid_get_energy_elec(grid *g){
-    (void)g;
+    // TODO: Any reason to remove this or leave it as a stub? 
+    // double energy = 0.0;
+
+    // #pragma omp parallel for reduction(+:energy)
+    // for (long int i = 0; i < g->size; i++) {
+    //     // Calculate the change in energy due to the Poisson-Boltzmann potential
+    //     energy += 0.5 * g->phi_n[i];
+    // }
+
+    // allreduce_sum(&energy, 1);
+
+    // return energy;
+
     return 0.0;
 }
+
+
+
