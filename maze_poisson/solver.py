@@ -328,13 +328,19 @@ class SolverMD(Logger):
     
     def initialize_particles(self):
         """Initialize the particles."""
+        start_file = self.gset.input_file
+        
         self.logger.info(f"Reading particle definitions from file: {self.gset.particles_file}")
         particles = pd.read_csv(self.gset.particles_file)
+        self.logger.info(f"Reading starting positions from file: {start_file}")
+        df = pd.read_csv(start_file)
         # Normalize column name for type if provided with different casing
         particles = self.pd_ensure_lowercase(particles, 'type')
+        df = self.pd_ensure_lowercase(df, 'type')
 
         if self.mdv.iswater:
             self.logger.info("Water mode enabled (SPC): expecting O-H-H triplets (types O,H,H) in input coordinates.")
+            self.validate_water_inputs(particles, df)
         if len(particles) != self.gset.N_typs:
             raise ValueError(
                 f"Number of particle types in file ({len(particles)}) does not match N_typs ({self.gset.N_typs})."
@@ -360,11 +366,7 @@ class SolverMD(Logger):
             raise ValueError(f"Charge assignment scheme {cas_str} not recognized.")
         ca_scheme_id = ca_scheme_map[cas_str]
 
-        start_file = self.gset.input_file
         kBT = self.mdv.kBT
-
-        df = pd.read_csv(start_file)
-        df = self.pd_ensure_lowercase(df, 'type')
 
         types = np.ascontiguousarray(particles.loc[df['type'], 'enum'].values, dtype=np.int32)
         pos = np.ascontiguousarray(df[['x', 'y', 'z']].values / cst.a0, dtype=np.float64)
@@ -413,8 +415,6 @@ class SolverMD(Logger):
                     f"Use one of: {', '.join(elec_corr_map.keys())}."
                 )
             estatic_corr_id = elec_corr_map[estatic_corr]
-            self.logger.info(f"Electrostatic correction: {estatic_corr_id}")
-            self.validate_water_inputs(particles, df)
             capi.solver_initialize_particles_water(self.mdv.iswater, estatic_corr_id)
 
         if self.mdv.poisson_boltzmann:
