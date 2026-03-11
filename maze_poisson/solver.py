@@ -106,7 +106,6 @@ class SolverMD(Logger):
     def initialize(self):
         """Initialize the solver."""
         capi.solver_initialize()
-        capi.solver_set_output_path(self.outset.path.encode("utf-8"))
 
         self.initialize_str_maps()
 

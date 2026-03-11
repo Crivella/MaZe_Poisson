@@ -78,8 +78,6 @@ add_library(maze_poisson MODULE
     src/precond_blockjacobi.c
 
     src/solver_md.c
-
-    src/debug_log.c
 )
 
 if(MP_FAST_MATH)

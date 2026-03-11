@@ -9,13 +9,6 @@ capi.register_function(
     'solver_initialize', None, []
 )
 
-# void solver_set_output_path(const char *path) {
-capi.register_function(
-    'solver_set_output_path', None, [
-        ctypes.c_char_p,
-    ],
-)
-
 # void solverinitialize_grid(int n_grid, double L, double h, double tol, double eps, int grid_type, int precond_type) {
 capi.register_function(
     'solver_initialize_grid', None, [
