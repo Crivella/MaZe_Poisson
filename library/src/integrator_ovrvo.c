@@ -5,85 +5,34 @@
 #include "mp_structs.h"
 #include "constants.h"
 #include "mpi_base.h"
-#include "omp_base.h"
 
-/*
-TODO: Was this really a problem?
-As far as i can tell the only thing that would happen here with the original code is that, for the same seed,
-the order in which the RNG numbers are generated could change so results might have slight inconsistencies w.r.t.
-OpenMP.
-Worst case i'd rather remove all the new stuff and disable open_mp for the OVRVO (it is not rlly a huge gain anyway)
-*/
+// Generated independent random numbers from a uniform distribution using
+// Box-Muller transform.
+// https://literateprograms.org/box-muller_transform__c_.html
+double randn() {
+    double U1, U2, R, mult;
+    static double X2;
+    static int call = 0;
 
-// Thread-local RNG using xorshift64* with Box-Muller for normals.
-// Each thread owns its own RNG state to avoid OpenMP data races.
-static unsigned long long *rng_state = NULL;
-static double *rng_spare = NULL;
-static int *rng_has_spare = NULL;
-static int rng_nthreads = 0;
-
-static unsigned long long splitmix64_next(unsigned long long *x) {
-    unsigned long long z = (*x += 0x9E3779B97F4A7C15ULL);
-    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
-    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
-    return z ^ (z >> 31);
-}
-
-static unsigned long long xorshift64star(unsigned long long *x) {
-    unsigned long long v = *x;
-    v ^= v >> 12;
-    v ^= v << 25;
-    v ^= v >> 27;
-    *x = v;
-    return v * 0x2545F4914F6CDD1DULL;
-}
-
-static double rng_uniform01(int tid) {
-    // Convert to (0,1) double. Keep away from 0 to avoid log(0).
-    unsigned long long r = xorshift64star(&rng_state[tid]);
-    double u = (r >> 11) * (1.0 / 9007199254740992.0); // 53-bit mantissa
-    if (u <= 0.0) {
-        u = 1.0 / 9007199254740992.0;
+    if (call == 1) {
+        call = !call;
+        return X2;
     }
-    return u;
-}
 
-static void rng_ensure_init() {
-    int nthreads = get_omp_max_threads();
-    if (nthreads < 1) {
-        nthreads = 1;
+    do {
+        U1 = 2.0 * rand () / RAND_MAX - 1;
+        U2 = 2.0 * rand () / RAND_MAX - 1;
+        R = pow (U1, 2) + pow (U2, 2);
     }
-    if (rng_state != NULL && rng_nthreads == nthreads) {
-        return;
-    }
-    free(rng_state);
-    free(rng_spare);
-    free(rng_has_spare);
-    rng_state = (unsigned long long *)malloc((size_t)nthreads * sizeof(unsigned long long));
-    rng_spare = (double *)malloc((size_t)nthreads * sizeof(double));
-    rng_has_spare = (int *)calloc((size_t)nthreads, sizeof(int));
-    rng_nthreads = nthreads;
+    while (R >= 1 || R == 0);
 
-    unsigned long long seed = 0xA5A5A5A5A5A5A5A5ULL;
-    seed ^= (unsigned long long)rand();
-    seed ^= ((unsigned long long)rand()) << 32;
-    for (int i = 0; i < nthreads; i++) {
-        rng_state[i] = splitmix64_next(&seed);
-    }
-}
+    mult = sqrt(-2 * log (R) / R);
 
-static double randn_thread(int tid) {
-    if (rng_has_spare[tid]) {
-        rng_has_spare[tid] = 0;
-        return rng_spare[tid];
-    }
-    double u1 = rng_uniform01(tid);
-    double u2 = rng_uniform01(tid);
-    double r = sqrt(-2.0 * log(u1));
-    double theta = 2.0 * M_PI * u2;
-    rng_spare[tid] = r * sin(theta);
-    rng_has_spare[tid] = 1;
-    return r * cos(theta);
+    X2 = U2 * mult;
+
+    call = !call;
+
+    return U1 * mult;
 }
 
 void ovrvo_integrator_init(integrator *integrator) {
@@ -110,19 +59,16 @@ void o_block(integrator *integrator, particles *p) {
     double c1_sqrt = sqrt(c1);
 
     if (rank == 0) {
-        rng_ensure_init();
         // The original call to multivariate_normal had a diagonal covariance so we are fine
         // with using randn for each component to generate 3 independent random numbers with the respective
         // mean = 0.0 and variance = 1.0.
         var2 = (1 - c1) * kB * T;
-        #pragma omp parallel for private(ni, var1)
         for (int i = 0; i < n_p; i++) {
-            int tid = get_omp_thread_num();
             ni = i * 3;
             var1 = sqrt(var2 / masses[i]);
             for (int j = 0; j < 3; j++) {
                 vel[ni + j] *= c1_sqrt;
-                vel[ni + j] += var1 * randn_thread(tid);
+                vel[ni + j] += var1 * randn();
             }
         }
     }
