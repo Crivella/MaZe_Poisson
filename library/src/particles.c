@@ -739,6 +739,7 @@ double particles_compute_forces_electrostatic_correction_spread(particles *p, gr
     return p->energy_corr;
 }
 
+// TODO: remove and leave only the non-self
 double particles_compute_forces_electrostatic_correction_spread_self(particles *p, grid *g) {
     // Start from intramolecular spread correction (O-H1, O-H2, H1-H2).
     particles_compute_forces_electrostatic_correction_spread(p, g);

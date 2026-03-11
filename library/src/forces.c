@@ -518,3 +518,126 @@ double compute_sc_forces(int n_p, double L, double *pos, double *params, double 
     }
     return potential_energy;
 }
+
+double compute_lj_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces) {
+    double r2 = vx * vx + vy * vy + vz * vz;
+    double r = sqrt(r2);
+    if (r > r_cut || r < 1e-15) {
+        return 0.0;
+    }
+    long int ia3 = ia * 3;
+    long int ib3 = ib * 3;
+    long int idx = ia * np + ib;
+    double sigma = params[idx];
+    double epsilon = params[idx + np * np];
+    double alpha = params[idx + 2 * np * np];
+    double beta = params[idx + 3 * np * np];
+
+    double inv_r = 1.0 / r;
+    double sr = sigma * inv_r;
+    double sr2 = sr * sr;
+    double sr6 = sr2 * sr2 * sr2;
+    double sr12 = sr6 * sr6;
+
+    double f_mag = 4 * epsilon * (12 * sr12 - 6 * sr6) * inv_r - alpha;
+    double V_mag = 4 * epsilon * (sr12 - sr6) + alpha * r + beta;
+
+    double fx = -f_mag * vx * inv_r;
+    double fy = -f_mag * vy * inv_r;
+    double fz = -f_mag * vz * inv_r;
+
+    forces[ia3    ] += fx;
+    forces[ia3 + 1] += fy;
+    forces[ia3 + 2] += fz;
+
+    forces[ib3    ] -= fx;
+    forces[ib3 + 1] -= fy;
+    forces[ib3 + 2] -= fz;
+
+    return V_mag;
+}
+
+double compute_tf_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces) {
+    double r2 = vx * vx + vy * vy + vz * vz;
+    double r = sqrt(r2);
+    if (r > r_cut || r < 1e-15) {
+        return 0.0;
+    }
+    long int ia3 = ia * 3;
+    long int ib3 = ib * 3;
+    long int idx = ia * np + ib;
+    double *A = params;
+    double *B = A + np * np;
+    double *C = B + np * np;
+    double *D = C + np * np;
+    double *sigma = D + np * np;
+    double *alpha = sigma + np * np;
+    double *beta = alpha + np * np;
+
+    double a = A[idx];
+    double b = B[idx];
+    double c = C[idx];
+    double d = D[idx];
+    double sig = sigma[idx];
+    double al = alpha[idx];
+    double be = beta[idx];
+
+    double exp_term = exp(b * (sig - r));
+    double r6 = r2 * r2 * r2;
+    double r7 = r6 * r;
+    double r8 = r7 * r;
+    double r9 = r8 * r;
+
+    double f_mag = b * a * exp_term - 6.0 * c / r7 - 8.0 * d / r9 - al;
+    double V_mag = a * exp_term - c / r6 - d / r8 + al * r + be;
+
+    double inv_r = 1.0 / r;
+    double fx = -f_mag * vx * inv_r;
+    double fy = -f_mag * vy * inv_r;
+    double fz = -f_mag * vz * inv_r;
+
+    forces[ia3    ] += fx;
+    forces[ia3 + 1] += fy;
+    forces[ia3 + 2] += fz;
+
+    forces[ib3    ] -= fx;
+    forces[ib3 + 1] -= fy;
+    forces[ib3 + 2] -= fz;
+
+    return V_mag;
+}
+
+double compute_sc_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces) {
+    double r2 = vx * vx + vy * vy + vz * vz;
+    double r = sqrt(r2);
+    if (r > r_cut || r < 1e-15) {
+        return 0.0;
+    }
+    long int ia3 = ia * 3;
+    long int ib3 = ib * 3;
+
+    double nu    = params[0];
+    double d     = params[1];
+    double B_nu  = params[2];
+    double alpha = params[3];
+    double beta  = params[4];
+
+    double d_over_r_pow = pow(d / r, nu);
+    double V_mag = B_nu * d_over_r_pow + alpha * r + beta;
+    double f_mag = B_nu * nu * d_over_r_pow / r - alpha;
+
+    double inv_r = 1.0 / r;
+    double fx = -f_mag * vx * inv_r;
+    double fy = -f_mag * vy * inv_r;
+    double fz = -f_mag * vz * inv_r;
+
+    forces[ia3    ] += fx;
+    forces[ia3 + 1] += fy;
+    forces[ia3 + 2] += fz;
+
+    forces[ib3    ] -= fx;
+    forces[ib3 + 1] -= fy;
+    forces[ib3 + 2] -= fz;
+
+    return V_mag;
+}
