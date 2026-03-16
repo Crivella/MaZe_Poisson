@@ -7,12 +7,9 @@
 #include "linalg.h"
 #include "omp_base.h"
 
-// Pairwise nonbonded contribution for intramolecular exclusions (applies opposite sign)
-double compute_lj_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces);
-double compute_tf_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces);
-double compute_sc_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces);
-
-static inline void pbc_displacement(const double *pos, long int ia, long int ib, double L, double *dx, double *dy, double *dz, double *dr2) {
+static inline void pbc_displacement(
+    const double *pos, long int ia, long int ib, double L, double *dx, double *dy, double *dz, double *dr2
+) {
     double x = pos[ib * 3]     - pos[ia * 3];
     double y = pos[ib * 3 + 1] - pos[ia * 3 + 1];
     double z = pos[ib * 3 + 2] - pos[ia * 3 + 2];
@@ -25,28 +22,18 @@ static inline void pbc_displacement(const double *pos, long int ia, long int ib,
     *dr2 = x * x + y * y + z * z;
 }
 
-double compute_forces_harmonic_bond(long int n_p, const double *pos, double *forces, double L, double k, double r0_val, int rank, int size) {
+double compute_forces_harmonic_bond(long int n_p, const double *pos, double *forces, double L, double k, double r0_val) {
     double energy = 0.0;
     const double eps = 1e-15;
 
-    int nthreads = get_omp_max_threads();
-    if (nthreads < 1) {
-        nthreads = 1;
-    }
     long int n3 = n_p * 3;
-    // Thread-local accumulation to avoid OpenMP races; reduce into `forces` at the end.
-    double **forces_thr = (double **)malloc((size_t)nthreads * sizeof(double *));
-    for (int t = 0; t < nthreads; t++) {
-        forces_thr[t] = (double *)calloc((size_t)n3, sizeof(double));
-    }
+    long int n_triplets = n_p / 3; // Assuming water-like molecules with 3 sites per molecule (O, H1, H2).
+    double *fcs = forces;
+
+    memset(fcs, 0, n3 * sizeof(double));
 
     #pragma omp parallel for reduction(+:energy)
-    for (long int m = 0; m < n_p / 3; m++) {
-        int tid = get_omp_thread_num();
-        double *fcs = forces_thr[tid];
-        if (size > 1 && (m % size) != rank) {
-            continue;
-        }
+    for (long int m = 0; m < n_triplets; m++) {
         long int iO = m * 3;
         long int iH1 = iO + 1;
         long int iH2 = iO + 2;
@@ -64,9 +51,9 @@ double compute_forces_harmonic_bond(long int n_p, const double *pos, double *for
         fcs[iH1 * 3    ] += dx * fab;
         fcs[iH1 * 3 + 1] += dy * fab;
         fcs[iH1 * 3 + 2] += dz * fab;
-        fcs[iO * 3    ] -= dx * fab;
-        fcs[iO * 3 + 1] -= dy * fab;
-        fcs[iO * 3 + 2] -= dz * fab;
+        fcs[iO  * 3    ] -= dx * fab;
+        fcs[iO  * 3 + 1] -= dy * fab;
+        fcs[iO  * 3 + 2] -= dz * fab;
         energy += 0.5 * k * (dr - r0_val) * (dr - r0_val);
 
         // O - H2
@@ -80,43 +67,27 @@ double compute_forces_harmonic_bond(long int n_p, const double *pos, double *for
         fcs[iH2 * 3    ] += dx * fab;
         fcs[iH2 * 3 + 1] += dy * fab;
         fcs[iH2 * 3 + 2] += dz * fab;
-        fcs[iO * 3    ] -= dx * fab;
-        fcs[iO * 3 + 1] -= dy * fab;
-        fcs[iO * 3 + 2] -= dz * fab;
+        fcs[iO  * 3    ] -= dx * fab;
+        fcs[iO  * 3 + 1] -= dy * fab;
+        fcs[iO  * 3 + 2] -= dz * fab;
         energy += 0.5 * k * (dr - r0_val) * (dr - r0_val);
     }
-
-    for (int t = 0; t < nthreads; t++) {
-        daxpy(forces_thr[t], forces, 1.0, n3);
-        free(forces_thr[t]);
-    }
-    free(forces_thr);
 
     return energy;
 }
 
-double compute_forces_harmonic_angle(long int n_p, const double *pos, double *forces, double L, double k, double theta0_val, int rank, int size) {
+double compute_forces_harmonic_angle(long int n_p, const double *pos, double *forces, double L, double k, double theta0_val) {
     double energy = 0.0;
     const double eps = 1e-15;
 
-    int nthreads = get_omp_max_threads();
-    if (nthreads < 1) {
-        nthreads = 1;
-    }
     long int n3 = n_p * 3;
-    // Thread-local accumulation to avoid OpenMP races; reduce into `forces` at the end.
-    double **forces_thr = (double **)malloc((size_t)nthreads * sizeof(double *));
-    for (int t = 0; t < nthreads; t++) {
-        forces_thr[t] = (double *)calloc((size_t)n3, sizeof(double));
-    }
+    long int n_triplets = n_p / 3; // Assuming water-like molecules with 3 sites per molecule (O, H1, H2).
+    double *fcs = forces;
+
+    memset(fcs, 0, n3 * sizeof(double));
 
     #pragma omp parallel for reduction(+:energy)
-    for (long int m = 0; m < n_p / 3; m++) {
-        int tid = get_omp_thread_num();
-        double *fcs = forces_thr[tid];
-        if (size > 1 && (m % size) != rank) {
-            continue;
-        }
+    for (long int m = 0; m < n_triplets; m++) {
         long int iO = m * 3;
         long int iH1 = iO + 1;
         long int iH2 = iO + 2;
@@ -164,17 +135,17 @@ double compute_forces_harmonic_angle(long int n_p, const double *pos, double *fo
         fcs[iH1 * 3    ] += dxab * fab;
         fcs[iH1 * 3 + 1] += dyab * fab;
         fcs[iH1 * 3 + 2] += dzab * fab;
-        fcs[iO * 3    ] -= dxab * fab;
-        fcs[iO * 3 + 1] -= dyab * fab;
-        fcs[iO * 3 + 2] -= dzab * fab;
+        fcs[iO  * 3    ] -= dxab * fab;
+        fcs[iO  * 3 + 1] -= dyab * fab;
+        fcs[iO  * 3 + 2] -= dzab * fab;
 
         // ac contribution (O-H2)
         fcs[iH2 * 3    ] += dxac * fac;
         fcs[iH2 * 3 + 1] += dyac * fac;
         fcs[iH2 * 3 + 2] += dzac * fac;
-        fcs[iO * 3    ] -= dxac * fac;
-        fcs[iO * 3 + 1] -= dyac * fac;
-        fcs[iO * 3 + 2] -= dzac * fac;
+        fcs[iO  * 3    ] -= dxac * fac;
+        fcs[iO  * 3 + 1] -= dyac * fac;
+        fcs[iO  * 3 + 2] -= dzac * fac;
 
         // bc contribution (H1-H2)
         fcs[iH2 * 3    ] += dxbc * fbc;
@@ -186,12 +157,6 @@ double compute_forces_harmonic_angle(long int n_p, const double *pos, double *fo
 
         energy += 0.5 * k * (theta - theta0_val) * (theta - theta0_val);
     }
-
-    for (int t = 0; t < nthreads; t++) {
-        daxpy(forces_thr[t], forces, 1.0, n3);
-        free(forces_thr[t]);
-    }
-    free(forces_thr);
 
     return energy;
 }
@@ -386,6 +351,174 @@ double compute_tf_forces(int n_p, double L, double *pos, double *params, double 
     return potential_energy / 2;
 }
 
+/*
+Compute the particle-particle forces using the tabulated Lennard-Jones potential
+
+@param n_p: the number of particles
+@param L: the size of the box
+@param pos: the positions of the particles (n_p, 3)
+@param params: the parameters of the potential [sigma, epsilon] (4, n_p, n_p)
+@param r_cut: the cutoff radius
+@param forces: the output forces on each particle (n_p, 3)
+*/
+double compute_lj_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces) {
+    int ip, jp;
+    int n_p2 = 2 * n_p;
+    long int n_p_pow2 = n_p * n_p;
+    long int idx1, idx2;
+
+    double *sigma_lj = params;
+    double *epsilon_lj = sigma_lj + n_p_pow2;
+    double *alpha = epsilon_lj + n_p_pow2;
+    double *beta = alpha + n_p_pow2;
+
+    double app;
+    double r_diff[3];
+    double r_mag, f_mag, V_mag;
+    double potential_energy = 0.0;
+    double epsilon, sigma, al, be;
+
+    #pragma omp parallel for private(app, ip, jp, r_diff, r_mag, f_mag, V_mag, epsilon, sigma, al, be, idx1, idx2) reduction(+:potential_energy)
+    for (int i = 0; i < n_p; i++) {
+        r_mag = 0.0;
+        ip = i * 3;
+        idx1 = i * n_p;
+        forces[ip] = 0.0;
+        forces[ip + 1] = 0.0;
+        forces[ip + 2] = 0.0;
+        for (int j = 0; j < n_p; j++) {
+            if (i == j) {
+                continue;
+            }
+            jp = 3 * j;
+            app = pos[ip] - pos[jp];
+            app -= L * round(app / L);
+            r_mag = app * app;
+            r_diff[0] = app;
+            app = pos[ip + 1] - pos[jp + 1];
+            app -= L * round(app / L);
+            r_diff[1] = app;
+            r_mag += app * app;
+            app = pos[ip + 2] - pos[jp + 2];
+            app -= L * round(app / L);
+            r_diff[2] = app;
+            r_mag += app * app;
+            r_mag = sqrt(r_mag);
+            if (!isfinite(r_mag) || r_mag <= 1e-12) {
+                // TODO: The first one is redundnat with the next check
+                //  The second one should never happen?
+                continue;
+            }
+            if (r_mag > r_cut) {
+                continue;
+            }
+            r_diff[0] /= r_mag;
+            r_diff[1] /= r_mag;
+            r_diff[2] /= r_mag;
+                
+            idx2 = idx1 + j;
+            sigma = sigma_lj[idx2];
+            epsilon = epsilon_lj[idx2];
+            al = alpha[idx2];
+            be = beta[idx2];
+            if (!isfinite(sigma) || !isfinite(epsilon) || !isfinite(al) || !isfinite(be)) {
+                mpi_fprintf(
+                    stderr,
+                    "Error: LJ params non-finite (i=%d j=%d sigma=%e epsilon=%e alpha=%e beta=%e)\n",
+                    i, j, sigma, epsilon, al, be
+                );
+                exit(1);
+            }
+
+            //write f_mag and V_mag for lennard-jones potential
+            f_mag = 4 * epsilon * (12 * pow(sigma / r_mag, 12) - 6 * pow(sigma / r_mag, 6)) / r_mag - al;
+            V_mag = 4 * epsilon * (pow(sigma / r_mag, 12) - pow(sigma / r_mag, 6)) + al * r_mag + be;
+
+            forces[ip] += f_mag * r_diff[0];
+            forces[ip + 1] += f_mag * r_diff[1];
+            forces[ip + 2] += f_mag * r_diff[2];
+
+            potential_energy += V_mag;
+        }
+    }
+
+    return potential_energy / 2;
+}
+
+
+/*
+Compute the particle-particle forces using the SC repulsive potential
+
+@param n_p: the number of particles
+@param L: the size of the box
+@param pos: the positions of the particles (n_p, 3)
+@param params: the parameters of the potential [nu, d, B] (3)
+@param r_cut: the cutoff radius
+@param forces: the output forces on each particle (n_p, 3)
+*/
+double compute_sc_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces) {
+    int i, j, k, ip, jp;
+    double nu, d, B_nu, alpha, beta;
+    double potential_energy = 0.0;
+
+    int size = n_p * 3;
+
+    double app;
+    double r_diff[3];
+    double r_mag, f_mag, V_mag;
+    double d_over_r_pow;
+    double f_k;
+
+    nu    = params[0];
+    d     = params[1];
+    B_nu  = params[2];
+    alpha = params[3];
+    beta  = params[4];
+
+    memset(forces, 0, size * sizeof(double));
+
+    #pragma \
+        omp parallel private(i, j, k, ip, jp, r_diff, r_mag, f_mag, f_k, V_mag, d_over_r_pow) \
+        reduction(+:potential_energy, forces[:size])
+    for (i = 0; i < n_p; i++) {
+        ip = 3 * i;
+        for (j = i + 1; j < n_p; j++) {
+            jp = 3 * j;
+
+            r_mag = 0.0;
+            for (k = 0; k < 3; k++) {
+                app = pos[ip + k] - pos[jp + k];
+                app -= L * round(app / L);
+                r_mag += app * app;
+                r_diff[k] = app;
+            }
+
+            r_mag = sqrt(r_mag);
+            if (!isfinite(r_mag) || r_mag <= 1e-12) {
+                // TODO: The first one is redundnat with the next check
+                //  The second one should never happen?
+                continue;
+            }
+            if (r_mag > r_cut) {
+                continue;
+            }
+
+            d_over_r_pow = pow(d / r_mag, nu);
+            V_mag = B_nu * d_over_r_pow + alpha * r_mag + beta;
+            f_mag = B_nu * nu * d_over_r_pow / r_mag - alpha;
+
+            for (k = 0; k < 3; k++) {
+                f_k = f_mag * r_diff[k] / r_mag;
+                forces[ip + k] += f_k;
+                forces[jp + k] -= f_k;
+            }
+
+            potential_energy += V_mag;
+        }
+    }
+    return potential_energy;
+}
+
 double compute_lj_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces) {
     double r2 = vx * vx + vy * vy + vz * vz;
     double r = sqrt(r2);
@@ -507,168 +640,4 @@ double compute_sc_pair_force_excl(long int ia, long int ib, double vx, double vy
     forces[ib3 + 2] -= fz;
 
     return V_mag;
-}
-
-/*
-Compute the particle-particle forces using the tabulated Lennard-Jones potential
-
-@param n_p: the number of particles
-@param L: the size of the box
-@param pos: the positions of the particles (n_p, 3)
-@param params: the parameters of the potential [sigma, epsilon] (4, n_p, n_p)
-@param r_cut: the cutoff radius
-@param forces: the output forces on each particle (n_p, 3)
-*/
-double compute_lj_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces) {
-    int ip, jp;
-    int n_p2 = 2 * n_p;
-    long int n_p_pow2 = n_p * n_p;
-    long int idx1, idx2;
-
-    double *sigma_lj = params;
-    double *epsilon_lj = sigma_lj + n_p_pow2;
-    double *alpha = epsilon_lj + n_p_pow2;
-    double *beta = alpha + n_p_pow2;
-
-    double app;
-    double r_diff[3];
-    double r_mag, f_mag, V_mag;
-    double potential_energy = 0.0;
-    double epsilon, sigma, al, be;
-
-    #pragma omp parallel for private(app, ip, jp, r_diff, r_mag, f_mag, V_mag, epsilon, sigma, al, be, idx1, idx2) reduction(+:potential_energy)
-    for (int i = 0; i < n_p; i++) {
-        r_mag = 0.0;
-        ip = i * 3;
-        idx1 = i * n_p;
-        forces[ip] = 0.0;
-        forces[ip + 1] = 0.0;
-        forces[ip + 2] = 0.0;
-        for (int j = 0; j < n_p; j++) {
-            if (i == j) {
-                continue;
-            }
-            jp = 3 * j;
-            app = pos[ip] - pos[jp];
-            app -= L * round(app / L);
-            r_mag = app * app;
-            r_diff[0] = app;
-            app = pos[ip + 1] - pos[jp + 1];
-            app -= L * round(app / L);
-            r_diff[1] = app;
-            r_mag += app * app;
-            app = pos[ip + 2] - pos[jp + 2];
-            app -= L * round(app / L);
-            r_diff[2] = app;
-            r_mag += app * app;
-            r_mag = sqrt(r_mag);
-            if (!isfinite(r_mag) || r_mag <= 1e-12) {
-                continue;
-            }
-            if (r_mag > r_cut) {
-                continue;
-            }
-            r_diff[0] /= r_mag;
-            r_diff[1] /= r_mag;
-            r_diff[2] /= r_mag;
-                
-            idx2 = idx1 + j;
-            sigma = sigma_lj[idx2];
-            epsilon = epsilon_lj[idx2];
-            al = alpha[idx2];
-            be = beta[idx2];
-            if (!isfinite(sigma) || !isfinite(epsilon) || !isfinite(al) || !isfinite(be)) {
-                mpi_fprintf(
-                    stderr,
-                    "Error: LJ params non-finite (i=%d j=%d sigma=%e epsilon=%e alpha=%e beta=%e)\n",
-                    i, j, sigma, epsilon, al, be
-                );
-                exit(1);
-            }
-
-            //write f_mag and V_mag for lennard-jones potential
-            f_mag = 4 * epsilon * (12 * pow(sigma / r_mag, 12) - 6 * pow(sigma / r_mag, 6)) / r_mag - al;
-            V_mag = 4 * epsilon * (pow(sigma / r_mag, 12) - pow(sigma / r_mag, 6)) + al * r_mag + be;
-
-            forces[ip] += f_mag * r_diff[0];
-            forces[ip + 1] += f_mag * r_diff[1];
-            forces[ip + 2] += f_mag * r_diff[2];
-
-            potential_energy += V_mag;
-        }
-    }
-
-    return potential_energy / 2;
-}
-
-
-/*
-Compute the particle-particle forces using the SC repulsive potential
-
-@param n_p: the number of particles
-@param L: the size of the box
-@param pos: the positions of the particles (n_p, 3)
-@param params: the parameters of the potential [nu, d, B] (3)
-@param r_cut: the cutoff radius
-@param forces: the output forces on each particle (n_p, 3)
-*/
-double compute_sc_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces) {
-    int i, j, k, ip, jp;
-    double nu, d, B_nu, alpha, beta;
-    double potential_energy = 0.0;
-
-    int size = n_p * 3;
-
-    double app;
-    double r_diff[3];
-    double r_mag, f_mag, V_mag;
-    double d_over_r_pow;
-    double f_k;
-
-    nu    = params[0];
-    d     = params[1];
-    B_nu  = params[2];
-    alpha = params[3];
-    beta  = params[4];
-
-    memset(forces, 0, size * sizeof(double));
-
-    #pragma \
-        omp parallel private(i, j, k, ip, jp, r_diff, r_mag, f_mag, f_k, V_mag, d_over_r_pow) \
-        reduction(+:potential_energy, forces[:size])
-    for (i = 0; i < n_p; i++) {
-        ip = 3 * i;
-        for (j = i + 1; j < n_p; j++) {
-            jp = 3 * j;
-
-            r_mag = 0.0;
-            for (k = 0; k < 3; k++) {
-                app = pos[ip + k] - pos[jp + k];
-                app -= L * round(app / L);
-                r_mag += app * app;
-                r_diff[k] = app;
-            }
-
-            r_mag = sqrt(r_mag);
-            if (!isfinite(r_mag) || r_mag <= 1e-12) {
-                continue;
-            }
-            if (r_mag > r_cut) {
-                continue;
-            }
-
-            d_over_r_pow = pow(d / r_mag, nu);
-            V_mag = B_nu * d_over_r_pow + alpha * r_mag + beta;
-            f_mag = B_nu * nu * d_over_r_pow / r_mag - alpha;
-
-            for (k = 0; k < 3; k++) {
-                f_k = f_mag * r_diff[k] / r_mag;
-                forces[ip + k] += f_k;
-                forces[jp + k] -= f_k;
-            }
-
-            potential_energy += V_mag;
-        }
-    }
-    return potential_energy;
 }

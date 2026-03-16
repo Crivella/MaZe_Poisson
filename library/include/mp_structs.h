@@ -1,8 +1,6 @@
 #ifndef __MP_STRUCTS_H
 #define __MP_STRUCTS_H
 
-#include <stdio.h>
-
 #define GRID_TYPE_NUM 5
 #define GRID_TYPE_LCG 0
 #define GRID_TYPE_FFT 1
@@ -33,6 +31,10 @@
 #define PRECOND_TYPE_MG 2
 #define PRECOND_TYPE_SSOR 3
 #define PRECOND_TYPE_BLOCKJACOBI 4
+
+#define WATER_ELECTROSTATIC_CORR_TYPE_NUM 2
+#define WATER_ELECTROSTATIC_CORR_TYPE_SPREAD 0
+#define WATER_ELECTROSTATIC_CORR_TYPE_SR 1
 
 // Struct typedefs
 typedef struct grid grid;
@@ -86,6 +88,9 @@ double fft_grid_update_charges(grid *grid, particles *p);
 void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
 void particles_pb_free(particles *p);
 
+void particles_water_init(particles *p, int is_water, int corr_type);
+void particles_water_free(particles *p);
+
 void particles_init_potential(particles *p, int pot_type, double *pot_params);
 void particles_init_potential_tf(particles *p, double *pot_params);
 void particles_init_potential_lj(particles *p, double *pot_params);
@@ -110,11 +115,6 @@ void particles_rescale_velocities(particles *p);
 void particles_rescale_momenta(particles *p);
 void particles_zero_linear(particles *p);
 
-void solver_set_output_path(const char *path);
-FILE *solver_open_not_converged_log(void);
-const char *solver_get_output_path(void);
-long int solver_get_field_step(void);
-
 void ovrvo_integrator_init(integrator *integrator);
 void ovrvo_integrator_part1(integrator *integrator, particles *p);
 void ovrvo_integrator_part2(integrator *integrator, particles *p);
@@ -135,6 +135,8 @@ void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_st
 
 void precond_blockjacobi_init();
 void precond_blockjacobi_cleanup();
+
+char *get_water_electrostatic_type_str(int n);
 
 #define H_ARR_SIZE 4
 
@@ -191,21 +193,23 @@ struct particles {
 
     int pot_type;  // Type of the potential
     int cas_type;  // Type of the charge assignment scheme
-    int is_water;  // Flag to toggle water/SPC setup
 
     int *types;  // Particle types (n_p)
     double *pos;  // Particle positions (n_p x 3)
     double *vel;  // Particle velocities (n_p x 3)
     double *fcs_elec;  // Particle electric forces (n_p x 3)
     double *fcs_noel;  // Particle non-electric forces (n_p x 3)
-    double *fcs_intra; // Intramolecular forces total (n_p x 3)
-    double *fcs_corr; // Electrostatic correction forces (n_p x 3)
     double *fcs_tot;  // Particle total forces (n_p x 3)
-    double energy_intra; // Intramolecular energy total
-    double energy_corr; // Intramolecular exclusion correction energy
     double *mass;  // Particle masses (n_p)
     double *charges;  // Particle charges (n_p)
     long int *neighbors;  // Particle neighbors (n_p x 8 x 3)
+
+    int is_water;  // Flag to toggle water/SPC setup
+    int corr_type; // Type of electrostatic correction for water
+    double *fcs_intra; // Intramolecular forces total (n_p x 3)
+    double *fcs_corr; // Electrostatic correction forces (n_p x 3)
+    double energy_intra; // Intramolecular energy total
+    double energy_corr; // Intramolecular exclusion correction energy
 
     double r_cut;
     double sigma;

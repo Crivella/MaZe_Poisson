@@ -9,13 +9,6 @@ capi.register_function(
     'solver_initialize', None, []
 )
 
-# void solver_set_output_path(const char *path) {
-capi.register_function(
-    'solver_set_output_path', None, [
-        ctypes.c_char_p,
-    ],
-)
-
 # void solverinitialize_grid(int n_grid, double L, double h, double tol, double eps, int grid_type, int precond_type) {
 capi.register_function(
     'solver_initialize_grid', None, [
@@ -53,7 +46,6 @@ capi.register_function(
         ctypes.c_int,
         ctypes.c_int,
         ctypes.c_int,
-        ctypes.c_int,
         npct.ndpointer(dtype=np.int32, ndim=1, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
@@ -63,19 +55,20 @@ capi.register_function(
     ],
 )
 
-# void solver_set_electrostatic_correction(int corr_type) {
-capi.register_function(
-    'solver_set_electrostatic_correction', None, [
-        ctypes.c_int,
-    ],
-)
-
 # void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
 capi.register_function(
     'solver_initialize_particles_pois_boltz', None, [
         ctypes.c_double,
         ctypes.c_double,
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void solver_initialize_particles_water(int is_water, int corr_type);
+capi.register_function(
+    'solver_initialize_particles_water', None, [
+        ctypes.c_int,
+        ctypes.c_int,
     ],
 )
 
