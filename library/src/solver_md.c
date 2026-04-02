@@ -61,7 +61,7 @@ void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enab
 void solver_initialize_particles(
     int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
     int *types, double *pos, double *vel, double *mass, double *charges,
-    double *pot_params
+    double *pot_params, double r_cut
 ) {
     g_particles = particles_init(n, n_p, n_typ, L, h, cas_type);
 
@@ -70,6 +70,7 @@ void solver_initialize_particles(
     memcpy(g_particles->vel, vel, n_p * 3 * sizeof(double));
     memcpy(g_particles->mass, mass, n_p * sizeof(double));
     memcpy(g_particles->charges, charges, n_p * sizeof(double));
+    g_particles->r_cut = r_cut;
 
     g_particles->init_potential(g_particles, pot_type, pot_params);
 }

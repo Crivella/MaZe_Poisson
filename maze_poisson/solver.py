@@ -392,10 +392,26 @@ class SolverMD(Logger):
 
         if potential == 'TF':
             pot_params = self.get_tosi_fumi_params(particles)
+            r_cut = self.mdv.r_cut_tf
         elif potential == 'LJ':
             pot_params = self.get_lennard_jones_params(particles)
+            r_cut = self.mdv.r_cut_lj
         elif potential == 'SC':
             pot_params = self.get_sc_params()
+            r_cut = self.mdv.r_cut_sc
+
+        if r_cut is None:
+            r_cut = -1.0
+        else:
+            if r_cut <= 0.0:
+                raise ValueError("Optional non-electrostatic cutoff must be positive.")
+            max_cut = self.L / 2.0
+            if r_cut > max_cut:
+                raise ValueError(
+                    f"Requested cutoff {r_cut:.6f} a.u. exceeds the maximum allowed by minimum-image PBC, "
+                    f"L/2 = {max_cut:.6f} a.u."
+                )
+            self.logger.info(f"Using custom {potential} cutoff: {r_cut:.6f} a.u.")
 
         # print(f"Using potential parameters: {pot_params}")
 
@@ -403,7 +419,7 @@ class SolverMD(Logger):
             self.N, self.N_typs, self.L, self.h, self.N_p,
             pot_id, ca_scheme_id,
             types, pos, vel, mass, charges,
-            pot_params
+            pot_params, r_cut
         )
 
         if self.mdv.iswater:

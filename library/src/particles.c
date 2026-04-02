@@ -245,7 +245,7 @@ void particles_init_potential_tf(particles *p, double *pot_params) {
 
     p->tf_params = (double *)malloc(7 * np2 * sizeof(double));
 
-    double r_cut = p->L / 2.0;
+    double r_cut = (p->r_cut > 0.0) ? p->r_cut : p->L / 2.0;
     p->r_cut = r_cut;
     double r_cut_6 = pow(r_cut, 6);
     double r_cut_7 = r_cut_6 * r_cut;
@@ -294,7 +294,7 @@ void particles_init_potential_lj(particles *p, double *pot_params) {
 
     p->lj_params = (double *)malloc(4 * np2 * sizeof(double));
 
-    double r_cut = p->L / 2.0;
+    double r_cut = (p->r_cut > 0.0) ? p->r_cut : p->L / 2.0;
     p->r_cut = r_cut;
     
     long int in, inj, idx;
@@ -336,7 +336,7 @@ void particles_init_potential_sc(particles *p, double *pot_params) {
     d = pot_params[1];
     B_nu = pot_params[2];
 
-    p->r_cut = 0.5 * p->L;
+    p->r_cut = (p->r_cut > 0.0) ? p->r_cut : 0.5 * p->L;
     r_cut = p->r_cut;
 
     d_over_r_cut = d / r_cut;
@@ -651,7 +651,7 @@ double particles_compute_forces_electrostatic_correction_spread(particles *p, gr
 
     // Intramolecular correction from spread charges:
     // loop over unique atom pairs in each molecule (O-H1, O-H2, H1-H2).
-    #pragma omp parallel for reduction(+:energy_corr)
+    #pragma omp parallel for reduction(+:energy_corr, fcs[:size])
     for (long int m = 0; m < n_triplets; m++) {
         long int idx = m * 3;
 
@@ -745,6 +745,7 @@ double particles_compute_forces_electrostatic_correction_spread_self(particles *
     particles_compute_forces_electrostatic_correction_spread(p, g);
 
     long int n_p = p->n_p;
+    long int n3 = n_p * 3;
     double *pos = p->pos;
     double *charges = p->charges;
     double *fcs = p->fcs_corr;
@@ -755,7 +756,7 @@ double particles_compute_forces_electrostatic_correction_spread_self(particles *
     int num_neighbors = p->num_neighbors;
 
     // Add same-atom chargelet-chargelet contributions (j1 != j2).
-    #pragma omp parallel for reduction(+:energy_corr)
+    #pragma omp parallel for reduction(+:energy_corr, fcs[:n3])
     for (long int ia = 0; ia < n_p; ia++) {
         long int fa = ia * 3;
         long int na0 = ia * num_neighbors * 3;
@@ -837,7 +838,7 @@ double particles_compute_forces_electrostatic_correction_sr(particles *p, grid *
     // Utility for minimum image
     #define MIN_IMG(d) (d -= L * nearbyint(d / L))
 
-    #pragma omp parallel for reduction(+:energy_corr)
+    #pragma omp parallel for reduction(+:energy_corr, fcs[:n3])
     for (long int m = 0; m < n_p / 3; m++) {
         long int iO = m * 3;
         double qO = p->charges[iO];

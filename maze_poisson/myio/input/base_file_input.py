@@ -113,6 +113,9 @@ class MDVariables(BaseFileInput):
 
     potential: str = 'TF'  # Type of potential to use
     potential_params_file: str = None  # File containing potential parameters
+    r_cut_tf: float = None  # Optional TF cutoff in a.u.; defaults to L/2
+    r_cut_lj: float = None  # Optional LJ cutoff in a.u.; defaults to L/2
+    r_cut_sc: float = None  # Optional SC cutoff in a.u.; defaults to L/2
 
     integrator: str = 'OVRVO'  # Integrator method
     method: str = 'FFT'  # Method for solving the Poisson equation
