@@ -393,12 +393,19 @@ class SolverMD(Logger):
         if potential == 'TF':
             pot_params = self.get_tosi_fumi_params(particles)
             r_cut = self.mdv.r_cut_tf
+            lj_force_shift = 1
         elif potential == 'LJ':
             pot_params = self.get_lennard_jones_params(particles)
             r_cut = self.mdv.r_cut_lj
+            lj_force_shift = int(bool(self.mdv.lj_force_shift))
+            if lj_force_shift:
+                self.logger.info("Using force-shifted LJ potential.")
+            else:
+                self.logger.info("Using LAMMPS-like unshifted LJ potential with tail energy correction.")
         elif potential == 'SC':
             pot_params = self.get_sc_params()
             r_cut = self.mdv.r_cut_sc
+            lj_force_shift = 1
 
         if r_cut is None:
             r_cut = -1.0
@@ -419,7 +426,7 @@ class SolverMD(Logger):
             self.N, self.N_typs, self.L, self.h, self.N_p,
             pot_id, ca_scheme_id,
             types, pos, vel, mass, charges,
-            pot_params, r_cut
+            pot_params, r_cut, lj_force_shift
         )
 
         if self.mdv.iswater:

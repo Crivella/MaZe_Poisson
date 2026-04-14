@@ -361,7 +361,41 @@ Compute the particle-particle forces using the tabulated Lennard-Jones potential
 @param r_cut: the cutoff radius
 @param forces: the output forces on each particle (n_p, 3)
 */
-double compute_lj_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces) {
+static double compute_lj_tail_correction(int n_p, double L, double *params, double r_cut) {
+    long int n_p_pow2 = n_p * n_p;
+    double *sigma_lj = params;
+    double *epsilon_lj = sigma_lj + n_p_pow2;
+    double volume = L * L * L;
+    double tail = 0.0;
+
+    if (r_cut <= 0.0 || volume <= 0.0) {
+        return 0.0;
+    }
+
+    for (int i = 0; i < n_p; i++) {
+        long int idx1 = i * n_p;
+        for (int j = 0; j < n_p; j++) {
+            long int idx = idx1 + j;
+            double sigma = sigma_lj[idx];
+            double epsilon = epsilon_lj[idx];
+            if (epsilon == 0.0) {
+                continue;
+            }
+
+            double sigma2 = sigma * sigma;
+            double sigma3 = sigma2 * sigma;
+            double sigma6 = sigma3 * sigma3;
+            double sigma12 = sigma6 * sigma6;
+            double rc3 = r_cut * r_cut * r_cut;
+            double rc9 = rc3 * rc3 * rc3;
+            tail += epsilon * (sigma12 / (9.0 * rc9) - sigma6 / (3.0 * rc3));
+        }
+    }
+
+    return 8.0 * M_PI * tail / volume;
+}
+
+double compute_lj_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces, int lj_force_shift) {
     int ip, jp;
     int n_p2 = 2 * n_p;
     long int n_p_pow2 = n_p * n_p;
@@ -442,7 +476,11 @@ double compute_lj_forces(int n_p, double L, double *pos, double *params, double 
         }
     }
 
-    return potential_energy / 2;
+    potential_energy /= 2.0;
+    if (!lj_force_shift) {
+        potential_energy += compute_lj_tail_correction(n_p, L, params, r_cut);
+    }
+    return potential_energy;
 }
 
 

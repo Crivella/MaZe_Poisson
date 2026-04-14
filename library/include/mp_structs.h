@@ -214,6 +214,7 @@ struct particles {
     double r_cut;
     double sigma;
     double epsilon;
+    int lj_force_shift;
     double *tf_params;  // Parameters for the TF potential (7 x n_p x n_p)
     double *lj_params;  // Parameters for the LJ potential (4 x n_p x n_p)
     double *sc_params;  // Parameters for the SC potential (5)

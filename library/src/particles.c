@@ -105,6 +105,7 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
     p->energy_corr = 0.0; // Intramolecular exclusion correction energy
     p->compute_intramolecular_forces = NULL;
     p->compute_forces_electrostatic_correction = NULL;
+    p->lj_force_shift = 1;
 
     p->pb_enabled = 0;  // Poisson-Boltzmann not enabled by default
     p->fcs_db = NULL;
@@ -127,8 +128,8 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
     p->get_temperature = particles_get_temperature;
     p->get_kinetic_energy = particles_get_kinetic_energy;
     p->get_momentum = particles_get_momentum;
-    // p->rescale_velocities = particles_rescale_velocities;
-    p->rescale_velocities = particles_zero_linear;
+    p->rescale_velocities = particles_rescale_velocities;
+    // p->rescale_velocities = particles_zero_linear;
     p->rescale_momenta = particles_rescale_momenta;
     // p->rescale_momenta = particles_rescale_momenta_water;
 
@@ -311,9 +312,14 @@ void particles_init_potential_lj(particles *p, double *pot_params) {
             sigma = pot_params[idx + 0];
             epsilon = pot_params[idx + 1];
 
-            v_shift = 4 * epsilon * (pow(sigma / r_cut, 12) - pow(sigma / r_cut, 6));
-            alpha = 4 * (12 * epsilon * pow(sigma / r_cut, 12) - 6 * epsilon * pow(sigma / r_cut, 6)) / r_cut;
-            beta = - v_shift - alpha * r_cut;
+            if (p->lj_force_shift) {
+                v_shift = 4 * epsilon * (pow(sigma / r_cut, 12) - pow(sigma / r_cut, 6));
+                alpha = 4 * (12 * epsilon * pow(sigma / r_cut, 12) - 6 * epsilon * pow(sigma / r_cut, 6)) / r_cut;
+                beta = - v_shift - alpha * r_cut;
+            } else {
+                alpha = 0.0;
+                beta = 0.0;
+            }
 
             p->lj_params[0*np2 + inj] = sigma;
             p->lj_params[1*np2 + inj] = epsilon;
@@ -460,7 +466,7 @@ double particles_compute_forces_sc(particles *p) {
 }
 
 double particles_compute_forces_lj(particles *p) { 
-    return compute_lj_forces(p->n_p, p->L, p->pos, p->lj_params, p->r_cut, p->fcs_noel);
+    return compute_lj_forces(p->n_p, p->L, p->pos, p->lj_params, p->r_cut, p->fcs_noel, p->lj_force_shift);
 }
 
 /*
@@ -1483,22 +1489,61 @@ void particles_get_momentum(particles *p, double *out) {
     out[2] = pz;
 }
 
+// works only for 2 species with same population, below is a more general version that does not assume that
+// void particles_rescale_velocities(particles *p) {
+//     double *init_vel = (double *)calloc(p->n_typ * 3, sizeof(double));
+
+//     for (int i = 0; i < p->n_p; i++) {
+//         for (int j = 0; j < 3; j++) {
+//             init_vel[p->types[i] * 3 + j] += p->vel[i * 3 + j];
+//         }
+//     }
+
+//     for (int i = 0; i < p->n_p; i++) {
+//         for (int j = 0; j < 3; j++) {
+//             p->vel[i * 3 + j] -= 2 * init_vel[p->types[i] * 3 + j] / p->n_p;
+//         }
+//     }
+
+//     free(init_vel);
+// }
+
+// removes average velocity per species
 void particles_rescale_velocities(particles *p) {
     double *init_vel = (double *)calloc(p->n_typ * 3, sizeof(double));
+    int *type_counts = (int *)calloc(p->n_typ, sizeof(int));
 
-    for (int i = 0; i < p->n_p; i++) {
-        for (int j = 0; j < 3; j++) {
-            init_vel[p->types[i] * 3 + j] += p->vel[i * 3 + j];
-        }
+    if (init_vel == NULL || type_counts == NULL) {
+        mpi_fprintf(stderr, "Failed to allocate buffers for velocity rescaling\n");
+        free(init_vel);
+        free(type_counts);
+        exit(1);
     }
 
     for (int i = 0; i < p->n_p; i++) {
+        int type = p->types[i];
+        if (type < 0 || type >= p->n_typ) {
+            mpi_fprintf(stderr, "Invalid particle type %d for particle %d\n", type, i);
+            free(init_vel);
+            free(type_counts);
+            exit(1);
+        }
+
+        type_counts[type]++;
         for (int j = 0; j < 3; j++) {
-            p->vel[i * 3 + j] -= 2 * init_vel[p->types[i] * 3 + j] / p->n_p;
+            init_vel[type * 3 + j] += p->vel[i * 3 + j];
+        }
+    }
+    
+    for (int i = 0; i < p->n_p; i++) {
+        int type = p->types[i];
+        for (int j = 0; j < 3; j++) {
+            p->vel[i * 3 + j] -= init_vel[type * 3 + j] / type_counts[type];
         }
     }
 
     free(init_vel);
+    free(type_counts);
 }
 
 void particles_rescale_momenta(particles *p) {

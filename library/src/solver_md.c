@@ -61,7 +61,7 @@ void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enab
 void solver_initialize_particles(
     int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
     int *types, double *pos, double *vel, double *mass, double *charges,
-    double *pot_params, double r_cut
+    double *pot_params, double r_cut, int lj_force_shift
 ) {
     g_particles = particles_init(n, n_p, n_typ, L, h, cas_type);
 
@@ -71,6 +71,7 @@ void solver_initialize_particles(
     memcpy(g_particles->mass, mass, n_p * sizeof(double));
     memcpy(g_particles->charges, charges, n_p * sizeof(double));
     g_particles->r_cut = r_cut;
+    g_particles->lj_force_shift = lj_force_shift;
 
     g_particles->init_potential(g_particles, pot_type, pot_params);
 }
@@ -206,8 +207,8 @@ void integrator_part_2() {
 }
 
 void solver_rescale_velocities() {
-    // g_particles->rescale_velocities(g_particles);
-    g_particles->rescale_momenta(g_particles);
+    g_particles->rescale_velocities(g_particles);
+    // g_particles->rescale_momenta(g_particles);
 }
 
 // int solver_initialize_md(int preconditioning, int vel_rescale) {
