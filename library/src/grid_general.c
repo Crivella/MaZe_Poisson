@@ -5,6 +5,7 @@
 
 #include "mpi_base.h"
 #include "mp_structs.h"
+#include "sphere_intersect.h"
 
 char grid_type_str[GRID_TYPE_NUM][16] = {"LCG", "FFT", "MULTIGRID", "MAZE-LCG", "MAZE-MULTIGRID"}; 
 int get_grid_type_num() {
@@ -61,11 +62,15 @@ grid * grid_init(int n, double L, double h, double tol, double eps, double eps_i
     new->phi_p = NULL;
     new->phi_n = NULL;
     new->ig2 = NULL;
+    new->region = NULL;
 
 
     new->pb_enabled = 0;  // Poisson-Boltzmann not enabled by default
     new->nonpolar_enabled = 0; //nonpolar forces not enabled by default
     new->eps_field_dep_enabled = 0; //field-dependent dielectric not enabled by default
+    new->eps_map_type = EPS_MAP_TYPE_TRADITIONAL;
+    new->pb_force_type = PB_FORCE_TYPE_PB_ROUX;
+    new->stress_tensor_bc_type = STRESS_TENSOR_BC_TYPE_DBC;
     new->w = 0.0;  // Ionic boundary width
     new->kbar2 = 0.0;  // Screening factor
     new->kBT = 0.0;
@@ -88,12 +93,15 @@ grid * grid_init(int n, double L, double h, double tol, double eps, double eps_i
 }
 
 void grid_pb_init(
-    grid *grid, double w, double kbar2, int nonpolar_enabled, int eps_field_dep_enabled, double kBT, double eps_field_alpha
+    grid *grid, double w, double kbar2, int nonpolar_enabled, int eps_map_type, int pb_force_type, int stress_tensor_bc_type, double kBT, double eps_field_alpha
 ) {
     // Initialize the grid for Poisson-Boltzmann simulations
     grid->pb_enabled = 1;  // Enable Poisson-Boltzmann
     grid->nonpolar_enabled = nonpolar_enabled; //nonpolar forces ON/OFF
-    grid->eps_field_dep_enabled = eps_field_dep_enabled; //field-dependent dielectric not enabled by default
+    grid->eps_map_type = eps_map_type;
+    grid->eps_field_dep_enabled = (eps_map_type == EPS_MAP_TYPE_FIELD_DEPENDENT);
+    grid->pb_force_type = pb_force_type;
+    grid->stress_tensor_bc_type = stress_tensor_bc_type;
     grid->w = w;
     grid->kbar2 = kbar2;
     grid->kBT = kBT;
@@ -107,6 +115,7 @@ void grid_pb_init(
     grid->eps_y = mpi_grid_allocate(n_local, n);
     grid->eps_z = mpi_grid_allocate(n_local, n);
     grid->k2 = (double *)malloc(grid->size * sizeof(double));
+    grid->region = (unsigned int *)calloc(grid->size, sizeof(unsigned int));
 }
 
 void grid_pb_free(grid *grid) {
@@ -116,6 +125,7 @@ void grid_pb_free(grid *grid) {
         mpi_grid_free(grid->eps_z, grid->n);
 
         free(grid->k2);
+        free(grid->region);
     }
 }
 
@@ -401,6 +411,111 @@ double grid_update_eps_field_dependent(grid *g, particles *p, double kBT) {
     // mpi_printf("\nMaximum dielectric constant change after update: %e\n", max_diff);
     return max_diff;
 }
+
+double wha (double eps1, double eps2, double frac)
+{
+    return 1.0 / (frac / eps1 + (1.0 - frac) / eps2);
+}
+
+static double eps_mix_eval(double eps1, double eps2, double frac)
+{
+    return wha(eps1, eps2, frac);
+}
+
+void grid_update_eps_and_k2_sphere(grid *g, particles *p)
+{
+    const int n       = g->n;
+    const int n_start = g->n_start;
+    const double h    = g->h;
+    const long size   = g->size;
+    const double L    = g->L;
+
+    const double eps_s = g->eps_s;
+    const double eps_m = g->eps_int;
+    const double kbar2 = g->kbar2;
+
+    double       *eps_x  = g->eps_x;
+    double       *eps_y  = g->eps_y;
+    double       *eps_z  = g->eps_z;
+    double       *k2     = g->k2;
+    unsigned int *region = g->region;
+
+    /* ====================================================
+     * STEP 1 - classify inside/outside using VdW spheres
+     * ==================================================== */
+
+    long long region_inside  = 0;
+    long long region_outside = 0;
+
+    #pragma omp parallel for schedule(static) reduction(+:region_inside,region_outside)
+    for (long idx = 0; idx < size; idx++) {
+        int k = idx % n;
+        int j = (idx / n) % n;
+        int i = idx / (n * n);
+
+        double x = (i + n_start) * h;
+        double y = j * h;
+        double z = k * h;
+
+        int inside = is_in_molecule_sphere(p, x, y, z, L);
+
+        k2[idx]     = inside ? 0.0 : kbar2;
+        region[idx] = inside ? 1u  : 0u;
+
+        if (inside) region_inside++;
+        else        region_outside++;
+    }
+
+    printf("REGION_DEBUG (sphere): inside=%lld outside=%lld (tot=%ld)\n",
+           region_inside, region_outside, size);
+
+    /* ====================================================
+     * STEP 2 - compute epsilon on each edge
+     * ==================================================== */
+
+    #pragma omp parallel for schedule(static)
+    for (long idx = 0; idx < size; idx++) {
+        int k = idx % n;
+        int j = (idx / n) % n;
+        int i = idx / (n * n);
+
+        double x1 = (i + n_start) * h;
+        double y1 = j * h;
+        double z1 = k * h;
+
+        eps_x[idx] = eps_s;
+        eps_y[idx] = eps_s;
+        eps_z[idx] = eps_s;
+
+        /* Edge X */
+        long idx_px = (i == n - 1) ? idx - (long)(n - 1) * n * n : idx + (long)n * n;
+        if (region[idx] != region[idx_px]) {
+            double frac = sphere_edge_fraction(p, x1, y1, z1, h, 0, L);
+            eps_x[idx] = eps_mix_eval(eps_m, eps_s, frac);
+        } else if (region[idx] != 0) {
+            eps_x[idx] = eps_m;
+        }
+
+        /* Edge Y */
+        long idx_py = (j == n - 1) ? idx - (long)(n - 1) * n : idx + n;
+        if (region[idx] != region[idx_py]) {
+            double frac = sphere_edge_fraction(p, x1, y1, z1, h, 1, L);
+            eps_y[idx] = eps_mix_eval(eps_m, eps_s, frac);
+        } else if (region[idx] != 0) {
+            eps_y[idx] = eps_m;
+        }
+
+        /* Edge Z */
+        long idx_pz = (k == n - 1) ? idx - (n - 1) : idx + 1;
+        if (region[idx] != region[idx_pz]) {
+            double frac = sphere_edge_fraction(p, x1, y1, z1, h, 2, L);
+            eps_z[idx] = eps_mix_eval(eps_m, eps_s, frac);
+        } else if (region[idx] != 0) {
+            eps_z[idx] = eps_m;
+        }
+    }
+}
+
 
 /*Important, when called for IO must be called by all procs*/
 double grid_get_energy_elec(grid *g){

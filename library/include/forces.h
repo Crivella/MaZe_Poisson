@@ -9,5 +9,6 @@ double compute_force_fd(
 double compute_tf_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces);
 double compute_sc_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces);
 double compute_lj_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces);
+void compute_stress_tensor_forces(int n, double eps_s, int n_p, double L, double h, const double *phi, double *pos, double *solv_radii, double *forces, int use_pbc);
 
 #endif

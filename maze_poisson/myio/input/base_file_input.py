@@ -125,16 +125,21 @@ class MDVariables(BaseFileInput):
     # Poisson-Boltzmann specific
     poisson_boltzmann: bool = False  # Whether to use Poisson-Boltzmann method
     nonpolar_forces: bool = False # Whether to use non polar forces or not
-    field_dependent_dielectric: bool = False  # Type of dielectric function eps(E) or eps(r)
+    field_dependent_dielectric: bool = False  # Backward-compatible shortcut for eps_map='FIELD_DEPENDENT'
+    eps_map: str = None  # TRADITIONAL, SPHERE, or FIELD_DEPENDENT
+    pb_force: str = 'PB_ROUX'  # PB_ROUX or STRESS_TENSOR
+    stress_tensor_bc: str = 'DBC'  # DBC or PBC
     eps_field_alpha: float = 1.0  # Alpha parameter in eps(E) (Hu & Wei Eq. S2)
     gamma_np: float = 0.0  # Non-polarization gamma in kcal/mol/A^2
     beta_np: float = 0.0  # offset in kcal/mol
     probe_radius: float = 1.4 / a0  # Probe radius in a.u.
 
-    def __post__init__(self):
+    def __post_init__(self):
         """Post-initialization to set defaults."""
         if self.dt_fs <= 0:
             raise ValueError("dt_fs must be a positive value.")
+        if self.eps_map is None:
+            self.eps_map = 'FIELD_DEPENDENT' if self.field_dependent_dielectric else 'TRADITIONAL'
 
     @property
     def kBT(self):

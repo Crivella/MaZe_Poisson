@@ -51,6 +51,22 @@ precond_map: Dict[str, int] = {
     # 'BLOCKJACOBI': 4,  # Symmetric Successive Over-Relaxation
 }
 
+eps_map_type_map: Dict[str, int] = {
+    'TRADITIONAL': 0,
+    'SPHERE': 1,
+    'FIELD_DEPENDENT': 2,
+}
+
+pb_force_type_map: Dict[str, int] = {
+    'PB_ROUX': 0,
+    'STRESS_TENSOR': 1,
+}
+
+stress_tensor_bc_type_map: Dict[str, int] = {
+    'DBC': 0,
+    'PBC': 1,
+}
+
 class SolverMD(Logger):
     """Base class for all solver classes."""
 
@@ -153,11 +169,22 @@ class SolverMD(Logger):
                 eps_s * cst.eps0 * cst.kB_si * self.mdv.T
             ) * cst.BR ** 2 * self.h ** 2
             self.logger.info("Initializing grid for Poisson-Boltzmann.")
+            eps_map = self.mdv.eps_map.upper()
+            if eps_map not in eps_map_type_map:
+                raise ValueError(f"EPS map {eps_map} not recognized.")
+            pb_force = self.mdv.pb_force.upper()
+            if pb_force not in pb_force_type_map:
+                raise ValueError(f"PB force method {pb_force} not recognized.")
+            stress_bc = self.mdv.stress_tensor_bc.upper()
+            if stress_bc not in stress_tensor_bc_type_map:
+                raise ValueError(f"Stress tensor boundary condition {stress_bc} not recognized.")
             capi.solver_initialize_grid_pois_boltz(
                 self.gset.w,
                 kbar2,
                 int(self.mdv.nonpolar_forces),
-                int(self.mdv.field_dependent_dielectric),
+                eps_map_type_map[eps_map],
+                pb_force_type_map[pb_force],
+                stress_tensor_bc_type_map[stress_bc],
                 self.mdv.kBT,
                 self.mdv.eps_field_alpha,
             )
@@ -487,13 +514,13 @@ class SolverMD(Logger):
         if self.mdv.elec:
             self.update_charges()
 
-            if self.mdv.poisson_boltzmann and not self.mdv.field_dependent_dielectric:
+            if self.mdv.poisson_boltzmann and self.mdv.eps_map.upper() != 'FIELD_DEPENDENT':
             # if self.mdv.poisson_boltzmann:
                 self.update_eps_k2()
 
             self.n_iters = self.update_field()
             self.t_iters = Clock.get_clock('field').last_call
-            if self.mdv.field_dependent_dielectric:
+            if self.mdv.eps_map.upper() == 'FIELD_DEPENDENT':
                 self.eps_phi_iters = capi.get_eps_phi_iters()
             else:
                 self.eps_phi_iters = 0
@@ -607,5 +634,9 @@ class SolverMD(Logger):
                     f'  Warning: transition region width ({w_ang:.2f} A) is smaller than grid spacing ({h_ang:.2f} A)'
                 )
             self.logger.info(f'  Ionic strength: {self.gset.I} M')
+            self.logger.info(f'  EPS map: {self.mdv.eps_map}')
+            self.logger.info(f'  PB forces: {self.mdv.pb_force}')
+            if self.mdv.pb_force.upper() == 'STRESS_TENSOR':
+                self.logger.info(f'  Stress tensor boundary: {self.mdv.stress_tensor_bc}')
             self.logger.info(f'  Gamma NP: {self.mdv.gamma_np}')
             self.logger.info(f'  Beta NP: {self.mdv.beta_np}')

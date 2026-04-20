@@ -32,6 +32,19 @@
 #define PRECOND_TYPE_SSOR 3
 #define PRECOND_TYPE_BLOCKJACOBI 4
 
+#define EPS_MAP_TYPE_NUM 3
+#define EPS_MAP_TYPE_TRADITIONAL 0
+#define EPS_MAP_TYPE_SPHERE 1
+#define EPS_MAP_TYPE_FIELD_DEPENDENT 2
+
+#define PB_FORCE_TYPE_NUM 2
+#define PB_FORCE_TYPE_PB_ROUX 0
+#define PB_FORCE_TYPE_STRESS_TENSOR 1
+
+#define STRESS_TENSOR_BC_TYPE_NUM 2
+#define STRESS_TENSOR_BC_TYPE_DBC 0
+#define STRESS_TENSOR_BC_TYPE_PBC 1
+
 // Struct typedefs
 typedef struct grid grid;
 typedef struct particles particles;
@@ -46,9 +59,10 @@ void grid_free(grid *grid);
 void particles_free(particles *p);
 void integrator_free(integrator *integrator);
 
-void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled, int eps_field_dep_enabled, double kBT, double eps_field_alpha);
+void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled, int eps_map_type, int pb_force_type, int stress_tensor_bc_type, double kBT, double eps_field_alpha);
 void grid_pb_free(grid *grid);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
+void grid_update_eps_and_k2_sphere(grid *grid, particles *particles);
 double grid_update_eps_field_dependent(grid *grid, particles *particles, double kBT);
 double grid_get_energy_elec(grid *grid);
 
@@ -97,6 +111,7 @@ double particles_compute_forces_tf(particles *p);
 double particles_compute_forces_lj(particles *p);
 double particles_compute_forces_sc(particles *p);
 double particles_compute_forces_pb(particles *p, grid *grid);
+double particles_compute_forces_pb_stress_tensor(particles *p, grid *grid);
 void particles_compute_forces_tot(particles *p);
 
 double particles_get_temperature(particles *p);
@@ -145,6 +160,7 @@ struct grid {
     double *phi_p;  // Previous potential (could be NULL if not needed by the method)
     double *phi_n;  // Last potential
     double *ig2;  // Inverse of the laplacian
+    unsigned int *region;  // Region type for each grid point (0=outside, 1=inside) defined in grid nodes
 
     int precond_type;  // Type of the preconditioner
 
@@ -152,6 +168,9 @@ struct grid {
     int pb_enabled;  // Poisson-Boltzmann enabled
     int nonpolar_enabled; // Nonpolar forces enabled
     int eps_field_dep_enabled; // Field-dependent dielectric enabled
+    int eps_map_type; // Dielectric map construction method
+    int pb_force_type; // Poisson-Boltzmann force computation method
+    int stress_tensor_bc_type; // Boundary condition used by stress-tensor PB forces
     double w;  // Ionic boundary width
     double kbar2;  // Screening factor
     double kBT;  // Thermal energy factor for field-dependent dielectric updates

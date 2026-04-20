@@ -44,10 +44,10 @@ void solver_initialize_grid(
 }
 
 void solver_initialize_grid_pois_boltz(
-    double w, double kbar2, int nonpolar_enabled, int eps_field_dep_enabled, double kBT, double eps_field_alpha
+    double w, double kbar2, int nonpolar_enabled, int eps_map_type, int pb_force_type, int stress_tensor_bc_type, double kBT, double eps_field_alpha
 ) {
     // Initialize the solvent potential and dielectric constant arrays
-    grid_pb_init(g_grid, w, kbar2, nonpolar_enabled, eps_field_dep_enabled, kBT, eps_field_alpha);
+    grid_pb_init(g_grid, w, kbar2, nonpolar_enabled, eps_map_type, pb_force_type, stress_tensor_bc_type, kBT, eps_field_alpha);
 }
 
 void solver_initialize_particles(
@@ -137,7 +137,20 @@ int solver_update_field() {
 
 void solver_update_eps_k2() {
     // Update the dielectric constant and screening factor based on the grid's transition state
-    grid_update_eps_and_k2(g_grid, g_particles);
+    switch (g_grid->eps_map_type) {
+        case EPS_MAP_TYPE_TRADITIONAL:
+            grid_update_eps_and_k2(g_grid, g_particles);
+            break;
+        case EPS_MAP_TYPE_SPHERE:
+            grid_update_eps_and_k2_sphere(g_grid, g_particles);
+            break;
+        case EPS_MAP_TYPE_FIELD_DEPENDENT:
+            grid_update_eps_and_k2(g_grid, g_particles);
+            break;
+        default:
+            mpi_fprintf(stderr, "Unknown eps_map_type: %d\n", g_grid->eps_map_type);
+            exit(1);
+    }
 }
 
 int get_eps_phi_iters() {
@@ -153,6 +166,9 @@ double solver_compute_forces_noel() {
 }
 
 double solver_compute_forces_pb() {
+    if (g_grid->pb_force_type == PB_FORCE_TYPE_STRESS_TENSOR) {
+        return particles_compute_forces_pb_stress_tensor(g_particles, g_grid);
+    }
     return g_particles->compute_forces_pb(g_particles, g_grid);
 }
 

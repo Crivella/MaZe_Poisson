@@ -57,6 +57,7 @@ add_library(maze_poisson MODULE
     src/fftw_wrap.c
 
     src/forces.c
+    src/sphere_intersect.c
     src/charges.c
 
     src/particles.c

@@ -774,6 +774,21 @@ double particles_compute_forces_pb(particles *p, grid *g) {
     return non_polar_energy;
 }
 
+double particles_compute_forces_pb_stress_tensor(particles *p, grid *g) {
+    double non_polar_energy = particles_compute_forces_pb(p, g);
+    long int size = p->n_p * 3;
+
+    compute_stress_tensor_forces(
+        g->n, g->eps_s, p->n_p, g->L, g->h,
+        g->phi_n, p->pos, p->solv_radii, p->fcs_elec,
+        g->stress_tensor_bc_type == STRESS_TENSOR_BC_TYPE_PBC
+    );
+
+    memset(p->fcs_db, 0, size * sizeof(double));
+    memset(p->fcs_ib, 0, size * sizeof(double));
+    return non_polar_energy;
+}
+
 void particles_compute_forces_tot(particles *p) {
     int size = p->n_p * 3;
     memset(p->fcs_tot, 0, size * sizeof(double));  // Initialize total forces to zero
@@ -855,4 +870,3 @@ void particles_rescale_velocities(particles *p) {
 
     free(init_vel);
 }
-
