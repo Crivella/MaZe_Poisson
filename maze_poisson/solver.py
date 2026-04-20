@@ -502,6 +502,13 @@ class SolverMD(Logger):
         if self.mdv.rescale:
             capi.solver_rescale_velocities()
 
+    def rescale_periodic(self, step: int):
+        """Periodically remove total momentum when rescaling is enabled."""
+        if not self.mdv.rescale or self.mdv.rescale_stride is None:
+            return
+        if step % self.mdv.rescale_stride == 0:
+            capi.solver_rescale_velocities()
+
     @Clock('update_eps_k2')
     def update_eps_k2(self):
         """Update the k^2 grid for Poisson-Boltzmann."""
@@ -608,6 +615,7 @@ class SolverMD(Logger):
 
         for i in ProgressBar(self.mdv.N_steps):
             self.md_loop_iter()
+            self.rescale_periodic(i + 1)
             self.md_loop_output(i)
 
     def run(self):
@@ -645,6 +653,10 @@ class SolverMD(Logger):
         self.logger.info(f'  Elec: {self.mdv.elec}    NotElec: {self.mdv.not_elec}')
         self.logger.info(f'  Temperature: {self.mdv.T} K,  Thermostat: {self.mdv.thermostat},  Gamma: {self.mdv.gamma}')
         self.logger.info(f'  Velocity rescaling: {self.mdv.rescale}')
+        if self.mdv.rescale and self.mdv.rescale_stride is not None:
+            self.logger.info(
+                f'  Periodic velocity rescaling: enabled every {self.mdv.rescale_stride} MD steps'
+            )
         if self.outset.print_restart:
             self.logger.info(f'  Restart step: {self.outset.restart_step}')
         if self.mdv.poisson_boltzmann:
