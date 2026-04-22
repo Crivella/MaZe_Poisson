@@ -466,8 +466,8 @@ void grid_update_eps_and_k2_sphere(grid *g, particles *p)
         else        region_outside++;
     }
 
-    printf("REGION_DEBUG (sphere): inside=%lld outside=%lld (tot=%ld)\n",
-           region_inside, region_outside, size);
+    // printf("REGION_DEBUG (sphere): inside=%lld outside=%lld (tot=%ld)\n",
+        //    region_inside, region_outside, size);
 
     /* ====================================================
      * STEP 2 - compute epsilon on each edge

@@ -247,7 +247,7 @@ void particles_init_potential_lj(particles *p, double *pot_params) {
             inj = in + j;
             typ2 = p->types[j];
 
-            idx = (typ1 * n_typ + typ2) * 4;  // Assuming pot_params is structured as [sigma, epsilon, alpha, beta] for each type pair
+            idx = (typ1 * n_typ + typ2) * 2;  // Input pot_params is structured as [sigma, epsilon] for each type pair
 
             sigma = pot_params[idx + 0];
             epsilon = pot_params[idx + 1];
