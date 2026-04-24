@@ -13,6 +13,10 @@ static int pbc_grid_index(int idx, int n) {
     return idx;
 }
 
+static long grid_index_3d(int i, int j, int k, int n) {
+    return (long)k + (long)j * n + (long)i * n * n;
+}
+
 // /*
 // Compute the forces on each particle by computing the field from the potential using finite differences.
 // New version computes the field only where the particles are located.
@@ -352,15 +356,13 @@ Compute the stress tensor forces on particles
 @param phi: the potential field of size n_grid * n_grid * n_grid
 @param out_forces: the output forces on each particle of size n_p * 3
 */
-void compute_stress_tensor_forces(
-    int n, double eps_s, int n_p, double L, double h, const double *phi, const unsigned int *region, double *pos, double *solv_radii, double *out_forces, int use_pbc
+void compute_stress_tensor_forces_dbc(
+    int n, double eps_s, int n_p, double L, double h, const double *phi, const unsigned int *region, double *pos, double *solv_radii, double *out_forces
 )
 {
     const double stress_prefactor = 1.0 / (4.0 * M_PI);
 
     double h2 = h * h;
-
-    for (int i = 0; i < n_p * 3; i++) out_forces[i] = 0.0;
 
     double Ex, Ey, Ez;
 
@@ -471,5 +473,171 @@ void compute_stress_tensor_forces(
                 }
             }
         }
+    }
+}
+
+void compute_stress_tensor_forces_pbc(
+    int n, double eps_s, int n_p, double L, double h, const double *phi, const unsigned int *region, double *pos, double *solv_radii, double *out_forces
+)
+{
+    const double stress_prefactor = 1.0 / (4.0 * M_PI);
+    double h2 = h * h;
+
+    double Ex, Ey, Ez;
+
+    for (int p_idx = 0; p_idx < n_p; p_idx++) {
+        int ip = round(pos[p_idx * 3 + 0] / h);
+        int jp = round(pos[p_idx * 3 + 1] / h);
+        int kp = round(pos[p_idx * 3 + 2] / h);
+        int num_points_min = ceil(solv_radii[p_idx] / h) + 1;
+        int R2 = (num_points_min + 1) * (num_points_min + 1);
+
+        for (int di = -num_points_min; di <= num_points_min; di++) {
+            for (int dj = -num_points_min; dj <= num_points_min; dj++) {
+                for (int dk = -num_points_min; dk <= num_points_min; dk++) {
+                    int i, j, k;
+                    int i1, i2, j1, j2, k1, k2;
+                    long idx_a;
+                    long idx_b;
+
+                    if (di*di + dj*dj + dk*dk >= R2) continue;
+
+                    i = pbc_grid_index(ip + di, n);
+                    j = pbc_grid_index(jp + dj, n);
+                    k = pbc_grid_index(kp + dk, n);
+
+                    idx_a = grid_index_3d(i, j, k, n);
+                    if (region != NULL && region[idx_a] != 0) continue;
+
+                    i1 = pbc_grid_index(i + 1, n);
+                    i2 = pbc_grid_index(i - 1, n);
+                    j1 = pbc_grid_index(j + 1, n);
+                    j2 = pbc_grid_index(j - 1, n);
+                    k1 = pbc_grid_index(k + 1, n);
+                    k2 = pbc_grid_index(k - 1, n);
+
+                    if ((di+1)*(di+1) + dj*dj + dk*dk >= R2) {
+                        idx_b = grid_index_3d(i1, j, k, n);
+                        if (region == NULL || region[idx_b] == 0) {
+                            Ex = -(phi[idx_b] - phi[idx_a]) / h;
+                            Ey = -(
+                                (phi[grid_index_3d(i, j1, k, n)] - phi[grid_index_3d(i, j2, k, n)]) +
+                                (phi[grid_index_3d(i1, j1, k, n)] - phi[grid_index_3d(i1, j2, k, n)])
+                            ) / (4.0 * h);
+                            Ez = -(
+                                (phi[grid_index_3d(i, j, k1, n)] - phi[grid_index_3d(i, j, k2, n)]) +
+                                (phi[grid_index_3d(i1, j, k1, n)] - phi[grid_index_3d(i1, j, k2, n)])
+                            ) / (4.0 * h);
+                            out_forces[p_idx * 3 + 0] += h2 * stress_prefactor * eps_s * (Ex*Ex - 0.5*(Ex*Ex + Ey*Ey + Ez*Ez));
+                            out_forces[p_idx * 3 + 1] += h2 * stress_prefactor * eps_s * Ex*Ey;
+                            out_forces[p_idx * 3 + 2] += h2 * stress_prefactor * eps_s * Ex*Ez;
+                        }
+                    }
+
+                    if ((di-1)*(di-1) + dj*dj + dk*dk >= R2) {
+                        idx_b = grid_index_3d(i2, j, k, n);
+                        if (region == NULL || region[idx_b] == 0) {
+                            Ex = (phi[idx_b] - phi[idx_a]) / h;
+                            Ey = -(
+                                (phi[grid_index_3d(i, j1, k, n)] - phi[grid_index_3d(i, j2, k, n)]) +
+                                (phi[grid_index_3d(i2, j1, k, n)] - phi[grid_index_3d(i2, j2, k, n)])
+                            ) / (4.0 * h);
+                            Ez = -(
+                                (phi[grid_index_3d(i, j, k1, n)] - phi[grid_index_3d(i, j, k2, n)]) +
+                                (phi[grid_index_3d(i2, j, k1, n)] - phi[grid_index_3d(i2, j, k2, n)])
+                            ) / (4.0 * h);
+                            out_forces[p_idx * 3 + 0] += h2 * stress_prefactor * (-1.0) * eps_s * (Ex*Ex - 0.5*(Ex*Ex + Ey*Ey + Ez*Ez));
+                            out_forces[p_idx * 3 + 1] += h2 * stress_prefactor * (-1.0) * eps_s * Ex*Ey;
+                            out_forces[p_idx * 3 + 2] += h2 * stress_prefactor * (-1.0) * eps_s * Ex*Ez;
+                        }
+                    }
+
+                    if (di*di + (dj+1)*(dj+1) + dk*dk >= R2) {
+                        idx_b = grid_index_3d(i, j1, k, n);
+                        if (region == NULL || region[idx_b] == 0) {
+                            Ex = -(
+                                (phi[grid_index_3d(i1, j, k, n)] - phi[grid_index_3d(i2, j, k, n)]) +
+                                (phi[grid_index_3d(i1, j1, k, n)] - phi[grid_index_3d(i2, j1, k, n)])
+                            ) / (4.0 * h);
+                            Ey = -(phi[idx_b] - phi[idx_a]) / h;
+                            Ez = -(
+                                (phi[grid_index_3d(i, j, k1, n)] - phi[grid_index_3d(i, j, k2, n)]) +
+                                (phi[grid_index_3d(i, j1, k1, n)] - phi[grid_index_3d(i, j1, k2, n)])
+                            ) / (4.0 * h);
+                            out_forces[p_idx * 3 + 0] += h2 * stress_prefactor * eps_s * Ey*Ex;
+                            out_forces[p_idx * 3 + 1] += h2 * stress_prefactor * eps_s * (Ey*Ey - 0.5*(Ex*Ex + Ey*Ey + Ez*Ez));
+                            out_forces[p_idx * 3 + 2] += h2 * stress_prefactor * eps_s * Ey*Ez;
+                        }
+                    }
+
+                    if (di*di + (dj-1)*(dj-1) + dk*dk >= R2) {
+                        idx_b = grid_index_3d(i, j2, k, n);
+                        if (region == NULL || region[idx_b] == 0) {
+                            Ex = -(
+                                (phi[grid_index_3d(i1, j, k, n)] - phi[grid_index_3d(i2, j, k, n)]) +
+                                (phi[grid_index_3d(i1, j2, k, n)] - phi[grid_index_3d(i2, j2, k, n)])
+                            ) / (4.0 * h);
+                            Ey = (phi[idx_b] - phi[idx_a]) / h;
+                            Ez = -(
+                                (phi[grid_index_3d(i, j, k1, n)] - phi[grid_index_3d(i, j, k2, n)]) +
+                                (phi[grid_index_3d(i, j2, k1, n)] - phi[grid_index_3d(i, j2, k2, n)])
+                            ) / (4.0 * h);
+                            out_forces[p_idx * 3 + 0] += h2 * stress_prefactor * (-1.0) * eps_s * Ey*Ex;
+                            out_forces[p_idx * 3 + 1] += h2 * stress_prefactor * (-1.0) * eps_s * (Ey*Ey - 0.5*(Ex*Ex + Ey*Ey + Ez*Ez));
+                            out_forces[p_idx * 3 + 2] += h2 * stress_prefactor * (-1.0) * eps_s * Ey*Ez;
+                        }
+                    }
+
+                    if (di*di + dj*dj + (dk+1)*(dk+1) >= R2) {
+                        idx_b = grid_index_3d(i, j, k1, n);
+                        if (region == NULL || region[idx_b] == 0) {
+                            Ex = -(
+                                (phi[grid_index_3d(i1, j, k, n)] - phi[grid_index_3d(i2, j, k, n)]) +
+                                (phi[grid_index_3d(i1, j, k1, n)] - phi[grid_index_3d(i2, j, k1, n)])
+                            ) / (4.0 * h);
+                            Ey = -(
+                                (phi[grid_index_3d(i, j1, k, n)] - phi[grid_index_3d(i, j2, k, n)]) +
+                                (phi[grid_index_3d(i, j1, k1, n)] - phi[grid_index_3d(i, j2, k1, n)])
+                            ) / (4.0 * h);
+                            Ez = -(phi[idx_b] - phi[idx_a]) / h;
+                            out_forces[p_idx * 3 + 0] += h2 * stress_prefactor * eps_s * Ez*Ex;
+                            out_forces[p_idx * 3 + 1] += h2 * stress_prefactor * eps_s * Ez*Ey;
+                            out_forces[p_idx * 3 + 2] += h2 * stress_prefactor * eps_s * (Ez*Ez - 0.5*(Ex*Ex + Ey*Ey + Ez*Ez));
+                        }
+                    }
+
+                    if (di*di + dj*dj + (dk-1)*(dk-1) >= R2) {
+                        idx_b = grid_index_3d(i, j, k2, n);
+                        if (region == NULL || region[idx_b] == 0) {
+                            Ex = -(
+                                (phi[grid_index_3d(i1, j, k, n)] - phi[grid_index_3d(i2, j, k, n)]) +
+                                (phi[grid_index_3d(i1, j, k2, n)] - phi[grid_index_3d(i2, j, k2, n)])
+                            ) / (4.0 * h);
+                            Ey = -(
+                                (phi[grid_index_3d(i, j1, k, n)] - phi[grid_index_3d(i, j2, k, n)]) +
+                                (phi[grid_index_3d(i, j1, k2, n)] - phi[grid_index_3d(i, j2, k2, n)])
+                            ) / (4.0 * h);
+                            Ez = (phi[idx_b] - phi[idx_a]) / h;
+                            out_forces[p_idx * 3 + 0] += h2 * stress_prefactor * (-1.0) * eps_s * Ez*Ex;
+                            out_forces[p_idx * 3 + 1] += h2 * stress_prefactor * (-1.0) * eps_s * Ez*Ey;
+                            out_forces[p_idx * 3 + 2] += h2 * stress_prefactor * (-1.0) * eps_s * (Ez*Ez - 0.5*(Ex*Ex + Ey*Ey + Ez*Ez));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void compute_stress_tensor_forces(
+    int n, double eps_s, int n_p, double L, double h, const double *phi, const unsigned int *region, double *pos, double *solv_radii, double *out_forces, int use_pbc
+)
+{
+    memset(out_forces, 0, n_p * 3 * sizeof(double));
+
+    if (use_pbc) {
+        compute_stress_tensor_forces_pbc(n, eps_s, n_p, L, h, phi, region, pos, solv_radii, out_forces);
+    } else {
+        compute_stress_tensor_forces_dbc(n, eps_s, n_p, L, h, phi, region, pos, solv_radii, out_forces);
     }
 }

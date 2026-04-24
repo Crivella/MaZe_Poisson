@@ -385,6 +385,10 @@ void particles_update_nearest_neighbors_spline(particles *p) {
 }
 
 double particles_compute_forces_field(particles *p, grid *grid) {
+    if (grid->pb_enabled && grid->pb_force_type == PB_FORCE_TYPE_STRESS_TENSOR) {
+        memset(p->fcs_elec, 0, p->n_p * 3 * sizeof(double));
+        return 0.0;
+    }
     return compute_force_fd(
         p->n, p->n_p, p->h, p->num_neighbors,
         grid->phi_n, p->neighbors, p->charges, p->pos, p->fcs_elec,
