@@ -90,6 +90,7 @@ class SolverMD(Logger):
         self.eps_phi_iters = 0
 
         self.energy_nonpolar = 0.0
+        self.potential_notelec = 0.0
 
         if self.outset.print_restart:
             outset.restart_step = outset.restart_step or mdv.N_steps

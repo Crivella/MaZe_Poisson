@@ -769,7 +769,19 @@ double particles_compute_forces_pb(particles *p, grid *g) {
 
     dscal(fcs_db, h / (8.0 * M_PI), size);
     dscal(fcs_ib, h / (8.0 * M_PI), size);
-    dscal(fcs_np, -p->gamma_np * h / (eps_s - eps_int), size);
+    if (g->nonpolar_enabled && fabs(p->gamma_np) > 0.0) {
+        double eps_delta = eps_s - eps_int;
+        if (fabs(eps_delta) < 1e-12) {
+            mpi_fprintf(
+                stderr,
+                "Invalid Poisson-Boltzmann setup: nonpolar forces require eps_s != eps_int.\n"
+            );
+            exit(1);
+        }
+        dscal(fcs_np, -p->gamma_np * h / eps_delta, size);
+    } else {
+        memset(fcs_np, 0, size * sizeof(double));
+    }
 
     return non_polar_energy;
 }
