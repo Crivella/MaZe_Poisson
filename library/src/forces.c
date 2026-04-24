@@ -366,6 +366,7 @@ void compute_stress_tensor_forces_dbc(
 
     double Ex, Ey, Ez;
 
+    #pragma omp parallel for schedule(static) private(Ex, Ey, Ez)
     for (int p_idx = 0; p_idx < n_p; p_idx++) {
         int ip = round(pos[p_idx * 3 + 0] / h);
         int jp = round(pos[p_idx * 3 + 1] / h);
@@ -485,6 +486,7 @@ void compute_stress_tensor_forces_pbc(
 
     double Ex, Ey, Ez;
 
+    #pragma omp parallel for schedule(static) private(Ex, Ey, Ez)
     for (int p_idx = 0; p_idx < n_p; p_idx++) {
         int ip = round(pos[p_idx * 3 + 0] / h);
         int jp = round(pos[p_idx * 3 + 1] / h);
