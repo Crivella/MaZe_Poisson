@@ -791,8 +791,14 @@ double particles_compute_forces_pb(particles *p, grid *g) {
 }
 
 double particles_compute_forces_pb_stress_tensor(particles *p, grid *g) {
-    double non_polar_energy = particles_compute_forces_pb(p, g);
     long int size = p->n_p * 3;
+    double non_polar_energy = 0.0;
+
+    if (g->nonpolar_enabled) {
+        non_polar_energy = particles_compute_forces_pb(p, g);
+    } else {
+        memset(p->fcs_np, 0, size * sizeof(double));
+    }
 
     compute_stress_tensor_forces(
         g->n, g->eps_s, p->n_p, g->L, g->h,
