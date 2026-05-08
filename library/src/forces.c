@@ -478,15 +478,22 @@ void compute_stress_tensor_forces_dbc(
 }
 
 void compute_stress_tensor_forces_pbc(
-    int n, double eps_s, int n_p, double L, double h, const double *phi, const unsigned int *region, double *pos, double *solv_radii, double *out_forces
-)
-{
+    int n, double eps_s, int n_p,
+    double L, double h, double *phi, const unsigned int *region,
+    double *pos, double *solv_radii, double *out_forces
+) {
+    long int n2 = n * n;
     const double stress_prefactor = 1.0 / (4.0 * M_PI);
     double h2 = h * h;
 
     double Ex, Ey, Ez;
 
-    #pragma omp parallel for schedule(static) private(Ex, Ey, Ez)
+    int n_loc = get_n_loc();
+    int n_start = get_n_start();
+    // Exchange the top and bottom slices
+    mpi_grid_exchange_bot_top(phi, n_loc, n);
+
+    #pragma omp parallel for private(Ex, Ey, Ez)
     for (int p_idx = 0; p_idx < n_p; p_idx++) {
         int ip = round(pos[p_idx * 3 + 0] / h);
         int jp = round(pos[p_idx * 3 + 1] / h);
@@ -494,27 +501,36 @@ void compute_stress_tensor_forces_pbc(
         int num_points_min = ceil(solv_radii[p_idx] / h) + 1;
         int R2 = (num_points_min + 1) * (num_points_min + 1);
 
+        int i, j, k;
+        int i1, i2, j1, j2, k1, k2;
+        long int idx_a;
+        long int idx_b;
+
+        long int app1, app2;
+
         for (int di = -num_points_min; di <= num_points_min; di++) {
+            i = pbc_grid_index(ip + di, n) - n_start; // Local index
+            i1 = i + 1;
+            i2 = i - 1;
+            if (i < 0 || i >= n_loc) {
+                continue;
+            }
+            app1 = di * di;
             for (int dj = -num_points_min; dj <= num_points_min; dj++) {
+                j  = pbc_grid_index(jp + dj, n);
+                j1 = pbc_grid_index(j + 1, n);
+                j2 = pbc_grid_index(j - 1, n);
+                app2 = app1 + dj * dj;
                 for (int dk = -num_points_min; dk <= num_points_min; dk++) {
-                    int i, j, k;
-                    int i1, i2, j1, j2, k1, k2;
-                    long idx_a;
-                    long idx_b;
+                    if (app2 + dk*dk >= R2) {
+                        continue;
+                    }
 
-                    if (di*di + dj*dj + dk*dk >= R2) continue;
-
-                    i = pbc_grid_index(ip + di, n);
-                    j = pbc_grid_index(jp + dj, n);
                     k = pbc_grid_index(kp + dk, n);
-
                     idx_a = grid_index_3d(i, j, k, n);
-                    if (region != NULL && region[idx_a] != 0) continue;
-
-                    i1 = pbc_grid_index(i + 1, n);
-                    i2 = pbc_grid_index(i - 1, n);
-                    j1 = pbc_grid_index(j + 1, n);
-                    j2 = pbc_grid_index(j - 1, n);
+                    if (region != NULL && region[idx_a] != 0) {
+                        continue;
+                    }
                     k1 = pbc_grid_index(k + 1, n);
                     k2 = pbc_grid_index(k - 1, n);
 
@@ -629,6 +645,8 @@ void compute_stress_tensor_forces_pbc(
             }
         }
     }
+
+    allreduce_sum(out_forces, 3 * n_p);
 }
 
 void compute_stress_tensor_forces(
