@@ -321,6 +321,8 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
 }    
 
 double grid_update_eps_field_dependent(grid *g, particles *p, double kBT) {
+    mpi_fprintf(stderr, "This function should not be used YET!!\n");
+    exit(1);
     int n = g->n;
     int n_local = g->n_local;
     double h = g->h;

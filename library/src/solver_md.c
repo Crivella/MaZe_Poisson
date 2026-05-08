@@ -131,12 +131,16 @@ void solver_set_field_prev(double *phi) {
 }
 
 int solver_update_field() {
-    g_grid->eps_phi_iters = 0;
+    g_grid->eps_phi_iters = 0;  // TODO This should probably go into update field
     return g_grid->update_field(g_grid);
 }
 
 void solver_update_eps_k2() {
     // Update the dielectric constant and screening factor based on the grid's transition state
+
+    // TODO The switch-case logic should go in a function separate from here.
+    //      This File mainly act as an API of what we are exposing from C to python. The code execution logic
+    //      should not be here
     switch (g_grid->eps_map_type) {
         case EPS_MAP_TYPE_TRADITIONAL:
             grid_update_eps_and_k2(g_grid, g_particles);
@@ -166,6 +170,7 @@ double solver_compute_forces_noel() {
 }
 
 double solver_compute_forces_pb() {
+    // TODO same here, hide execution logic from this file
     if (g_grid->pb_force_type == PB_FORCE_TYPE_STRESS_TENSOR) {
         return particles_compute_forces_pb_stress_tensor(g_particles, g_grid);
     }
@@ -343,6 +348,9 @@ void get_field_prev(double *recv) {
 void get_eps_map(double *recv_x, double *recv_y, double *recv_z) {
     long int n3 = (long) g_grid->n * g_grid->n * g_grid->n;
 
+
+    // TODO would leave this comment here to mark that this function is not really implemented yet,
+    mpi_fprintf(stderr, "get_eps_map is not fully implemented yet, returning zeros\n");
     if (recv_x != NULL) {
         memset(recv_x, 0, n3 * sizeof(double));
     }

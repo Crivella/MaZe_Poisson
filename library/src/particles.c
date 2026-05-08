@@ -386,7 +386,9 @@ void particles_update_nearest_neighbors_spline(particles *p) {
 
 double particles_compute_forces_field(particles *p, grid *grid) {
     if (grid->pb_enabled && grid->pb_force_type == PB_FORCE_TYPE_STRESS_TENSOR) {
-        memset(p->fcs_elec, 0, p->n_p * 3 * sizeof(double));
+        // The tensor forces are already resetting this 2 zero, not sure which is the best place to do this
+        // depends on who we want to be responsible for what
+        // memset(p->fcs_elec, 0, p->n_p * 3 * sizeof(double));
         return 0.0;
     }
     return compute_force_fd(
@@ -773,6 +775,8 @@ double particles_compute_forces_pb(particles *p, grid *g) {
 
     dscal(fcs_db, h / (8.0 * M_PI), size);
     dscal(fcs_ib, h / (8.0 * M_PI), size);
+
+    // TODO: `fabs(p->gamma_np) > 0.0` Isn't this always true?
     if (g->nonpolar_enabled && fabs(p->gamma_np) > 0.0) {
         double eps_delta = eps_s - eps_int;
         if (fabs(eps_delta) < 1e-12) {
@@ -784,6 +788,8 @@ double particles_compute_forces_pb(particles *p, grid *g) {
         }
         dscal(fcs_np, -p->gamma_np * h / eps_delta, size);
     } else {
+        // TODO This is probably not needed this should be initialized to zero and not touched if non-polar forces are not enabled
+        // If it is not already 0 here, it means we are doing something wrong in the code
         memset(fcs_np, 0, size * sizeof(double));
     }
 

@@ -357,16 +357,19 @@ Compute the stress tensor forces on particles
 @param out_forces: the output forces on each particle of size n_p * 3
 */
 void compute_stress_tensor_forces_dbc(
-    int n, double eps_s, int n_p, double L, double h, const double *phi, const unsigned int *region, double *pos, double *solv_radii, double *out_forces
-)
-{
+    int n, double eps_s, int n_p,
+    double L, double h, const double *phi, const unsigned int *region,
+    double *pos, double *solv_radii, double *out_forces
+) {
+    mpi_fprintf(stderr, "`compute_stress_tensor_forces_dbc` should not be used YET!!\n");
+    exit(1);
     const double stress_prefactor = 1.0 / (4.0 * M_PI);
 
     double h2 = h * h;
 
     double Ex, Ey, Ez;
 
-    #pragma omp parallel for schedule(static) private(Ex, Ey, Ez)
+    #pragma omp parallel for private(Ex, Ey, Ez)
     for (int p_idx = 0; p_idx < n_p; p_idx++) {
         int ip = round(pos[p_idx * 3 + 0] / h);
         int jp = round(pos[p_idx * 3 + 1] / h);
@@ -650,7 +653,9 @@ void compute_stress_tensor_forces_pbc(
 }
 
 void compute_stress_tensor_forces(
-    int n, double eps_s, int n_p, double L, double h, const double *phi, const unsigned int *region, double *pos, double *solv_radii, double *out_forces, int use_pbc
+    int n, double eps_s, int n_p,
+    double L, double h, double *phi, const unsigned int *region,
+    double *pos, double *solv_radii, double *out_forces, int use_pbc
 )
 {
     memset(out_forces, 0, n_p * 3 * sizeof(double));
