@@ -51,6 +51,7 @@ precond_map: Dict[str, int] = {
     # 'BLOCKJACOBI': 4,  # Symmetric Successive Over-Relaxation
 }
 
+# TODO make this get populated from the C API like the other maps, to avoid hardcoding and potential mismatches
 eps_map_type_map: Dict[str, int] = {
     'TRADITIONAL': 0,
     'SPHERE': 1,
@@ -439,7 +440,7 @@ class SolverMD(Logger):
     @Clock('update_eps_k2')
     def update_eps_k2(self):
         """Update the k^2 grid for Poisson-Boltzmann."""
-        if self.mdv.poisson_boltzmann:
+        if self.mdv.poisson_boltzmann and self.mdv.eps_map.upper() != 'FIELD_DEPENDENT':
             capi.solver_update_eps_k2()
 
     @Clock('field')
@@ -489,6 +490,7 @@ class SolverMD(Logger):
     def md_loop_output(self, i: int, force: bool = False):
         """Output the data for the MD loop."""
         self.ofiles.output(i, self, force)
+        # TODO move this logic in the OutputFiles class
         if self.outset.print_eps_map and (force or i % self.out_stride == 0):
             self.save_eps_map(iter_idx=i)
 
@@ -515,12 +517,10 @@ class SolverMD(Logger):
         if self.mdv.elec:
             self.update_charges()
 
-            if self.mdv.poisson_boltzmann and self.mdv.eps_map.upper() != 'FIELD_DEPENDENT':
-            # if self.mdv.poisson_boltzmann:
-                self.update_eps_k2()
-
+            self.update_eps_k2()
             self.n_iters = self.update_field()
             self.t_iters = Clock.get_clock('field').last_call
+            # TODO this is probably not needed since it should be always 0 from C if not FIELD_DEPENDENT
             if self.mdv.eps_map.upper() == 'FIELD_DEPENDENT':
                 self.eps_phi_iters = capi.get_eps_phi_iters()
             else:
@@ -562,6 +562,9 @@ class SolverMD(Logger):
         epsilon maps across steps can be stitched into an animation.
         """
         # Disabled: do not write epsilon map files
+        # TODO
+        # This should be dealt with in the OutputFiles and derived classes as here we do not take into account
+        # running with MPI for the IO
         return ""
 
         if not self.mdv.poisson_boltzmann:
