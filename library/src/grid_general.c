@@ -23,6 +23,30 @@ char *get_precond_type_str(int n) {
     return precond_type_str[n];
 }
 
+char eps_map_type_str[EPS_MAP_TYPE_NUM][32] = {"TRADITIONAL", "SPHERE", "FIELD_DEPENDENT"};
+int get_eps_map_type_num() {
+    return EPS_MAP_TYPE_NUM;
+}
+char *get_eps_map_type_str(int n) {
+    return eps_map_type_str[n];
+}
+
+char pb_force_type_str[PB_FORCE_TYPE_NUM][32] = {"PB_ROUX", "STRESS_TENSOR"};
+int get_pb_force_type_num() {
+    return PB_FORCE_TYPE_NUM;
+}
+char *get_pb_force_type_str(int n) {
+    return pb_force_type_str[n];
+}
+
+char stress_tensor_bc_type_str[STRESS_TENSOR_BC_TYPE_NUM][32] = {"DBC", "PBC"};
+int get_stress_tensor_bc_type_num() {
+    return STRESS_TENSOR_BC_TYPE_NUM;
+}
+char *get_stress_tensor_bc_type_str(int n) {
+    return stress_tensor_bc_type_str[n];
+}
+
 grid * grid_init(int n, double L, double h, double tol, double eps, double eps_int, int grid_type, int precond_type) {
     void   (*init_func)(grid *);
     switch (grid_type) {
@@ -68,9 +92,13 @@ grid * grid_init(int n, double L, double h, double tol, double eps, double eps_i
     new->pb_enabled = 0;  // Poisson-Boltzmann not enabled by default
     new->nonpolar_enabled = 0; //nonpolar forces not enabled by default
     new->eps_field_dep_enabled = 0; //field-dependent dielectric not enabled by default
-    new->eps_map_type = EPS_MAP_TYPE_TRADITIONAL;
-    new->pb_force_type = PB_FORCE_TYPE_PB_ROUX;
-    new->stress_tensor_bc_type = STRESS_TENSOR_BC_TYPE_DBC;
+
+    // These are set in `grid_pb_init` which should always be called before running PB related functions
+    // Using this allows us to give a more descriptive error message
+    new->eps_map_type = MAP_NOT_INITIALIZED;
+    new->pb_force_type = MAP_NOT_INITIALIZED;
+    new->stress_tensor_bc_type = MAP_NOT_INITIALIZED;
+
     new->w = 0.0;  // Ionic boundary width
     new->kbar2 = 0.0;  // Screening factor
     new->kBT = 0.0;
@@ -80,6 +108,10 @@ grid * grid_init(int n, double L, double h, double tol, double eps, double eps_i
     new->eps_x = NULL;  // Dielectric constant in x direction
     new->eps_y = NULL;  // Dielectric constant in y direction
     new->eps_z = NULL;  // Dielectric constant in z direction
+
+    new->update_field = NULL;
+    new->update_charges = NULL;
+    new->update_eps_and_k2 = NULL;
     
     init_func(new);
 
@@ -110,6 +142,8 @@ void grid_pb_init(
     // Initialize the solvent potential and dielectric constant arrays
     int n = grid->n;
     int n_local = grid->n_local;
+
+    grid->update_eps_and_k2 = grid_update_eps_and_k2;
 
     grid->eps_x = mpi_grid_allocate(n_local, n);
     grid->eps_y = mpi_grid_allocate(n_local, n);
@@ -155,7 +189,7 @@ void grid_free(grid *grid) {
     free(grid);
 }
 
-void grid_update_eps_and_k2(grid *g, particles *p) {
+void grid_update_eps_and_k2_roux(grid *g, particles *p) {
     // Update the dielectric constant and screening factor based on the grid's transition regions
     int n = g->n;
     int n_local = g->n_local;
@@ -320,12 +354,13 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
     }
 }    
 
-double grid_update_eps_field_dependent(grid *g, particles *p, double kBT) {
+double grid_update_eps_field_dependent(grid *g, particles *p) {
     mpi_fprintf(stderr, "This function should not be used YET!!\n");
     exit(1);
     int n = g->n;
     int n_local = g->n_local;
     double h = g->h;
+    double kBT = g->kBT;
 
     double eps_s   = g->eps_s;
     double eps_int = g->eps_int;
@@ -515,6 +550,27 @@ void grid_update_eps_and_k2_sphere(grid *g, particles *p)
         } else if (region[idx] != 0) {
             eps_z[idx] = eps_m;
         }
+    }
+}
+
+void grid_update_eps_and_k2(grid *g, particles *p) {
+    switch (g->eps_map_type) {
+        case MAP_NOT_INITIALIZED:
+            mpi_fprintf(stderr, "Error: Epsilon map type not initialized. Please call `grid_pb_init` before running Poisson-Boltzmann related functions.\n");
+            exit(1);
+        case EPS_MAP_TYPE_TRADITIONAL:
+            grid_update_eps_and_k2_roux(g, p);
+            break;
+        case EPS_MAP_TYPE_FIELD_DEPENDENT:
+            // TODO: should this be `grid_update_eps_field_dependent` instead?
+            grid_update_eps_and_k2_roux(g, p);
+            break;
+        case EPS_MAP_TYPE_SPHERE:
+            grid_update_eps_and_k2_sphere(g, p);
+            break;
+        default:
+            mpi_fprintf(stderr, "Unknown epsilon map type: %d\n", g->eps_map_type);
+            exit(1);
     }
 }
 

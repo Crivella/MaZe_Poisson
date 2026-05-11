@@ -131,30 +131,12 @@ void solver_set_field_prev(double *phi) {
 }
 
 int solver_update_field() {
-    g_grid->eps_phi_iters = 0;  // TODO This should probably go into update field
     return g_grid->update_field(g_grid);
 }
 
 void solver_update_eps_k2() {
     // Update the dielectric constant and screening factor based on the grid's transition state
-
-    // TODO The switch-case logic should go in a function separate from here.
-    //      This File mainly act as an API of what we are exposing from C to python. The code execution logic
-    //      should not be here
-    switch (g_grid->eps_map_type) {
-        case EPS_MAP_TYPE_TRADITIONAL:
-            grid_update_eps_and_k2(g_grid, g_particles);
-            break;
-        case EPS_MAP_TYPE_SPHERE:
-            grid_update_eps_and_k2_sphere(g_grid, g_particles);
-            break;
-        case EPS_MAP_TYPE_FIELD_DEPENDENT:
-            grid_update_eps_and_k2(g_grid, g_particles);
-            break;
-        default:
-            mpi_fprintf(stderr, "Unknown eps_map_type: %d\n", g_grid->eps_map_type);
-            exit(1);
-    }
+    g_grid->update_eps_and_k2(g_grid, g_particles);
 }
 
 int get_eps_phi_iters() {
@@ -170,10 +152,6 @@ double solver_compute_forces_noel() {
 }
 
 double solver_compute_forces_pb() {
-    // TODO same here, hide execution logic from this file
-    if (g_grid->pb_force_type == PB_FORCE_TYPE_STRESS_TENSOR) {
-        return particles_compute_forces_pb_stress_tensor(g_particles, g_grid);
-    }
     return g_particles->compute_forces_pb(g_particles, g_grid);
 }
 

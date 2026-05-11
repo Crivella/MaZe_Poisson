@@ -51,21 +51,20 @@ precond_map: Dict[str, int] = {
     # 'BLOCKJACOBI': 4,  # Symmetric Successive Over-Relaxation
 }
 
-# TODO make this get populated from the C API like the other maps, to avoid hardcoding and potential mismatches
 eps_map_type_map: Dict[str, int] = {
-    'TRADITIONAL': 0,
-    'SPHERE': 1,
-    'FIELD_DEPENDENT': 2,
+    # 'TRADITIONAL': 0,
+    # 'SPHERE': 1,
+    # 'FIELD_DEPENDENT': 2,
 }
 
 pb_force_type_map: Dict[str, int] = {
-    'PB_ROUX': 0,
-    'STRESS_TENSOR': 1,
+    # 'PB_ROUX': 0,
+    # 'STRESS_TENSOR': 1,
 }
 
 stress_tensor_bc_type_map: Dict[str, int] = {
-    'DBC': 0,
-    'PBC': 1,
+    # 'DBC': 0,
+    # 'PBC': 1,
 }
 
 class SolverMD(Logger):
@@ -139,6 +138,9 @@ class SolverMD(Logger):
             (ca_scheme_map, 'get_ca_scheme_type_num', 'get_ca_scheme_type_str'),
             (integrator_map, 'get_integrator_type_num', 'get_integrator_type_str'),
             (precond_map, 'get_precond_type_num', 'get_precond_type_str'),
+            (eps_map_type_map, 'get_eps_map_type_num', 'get_eps_map_type_str'),
+            (pb_force_type_map, 'get_pb_force_type_num', 'get_pb_force_type_str'),
+            (stress_tensor_bc_type_map, 'get_stress_tensor_bc_type_num', 'get_stress_tensor_bc_type_str'),
         ]:
             n = getattr(capi, fname_num)()
             for i in range(n):
@@ -490,9 +492,6 @@ class SolverMD(Logger):
     def md_loop_output(self, i: int, force: bool = False):
         """Output the data for the MD loop."""
         self.ofiles.output(i, self, force)
-        # TODO move this logic in the OutputFiles class
-        if self.outset.print_eps_map and (force or i % self.out_stride == 0):
-            self.save_eps_map(iter_idx=i)
 
     @Clock('charges')
     def update_charges(self):
@@ -520,11 +519,7 @@ class SolverMD(Logger):
             self.update_eps_k2()
             self.n_iters = self.update_field()
             self.t_iters = Clock.get_clock('field').last_call
-            # TODO this is probably not needed since it should be always 0 from C if not FIELD_DEPENDENT
-            if self.mdv.eps_map.upper() == 'FIELD_DEPENDENT':
-                self.eps_phi_iters = capi.get_eps_phi_iters()
-            else:
-                self.eps_phi_iters = 0
+            self.eps_phi_iters = capi.get_eps_phi_iters()
         self.compute_forces()
         self.integrator_part2()
 
@@ -552,51 +547,6 @@ class SolverMD(Logger):
         self.initialize()
         self.md_loop()
         self.md_loop_output(self.mdv.N_steps, force=True)
-        if self.outset.print_eps_map:
-            self.save_eps_map()
-
-    def save_eps_map(self, iter_idx: int | None = None, filename: str | None = None) -> str:
-        """Save the dielectric map (eps_x, eps_y, eps_z) to a compressed npz file.
-
-        iter_idx is stored in the file (and used in the default filename) so that
-        epsilon maps across steps can be stitched into an animation.
-        """
-        # Disabled: do not write epsilon map files
-        # TODO
-        # This should be dealt with in the OutputFiles and derived classes as here we do not take into account
-        # running with MPI for the IO
-        return ""
-
-        if not self.mdv.poisson_boltzmann:
-            raise ValueError("Epsilon map is available only when Poisson-Boltzmann is enabled.")
-
-        eps_x = np.empty((self.N, self.N, self.N), dtype=np.float64)
-        eps_y = np.empty_like(eps_x)
-        eps_z = np.empty_like(eps_x)
-        capi.get_eps_map(eps_x, eps_y, eps_z)
-
-        if filename is None:
-            if iter_idx is not None:
-                filename = os.path.join(self.outset.path, f'epsilon_map_step_{iter_idx:06d}.npz')
-            else:
-                filename = os.path.join(self.outset.path, 'epsilon_map.npz')
-        out_dir = os.path.dirname(filename)
-        if out_dir:
-            os.makedirs(out_dir, exist_ok=True)
-
-        np.savez_compressed(
-            filename,
-            eps_x=eps_x,
-            eps_y=eps_y,
-            eps_z=eps_z,
-            h=self.h,
-            L=self.L,
-            eps_s=self.gset.eps_s,
-            eps_int=self.gset.eps_int,
-            iter=iter_idx,
-        )
-        self.logger.info(f"Saved epsilon map to {filename}")
-        return filename
 
     def save_input(self):
         """Save the input parameters to a file."""

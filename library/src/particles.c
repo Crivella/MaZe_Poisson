@@ -423,7 +423,7 @@ double calc_h_ratio(double rad, double w2, double w3) {
     );
 }
 
-double particles_compute_forces_pb(particles *p, grid *g) {
+double particles_compute_forces_pb_roux(particles *p, grid *g) {
     if (! g->pb_enabled) {
         // Poisson-Boltzmann is not enabled
         mpi_fprintf(stderr, "Poisson-Boltzmann forces are not enabled in the grid.\n");
@@ -776,7 +776,6 @@ double particles_compute_forces_pb(particles *p, grid *g) {
     dscal(fcs_db, h / (8.0 * M_PI), size);
     dscal(fcs_ib, h / (8.0 * M_PI), size);
 
-    // TODO: `fabs(p->gamma_np) > 0.0` Isn't this always true?
     if (g->nonpolar_enabled && fabs(p->gamma_np) > 0.0) {
         double eps_delta = eps_s - eps_int;
         if (fabs(eps_delta) < 1e-12) {
@@ -787,10 +786,6 @@ double particles_compute_forces_pb(particles *p, grid *g) {
             exit(1);
         }
         dscal(fcs_np, -p->gamma_np * h / eps_delta, size);
-    } else {
-        // TODO This is probably not needed this should be initialized to zero and not touched if non-polar forces are not enabled
-        // If it is not already 0 here, it means we are doing something wrong in the code
-        memset(fcs_np, 0, size * sizeof(double));
     }
 
     return non_polar_energy;
@@ -815,6 +810,22 @@ double particles_compute_forces_pb_stress_tensor(particles *p, grid *g) {
     memset(p->fcs_db, 0, size * sizeof(double));
     memset(p->fcs_ib, 0, size * sizeof(double));
     return non_polar_energy;
+}
+
+double particles_compute_forces_pb(particles *p, grid *g) {
+    switch (g->pb_force_type)
+    {
+        case MAP_NOT_INITIALIZED:
+            mpi_fprintf(stderr, "Poisson-Boltzmann force type not initialized. Please call `grid_pb_init` before running Poisson-Boltzmann related functions.\n");
+            exit(1);
+        case PB_FORCE_TYPE_PB_ROUX:
+            return particles_compute_forces_pb_roux(p, g);
+        case PB_FORCE_TYPE_STRESS_TENSOR:
+            return particles_compute_forces_pb_stress_tensor(p, g);
+        default:
+            mpi_fprintf(stderr, "Invalid Poisson-Boltzmann force type specified.\n");
+            exit(1);
+    }
 }
 
 void particles_compute_forces_tot(particles *p) {

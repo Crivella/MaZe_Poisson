@@ -1,6 +1,8 @@
 #ifndef __MP_STRUCTS_H
 #define __MP_STRUCTS_H
 
+#define MAP_NOT_INITIALIZED -1
+
 #define GRID_TYPE_NUM 5
 #define GRID_TYPE_LCG 0
 #define GRID_TYPE_FFT 1
@@ -62,8 +64,7 @@ void integrator_free(integrator *integrator);
 void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled, int eps_map_type, int pb_force_type, int stress_tensor_bc_type, double kBT, double eps_field_alpha);
 void grid_pb_free(grid *grid);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
-void grid_update_eps_and_k2_sphere(grid *grid, particles *particles);
-double grid_update_eps_field_dependent(grid *grid, particles *particles, double kBT);
+double grid_update_eps_field_dependent(grid *grid, particles *particles);
 double grid_get_energy_elec(grid *grid);
 
 void lcg_grid_init(grid * grid);
@@ -111,7 +112,6 @@ double particles_compute_forces_tf(particles *p);
 double particles_compute_forces_lj(particles *p);
 double particles_compute_forces_sc(particles *p);
 double particles_compute_forces_pb(particles *p, grid *grid);
-double particles_compute_forces_pb_stress_tensor(particles *p, grid *grid);
 void particles_compute_forces_tot(particles *p);
 
 double particles_get_temperature(particles *p);
@@ -190,6 +190,7 @@ struct grid {
     void    (*apply_precond)( double *, double *, int, int, int);
     int     (*update_field)( grid *);
     double  (*update_charges)( grid *, particles *);
+    void    (*update_eps_and_k2)( grid *, particles *);
 };
 
 struct particles {
