@@ -493,6 +493,7 @@ class SolverMD(Logger):
             sys.exit(1)
 
     #Does not change the charge for testing purpose
+    @Clock('smoothing')
     def smoothing(self):
         #print("Performing smoothing.")
         if self.mdv.R_c is None:
@@ -526,13 +527,21 @@ class SolverMD(Logger):
     def md_loop_iter(self):
         """Run one iteration of the molecular dynamics loop."""
         self.integrator_part1()
+        self.t_charges = 0.0
+        self.t_smoothing = 0.0
+        self.t_field = 0.0
+        self.t_elec_total = 0.0
         if self.mdv.elec:
             self.update_charges()
+            self.t_charges = Clock.get_clock('charges').last_call
             if self.mdv.smoothing==True:
                 self.smoothing()
+                self.t_smoothing = Clock.get_clock('smoothing').last_call
             self.update_eps_k2()
             self.n_iters = self.update_field()
-            self.t_iters = Clock.get_clock('field').last_call
+            self.t_field = Clock.get_clock('field').last_call
+            self.t_elec_total = self.t_charges + self.t_smoothing + self.t_field
+            self.t_iters = self.t_field
         self.compute_forces()
         self.integrator_part2()
 

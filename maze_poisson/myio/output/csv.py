@@ -144,12 +144,16 @@ class SolutesCSVOutputFile(CSVOutputFile):
 
 class PerformanceCSVOutputFile(CSVOutputFile):
     name =  'performance'
-    headers = ['iter', 'time', 'n_iters']
+    headers = ['iter', 'time', 'n_iters', 't_charges', 't_smoothing', 't_field', 't_elec_total']
     def get_data(self, iter: int, solver):
         return pd.DataFrame({
             'iter': [iter],
             'time': [solver.t_iters],
-            'n_iters': [solver.n_iters]
+            'n_iters': [solver.n_iters],
+            't_charges': [getattr(solver, 't_charges', 0.0)],
+            't_smoothing': [getattr(solver, 't_smoothing', 0.0)],
+            't_field': [getattr(solver, 't_field', 0.0)],
+            't_elec_total': [getattr(solver, 't_elec_total', 0.0)],
         })
 
 class RestartCSVOutputFile(CSVOutputFile):
