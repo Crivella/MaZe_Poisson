@@ -1,5 +1,6 @@
 from dataclasses import asdict, dataclass
 from functools import wraps
+from typing import Optional
 
 from ...constants import a0, kB, t_au
 from ...myio.loggers import logger
@@ -53,6 +54,8 @@ class OutputSettings(BaseFileInput):
     print_energy: bool = False
     print_temperature: bool = False
     print_tot_force: bool = False
+    print_force_components: bool = False
+    print_force_components_particle: bool = False
     print_forces_pb: bool = False
     print_restart: bool = False
     print_restart_field: bool = False
@@ -65,6 +68,7 @@ class OutputSettings(BaseFileInput):
 
     debug: bool = False
     restart_step: int = None
+    force_components_particle: int = 2
 
 @dataclass(kw_only=True)
 class GridSetting(BaseFileInput):
@@ -110,10 +114,18 @@ class MDVariables(BaseFileInput):
 
     potential: str = 'TF'  # Type of potential to use
     potential_params_file: str = None  # File containing potential parameters
+    r_cut_tf: float = None  # Optional TF cutoff in a.u.; defaults to L/2
+    r_cut_lj: float = None  # Optional LJ cutoff in a.u.; defaults to L/2
+    lj_force_shift: bool = True  # If False, use LAMMPS-like lj/cut forces plus LJ tail energy correction
+    r_cut_sc: float = None  # Optional SC cutoff in a.u.; defaults to L/2
 
     integrator: str = 'OVRVO'  # Integrator method
     method: str = 'FFT'  # Method for solving the Poisson equation
     tol: float = 1e-7  # Tolerance for convergence
+
+    iswater: bool = False  # Flag to toggle SPC water setup
+    electrostatic_correction: str = 'SR'  # SPREAD | SR 
+
     smoothing: bool = False #Decide wether perform smoohting of the charges or not
     R_c: float = None #Cutoff distance
     sigma_gauss: float = None # Gaussian smoothing width
@@ -122,6 +134,7 @@ class MDVariables(BaseFileInput):
     gamma: float = 1e-3  # Damping coefficient for the thermostat
 
     rescale: bool = False  # Whether to rescale velocities
+    rescale_stride: Optional[int] = None  # If set, rescale velocities every rescale_stride MD steps
     invert_time: bool = False  # Whether to invert the time direction
 
     # Poisson-Boltzmann specific
@@ -131,10 +144,17 @@ class MDVariables(BaseFileInput):
     beta_np: float = 0.0  # offset in kcal/mol
     probe_radius: float = 1.4 / a0  # Probe radius in a.u.
 
-    def __post__init__(self):
+    def __post_init__(self):
         """Post-initialization to set defaults."""
         if self.dt_fs <= 0:
             raise ValueError("dt_fs must be a positive value.")
+        if isinstance(self.rescale_stride, str) and self.rescale_stride.strip().lower() in ('none', 'null'):
+            self.rescale_stride = None
+        if self.rescale_stride is not None:
+            if isinstance(self.rescale_stride, bool) or not isinstance(self.rescale_stride, int):
+                raise ValueError("rescale_stride must be None or a positive integer.")
+            if self.rescale_stride <= 0:
+                raise ValueError("rescale_stride must be a positive integer.")
 
     @property
     def kBT(self):

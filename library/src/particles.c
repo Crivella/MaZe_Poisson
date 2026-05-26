@@ -9,6 +9,7 @@
 #include "forces.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
+#include "omp_base.h"
 
 #define NUM_NEIGH_CIC 8
 #define NUM_NEIGH_SPLINE 64
@@ -33,6 +34,17 @@ int get_ca_scheme_type_num() {
 
 char *get_ca_scheme_type_str(int n) {
     return ca_scheme_type_str[n];
+}
+
+// Water electrostatic types
+char water_electrostatic_type_str[WATER_ELECTROSTATIC_CORR_TYPE_NUM][16] = {"SPREAD", "SR"};
+
+int get_water_electrostatic_type_num() {
+    return WATER_ELECTROSTATIC_CORR_TYPE_NUM;
+}
+
+char *get_water_electrostatic_type_str(int n) {
+    return water_electrostatic_type_str[n];
 }
 
 void particle_charges_init(particles *p, int cas_type) {
@@ -65,6 +77,10 @@ void particle_charges_init(particles *p, int cas_type) {
     }   
 }
 
+/*
+TODO: Need to implement a specific init function for water like we do for the PB instead of doing it manually in 
+solver_md.c
+*/
 particles * particles_init(int n, int n_p, int n_typ, double L, double h, int cas_type) {
     particles *p = (particles *)malloc(sizeof(particles));
     p->n = n;
@@ -81,6 +97,15 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
     p->fcs_tot = (double *)calloc(n_p * 3, sizeof(double));
     p->mass = (double *)malloc(n_p * sizeof(double));
     p->charges = (double *)malloc(n_p * sizeof(double));
+
+    p->is_water = 0;
+    p->fcs_intra = NULL; // Intramolecular forces total
+    p->fcs_corr = NULL; // Electrostatic correction forces
+    p->energy_intra = 0.0; // Intramolecular energy bond-angle
+    p->energy_corr = 0.0; // Intramolecular exclusion correction energy
+    p->compute_intramolecular_forces = NULL;
+    p->compute_forces_electrostatic_correction = NULL;
+    p->lj_force_shift = 1;
 
     p->pb_enabled = 0;  // Poisson-Boltzmann not enabled by default
     p->fcs_db = NULL;
@@ -105,7 +130,9 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
     // p-> compute_energy_short_range = particles_compute_energy_short_range;
     p->get_momentum = particles_get_momentum;
     p->rescale_velocities = particles_rescale_velocities;
-    // p->rescale_velocities = particles_rescale_momenta;
+    // p->rescale_velocities = particles_zero_linear;
+    p->rescale_momenta = particles_rescale_momenta;
+    // p->rescale_momenta = particles_rescale_momenta_water;
 
     p-> smoothing = false;
     p->R_c = 0.0;
@@ -141,6 +168,37 @@ void particles_pb_free(particles *p) {
     }
 }
 
+void particles_water_init(particles *p, int is_water, int corr_type) {
+    if (!is_water) {
+        return;
+    }
+    p->is_water = 1;
+    p->corr_type = corr_type;
+    
+    p->fcs_intra = (double *)calloc(p->n_p * 3, sizeof(double)); // Intramolecular forces total
+    p->fcs_corr = (double *)calloc(p->n_p * 3, sizeof(double)); // Electrostatic correction forces
+
+    p->compute_intramolecular_forces = particles_compute_intramolecular_forces;
+    switch (corr_type) {
+        case WATER_ELECTROSTATIC_CORR_TYPE_SPREAD:
+            p->compute_forces_electrostatic_correction = particles_compute_forces_electrostatic_correction_spread;
+            break;
+        case WATER_ELECTROSTATIC_CORR_TYPE_SR:
+            p->compute_forces_electrostatic_correction = particles_compute_forces_electrostatic_correction_sr;
+            break;
+        default:
+            mpi_fprintf(stderr, "Invalid electrostatic correction type %d\n", corr_type);
+            exit(1);
+    }
+}
+
+void particles_water_free(particles *p) {
+    if (p->is_water) {
+        free(p->fcs_intra);
+        free(p->fcs_corr);
+    }
+}
+
 void particles_free(particles *p) {
     free(p->types);
     free(p->pos);
@@ -159,6 +217,7 @@ void particles_free(particles *p) {
     }
 
     particles_pb_free(p);
+    particles_water_free(p);
 
     free(p);
 }
@@ -191,7 +250,7 @@ void particles_init_potential_tf(particles *p, double *pot_params) {
 
     p->tf_params = (double *)malloc(7 * np2 * sizeof(double));
 
-    double r_cut = p->L / 2.0;
+    double r_cut = (p->r_cut > 0.0) ? p->r_cut : p->L / 2.0;
     p->r_cut = r_cut;
     double r_cut_6 = pow(r_cut, 6);
     double r_cut_7 = r_cut_6 * r_cut;
@@ -242,7 +301,7 @@ void particles_init_potential_lj(particles *p, double *pot_params) {
 
     p->lj_params = (double *)malloc(4 * np2 * sizeof(double));
 
-    double r_cut = p->L / 2.0;
+    double r_cut = (p->r_cut > 0.0) ? p->r_cut : p->L / 2.0;
     p->r_cut = r_cut;
     
     long int in, inj, idx;
@@ -254,14 +313,19 @@ void particles_init_potential_lj(particles *p, double *pot_params) {
             inj = in + j;
             typ2 = p->types[j];
 
-            idx = (typ1 * n_typ + typ2) * 4;  // Assuming pot_params is structured as [sigma, epsilon, alpha, beta] for each type pair
+            idx = (typ1 * n_typ + typ2) * 2;  // pot_params is structured as [sigma, epsilon] for each type pair
 
             sigma = pot_params[idx + 0];
             epsilon = pot_params[idx + 1];
 
-            v_shift = 4 * epsilon * (pow(sigma / r_cut, 12) - pow(sigma / r_cut, 6));
-            alpha = 4 * (12 * epsilon * pow(sigma / r_cut, 12) - 6 * epsilon * pow(sigma / r_cut, 6)) / r_cut;
-            beta = - v_shift - alpha * r_cut;
+            if (p->lj_force_shift) {
+                v_shift = 4 * epsilon * (pow(sigma / r_cut, 12) - pow(sigma / r_cut, 6));
+                alpha = 4 * (12 * epsilon * pow(sigma / r_cut, 12) - 6 * epsilon * pow(sigma / r_cut, 6)) / r_cut;
+                beta = - v_shift - alpha * r_cut;
+            } else {
+                alpha = 0.0;
+                beta = 0.0;
+            }
 
             p->lj_params[0*np2 + inj] = sigma;
             p->lj_params[1*np2 + inj] = epsilon;
@@ -284,7 +348,7 @@ void particles_init_potential_sc(particles *p, double *pot_params) {
     d = pot_params[1];
     B_nu = pot_params[2];
 
-    p->r_cut = 0.5 * p->L;
+    p->r_cut = (p->r_cut > 0.0) ? p->r_cut : 0.5 * p->L;
     r_cut = p->r_cut;
 
     d_over_r_cut = d / r_cut;
@@ -408,7 +472,7 @@ double particles_compute_forces_sc(particles *p) {
 }
 
 double particles_compute_forces_lj(particles *p) { 
-    return compute_lj_forces(p->n_p, p->L, p->pos, p->lj_params, p->r_cut, p->fcs_noel);
+    return compute_lj_forces(p->n_p, p->L, p->pos, p->lj_params, p->r_cut, p->fcs_noel, p->lj_force_shift);
 }
 
 // double particles_compute_energy_short_range(particles *p) {
@@ -417,6 +481,587 @@ double particles_compute_forces_lj(particles *p) {
 //     }
 //     return compute_energy_short_range_pairwise(p->n_p, p->pos, p->charges, p->R_c, p->L);
 // }
+
+/*
+Legacy intramolecular implementation (bond + angle in one loop).
+Kept commented out for reference per request.
+*/
+#if 0
+double particles_compute_intramolecular_forces(particles *p) {
+    if (!p->is_water) {
+        return 0.0;
+    }
+
+    int rank = 0;
+    int size = 1;
+#ifdef __MPI
+    size = get_size();
+    if (size < 1) {
+        size = 1;
+    }
+    rank = get_rank();
+#endif
+
+    long int np = p->n_p;
+    double *pos = p->pos;
+    double *fcs = p->fcs_intra;
+    double L = p->L;
+    p->energy_intra = 0.0;
+    if (fcs == NULL) {
+        fcs = (double *)calloc(np * 3, sizeof(double));
+        p->fcs_intra = fcs;
+    } else {
+        memset(fcs, 0, np * 3 * sizeof(double));
+    }
+
+    double energy_ba = 0.0;
+
+    // Utility for minimum image
+    #define MIN_IMG(d) (d -= L * round(d / L))
+
+    #pragma omp parallel for reduction(+:energy_ba)
+    for (long int m = 0; m < np / 3; m++) {
+        if (size > 1 && (m % size) != rank) {
+            continue;
+        }
+        long int iO = m * 3;
+        double qO = p->charges[iO];
+        double qH1 = p->charges[iO + 1];
+        double qH2 = p->charges[iO + 2];
+
+        long int o3 = iO * 3;
+        long int h13 = (iO + 1) * 3;
+        long int h23 = (iO + 2) * 3;
+
+        // Vectors O->H1 and O->H2 with PBC
+        double r1x = pos[h13    ] - pos[o3    ];
+        double r1y = pos[h13 + 1] - pos[o3 + 1];
+        double r1z = pos[h13 + 2] - pos[o3 + 2];
+        MIN_IMG(r1x); MIN_IMG(r1y); MIN_IMG(r1z);
+
+        double r2x = pos[h23    ] - pos[o3    ];
+        double r2y = pos[h23 + 1] - pos[o3 + 1];
+        double r2z = pos[h23 + 2] - pos[o3 + 2];
+        MIN_IMG(r2x); MIN_IMG(r2y); MIN_IMG(r2z);
+
+        double r1 = sqrt(r1x * r1x + r1y * r1y + r1z * r1z) + 1e-8;
+        double r2 = sqrt(r2x * r2x + r2y * r2y + r2z * r2z) + 1e-8;
+        if(r1 < 1e-8) printf("r1<1e-8!!\n");
+        if(r2 < 1e-8) printf("r2<1e-8!!\n");
+
+        // Bond energies
+        double dr1 = r1 - r0;
+        double dr2 = r2 - r0;
+        double ebond = 0.5 * kb * (dr1 * dr1 + dr2 * dr2);
+
+        // Bond forces
+        double fb1 = -kb * dr1 / r1;
+        double fb2 = -kb * dr2 / r2;
+
+        double f1x = fb1 * r1x;
+        double f1y = fb1 * r1y;
+        double f1z = fb1 * r1z;
+
+        double f2x = fb2 * r2x;
+        double f2y = fb2 * r2y;
+        double f2z = fb2 * r2z;
+
+        // Angle - cos(theta) = \vec{r1} * \vec{r2} / (r1 * r2)
+        double cos_t = (r1x * r2x + r1y * r2y + r1z * r2z) / (r1 * r2);
+        if (cos_t > 1.0) cos_t = 1.0;
+        if (cos_t < -1.0) cos_t = -1.0;
+
+        double theta = acos(cos_t);
+        double dtheta = theta - theta0;
+
+        // Angle energy
+        double eangle = 0.5 * ka * dtheta * dtheta;
+
+        // Forces from angle term
+        if (fabs(sin(theta)) < 1e-6) printf("WARNING: sin(theta) = %lf\n", sin(theta));
+        double coef = ka * dtheta / (sin(theta) + 1e-8);
+        double v1x = r1x / r1, v1y = r1y / r1, v1z = r1z / r1;
+        double v2x = r2x / r2, v2y = r2y / r2, v2z = r2z / r2;
+
+        double fa1x = coef * (v2x - cos_t * v1x) / r1;
+        double fa1y = coef * (v2y - cos_t * v1y) / r1;
+        double fa1z = coef * (v2z - cos_t * v1z) / r1;
+
+        double fa2x = coef * (v1x - cos_t * v2x) / r2;
+        double fa2y = coef * (v1y - cos_t * v2y) / r2;
+        double fa2z = coef * (v1z - cos_t * v2z) / r2;
+
+        // Accumulate forces (bond + angle)
+        fcs[h13    ] += f1x + fa1x;
+        fcs[h13 + 1] += f1y + fa1y;
+        fcs[h13 + 2] += f1z + fa1z;
+
+        fcs[h23    ] += f2x + fa2x;
+        fcs[h23 + 1] += f2y + fa2y;
+        fcs[h23 + 2] += f2z + fa2z;
+
+        fcs[o3    ] -= (f1x + f2x + fa1x + fa2x);
+        fcs[o3 + 1] -= (f1y + f2y + fa1y + fa2y);
+        fcs[o3 + 2] -= (f1z + f2z + fa1z + fa2z);
+
+        energy_ba += ebond + eangle;
+    }
+
+    #undef MIN_IMG
+
+#ifdef __MPI
+    if (size > 1) {
+        long int n3 = np * 3;
+        allreduce_sum(fcs, n3);
+        allreduce_sum(&energy_ba, 1);
+    }
+#endif
+
+    p->energy_intra = energy_ba;
+    return p->energy_intra;
+}
+#endif
+
+double particles_compute_intramolecular_forces(particles *p) {
+    if (!p->is_water) {
+        return 0.0;
+    }
+
+    long int np = p->n_p;
+    long int n3 = np * 3;
+
+    double *fcs = p->fcs_intra;
+    double *fcs_tmp = (double *)calloc(n3, sizeof(double));
+
+    memset(fcs, 0, np * 3 * sizeof(double));
+    double energy_bond = compute_forces_harmonic_bond(np, p->pos, fcs_tmp, p->L, kb, r0);
+    daxpy(fcs_tmp, fcs, 1.0, n3);  // fcs += fcs_tmp
+    double energy_angle = compute_forces_harmonic_angle(np, p->pos, fcs_tmp, p->L, ka, theta0);
+    daxpy(fcs_tmp, fcs, 1.0, n3);  // fcs += fcs_tmp
+
+    free(fcs_tmp);
+
+    p->energy_intra = energy_bond + energy_angle;
+
+    return p->energy_intra;
+}
+
+double particles_compute_forces_electrostatic_correction_spread(particles *p, grid *g) {
+    long int size = p->n_p * 3;
+
+    // int rank = get_rank();
+    // int size_mpi = get_size();
+
+
+    long int n_p = p->n_p;
+    long int n_triplets = n_p / 3;
+    double *pos = p->pos;
+    double *charges = p->charges;
+    double *fcs = p->fcs_corr;
+    double L = p->L;
+    double h = g->h;
+    double energy_corr = 0.0;
+    double dx, dy, dz, r2, r, force_mag;
+
+    memset(fcs, 0, size * sizeof(double));
+
+    // Use the number of neighbors based on the spreading function.
+    int num_neighbors = p->num_neighbors;
+
+    // Intramolecular correction from spread charges:
+    // loop over unique atom pairs in each molecule (O-H1, O-H2, H1-H2).
+    #pragma omp parallel for reduction(+:energy_corr, fcs[:size])
+    for (long int m = 0; m < n_triplets; m++) {
+        long int idx = m * 3;
+
+        for (int a = 0; a < 3; a++) {
+            long int ia = idx + a;
+            long int fa = ia * 3;
+            long int na0 = ia * num_neighbors * 3;
+            double pxa = pos[fa];
+            double pya = pos[fa + 1];
+            double pza = pos[fa + 2];
+            double qa = charges[ia];
+
+            for (int b = a + 1; b < 3; b++) {
+                long int ib = idx + b;
+                long int fb = ib * 3;
+                long int nb0 = ib * num_neighbors * 3;
+                double pxb = pos[fb];
+                double pyb = pos[fb + 1];
+                double pzb = pos[fb + 2];
+                double qb = charges[ib];
+
+                for (int j1 = 0; j1 < num_neighbors; j1++) {
+                    long int i1 = na0 + j1 * 3;
+                    long int ni = p->neighbors[i1];
+                    long int nj = p->neighbors[i1 + 1];
+                    long int nk = p->neighbors[i1 + 2];
+
+                    double wx1 = p->charges_spread_func(pxa - ni * h, L, h);
+                    double wy1 = p->charges_spread_func(pya - nj * h, L, h);
+                    double wz1 = p->charges_spread_func(pza - nk * h, L, h);
+                    double qg1 = qa * wx1 * wy1 * wz1;
+                    if (qg1 == 0.0) {
+                        continue;
+                    }
+
+                    for (int j2 = 0; j2 < num_neighbors; j2++) {
+                        long int i2 = nb0 + j2 * 3;
+                        long int ni2 = p->neighbors[i2];
+                        long int nj2 = p->neighbors[i2 + 1];
+                        long int nk2 = p->neighbors[i2 + 2];
+
+                        if (ni == ni2 && nj == nj2 && nk == nk2) {
+                            continue;
+                        }
+
+                        double wx2 = p->charges_spread_func(pxb - ni2 * h, L, h);
+                        double wy2 = p->charges_spread_func(pyb - nj2 * h, L, h);
+                        double wz2 = p->charges_spread_func(pzb - nk2 * h, L, h);
+                        double qg2 = qb * wx2 * wy2 * wz2;
+                        if (qg2 == 0.0) {
+                            continue;
+                        }
+
+                        dx = (ni - ni2) * h;
+                        dy = (nj - nj2) * h;
+                        dz = (nk - nk2) * h;
+
+                        // Minimum image convention in real space.
+                        dx -= L * nearbyint(dx / L);
+                        dy -= L * nearbyint(dy / L);
+                        dz -= L * nearbyint(dz / L);
+
+                        r2 = dx * dx + dy * dy + dz * dz;
+                        if (r2 == 0.0) {
+                            continue;
+                        }
+                        r = sqrt(r2);
+
+                        force_mag = -(qg1 * qg2) / (r2 * r);
+                        energy_corr -= (qg1 * qg2) / r;
+
+                        fcs[fa    ] += force_mag * dx;
+                        fcs[fa + 1] += force_mag * dy;
+                        fcs[fa + 2] += force_mag * dz;
+                        fcs[fb    ] -= force_mag * dx;
+                        fcs[fb + 1] -= force_mag * dy;
+                        fcs[fb + 2] -= force_mag * dz;
+                    }
+                }
+            }
+        }
+    }
+
+    p->energy_corr = energy_corr;
+    return p->energy_corr;
+}
+
+// TODO: remove and leave only the non-self
+double particles_compute_forces_electrostatic_correction_spread_self(particles *p, grid *g) {
+    // Start from intramolecular spread correction (O-H1, O-H2, H1-H2).
+    particles_compute_forces_electrostatic_correction_spread(p, g);
+
+    long int n_p = p->n_p;
+    long int n3 = n_p * 3;
+    double *pos = p->pos;
+    double *charges = p->charges;
+    double *fcs = p->fcs_corr;
+    double L = p->L;
+    double h = g->h;
+    double energy_corr = p->energy_corr;
+
+    int num_neighbors = p->num_neighbors;
+
+    // Add same-atom chargelet-chargelet contributions (j1 != j2).
+    #pragma omp parallel for reduction(+:energy_corr, fcs[:n3])
+    for (long int ia = 0; ia < n_p; ia++) {
+        long int fa = ia * 3;
+        long int na0 = ia * num_neighbors * 3;
+        double pxa = pos[fa];
+        double pya = pos[fa + 1];
+        double pza = pos[fa + 2];
+        double qa = charges[ia];
+
+        for (int j1 = 0; j1 < num_neighbors; j1++) {
+            long int i1 = na0 + j1 * 3;
+            long int ni = p->neighbors[i1];
+            long int nj = p->neighbors[i1 + 1];
+            long int nk = p->neighbors[i1 + 2];
+
+            double wx1 = p->charges_spread_func(pxa - ni * h, L, h);
+            double wy1 = p->charges_spread_func(pya - nj * h, L, h);
+            double wz1 = p->charges_spread_func(pza - nk * h, L, h);
+            double qg1 = qa * wx1 * wy1 * wz1;
+            if (qg1 == 0.0) {
+                continue;
+            }
+
+            for (int j2 = j1 + 1; j2 < num_neighbors; j2++) {
+                long int i2 = na0 + j2 * 3;
+                long int ni2 = p->neighbors[i2];
+                long int nj2 = p->neighbors[i2 + 1];
+                long int nk2 = p->neighbors[i2 + 2];
+
+                double wx2 = p->charges_spread_func(pxa - ni2 * h, L, h);
+                double wy2 = p->charges_spread_func(pya - nj2 * h, L, h);
+                double wz2 = p->charges_spread_func(pza - nk2 * h, L, h);
+                double qg2 = qa * wx2 * wy2 * wz2;
+                if (qg2 == 0.0) {
+                    continue;
+                }
+
+                double dx = (ni - ni2) * h;
+                double dy = (nj - nj2) * h;
+                double dz = (nk - nk2) * h;
+                dx -= L * nearbyint(dx / L);
+                dy -= L * nearbyint(dy / L);
+                dz -= L * nearbyint(dz / L);
+
+                double r2 = dx * dx + dy * dy + dz * dz;
+                if (r2 == 0.0) {
+                    continue;
+                }
+                double r = sqrt(r2);
+                double force_mag = -(qg1 * qg2) / (r2 * r);
+
+                fcs[fa    ] += force_mag * dx;
+                fcs[fa + 1] += force_mag * dy;
+                fcs[fa + 2] += force_mag * dz;
+                energy_corr -= (qg1 * qg2) / r;
+            }
+        }
+    }
+
+    p->energy_corr = energy_corr;
+    return p->energy_corr;
+}
+
+double particles_compute_forces_electrostatic_correction_sr(particles *p, grid *g) {
+    if (!p->is_water) {
+        p->energy_corr = 0.0;
+        return p->energy_corr;
+    }
+
+    long int n_p = p->n_p;
+    long int n3 = n_p * 3;
+    long int n_triplets = n_p / 3;
+    double *pos = p->pos;
+    double *fcs = p->fcs_corr;
+    double L = p->L;
+    double energy_corr = 0.0;
+
+    memset(fcs, 0, n3 * sizeof(double));
+
+    // Utility for minimum image
+    #define MIN_IMG(d) (d -= L * nearbyint(d / L))
+
+    #pragma omp parallel for reduction(+:energy_corr, fcs[:n3])
+    for (long int m = 0; m < n_p / 3; m++) {
+        long int iO = m * 3;
+        double qO = p->charges[iO];
+        double qH1 = p->charges[iO + 1];
+        double qH2 = p->charges[iO + 2];
+
+        long int o3 = iO * 3;
+        long int h13 = (iO + 1) * 3;
+        long int h23 = (iO + 2) * 3;
+
+        // Vectors O->H1 and O->H2 with PBC
+        double r1x = pos[h13    ] - pos[o3    ];
+        double r1y = pos[h13 + 1] - pos[o3 + 1];
+        double r1z = pos[h13 + 2] - pos[o3 + 2];
+        MIN_IMG(r1x); MIN_IMG(r1y); MIN_IMG(r1z);
+
+        double r2x = pos[h23    ] - pos[o3    ];
+        double r2y = pos[h23 + 1] - pos[o3 + 1];
+        double r2z = pos[h23 + 2] - pos[o3 + 2];
+        MIN_IMG(r2x); MIN_IMG(r2y); MIN_IMG(r2z);
+
+        double r1 = sqrt(r1x * r1x + r1y * r1y + r1z * r1z) + 1e-15;
+        double r2 = sqrt(r2x * r2x + r2y * r2y + r2z * r2z) + 1e-15;
+
+        double hhx = r2x - r1x;
+        double hhy = r2y - r1y;
+        double hhz = r2z - r1z;
+        MIN_IMG(hhx); MIN_IMG(hhy); MIN_IMG(hhz);
+
+        double inv_r, inv_r3, fac;
+
+        // O-H1
+        inv_r = 1.0 / r1;
+        inv_r3 = inv_r * inv_r * inv_r;
+        fac = -qO * qH1 * inv_r3;
+        fcs[o3    ] -= fac * r1x;
+        fcs[o3 + 1] -= fac * r1y;
+        fcs[o3 + 2] -= fac * r1z;
+        fcs[h13    ] += fac * r1x;
+        fcs[h13 + 1] += fac * r1y;
+        fcs[h13 + 2] += fac * r1z;
+        energy_corr -= qO * qH1 * inv_r;
+
+        // O-H2
+        inv_r = 1.0 / r2;
+        inv_r3 = inv_r * inv_r * inv_r;
+        fac = -qO * qH2 * inv_r3;
+        fcs[o3    ] -= fac * r2x;
+        fcs[o3 + 1] -= fac * r2y;
+        fcs[o3 + 2] -= fac * r2z;
+        fcs[h23    ] += fac * r2x;
+        fcs[h23 + 1] += fac * r2y;
+        fcs[h23 + 2] += fac * r2z;
+        energy_corr -= qO * qH2 * inv_r;
+
+        // H1-H2
+        inv_r = 1.0 / (sqrt(hhx * hhx + hhy * hhy + hhz * hhz) + 1e-15);
+        inv_r3 = inv_r * inv_r * inv_r;
+        fac = -qH1 * qH2 * inv_r3;
+        fcs[h13    ] -= fac * hhx;
+        fcs[h13 + 1] -= fac * hhy;
+        fcs[h13 + 2] -= fac * hhz;
+        fcs[h23    ] += fac * hhx;
+        fcs[h23 + 1] += fac * hhy;
+        fcs[h23 + 2] += fac * hhz;
+        energy_corr -= qH1 * qH2 * inv_r;
+    }
+
+    #undef MIN_IMG
+
+    p->energy_corr = energy_corr;
+    return p->energy_corr;
+}
+
+// double particles_compute_forces_electrostatic_correction_maze(particles *p, grid *g) {
+//     if (!p->is_water) {
+//         p->energy_corr = 0.0;
+//         return p->energy_corr;
+//     }
+
+//     int rank = 0;
+//     int size_mpi = 1;
+// #ifdef __MPI
+//     size_mpi = get_size();
+//     if (size_mpi < 1) {
+//         size_mpi = 1;
+//     }
+//     rank = get_rank();
+// #endif
+
+//     long int size = p->n_p * 3;
+//     if (p->fcs_corr == NULL) {
+//         p->fcs_corr = (double *)calloc(size, sizeof(double));
+//     } else {
+//         memset(p->fcs_corr, 0, size * sizeof(double));
+//     }
+
+//     long int np = p->n_p;
+//     double energy_corr = 0.0;
+
+//     double *forces_tmp = (double *)calloc(size, sizeof(double));
+//     double *charges_tmp = (double *)calloc(np, sizeof(double));
+//     if (forces_tmp == NULL || charges_tmp == NULL) {
+//         mpi_fprintf(stderr, "Error: Failed to allocate temporary buffers for electrostatic correction.\n");
+//         free(forces_tmp);
+//         free(charges_tmp);
+//         return 0.0;
+//     }
+
+//     long int grid_size = g->size;
+//     double *q_save = (double *)malloc(grid_size * sizeof(double));
+//     double *phi_n_save = (double *)malloc(grid_size * sizeof(double));
+//     double *phi_p_save = NULL;
+//     if (g->phi_p != NULL) {
+//         phi_p_save = (double *)malloc(grid_size * sizeof(double));
+//     }
+//     if (q_save == NULL || phi_n_save == NULL || (g->phi_p != NULL && phi_p_save == NULL)) {
+//         mpi_fprintf(stderr, "Error: Failed to allocate grid save buffers for electrostatic correction.\n");
+//         free(forces_tmp);
+//         free(charges_tmp);
+//         free(q_save);
+//         free(phi_n_save);
+//         free(phi_p_save);
+//         return 0.0;
+//     }
+
+//     // Save global grid state; it will be restored after per-molecule correction.
+//     memcpy(q_save, g->q, grid_size * sizeof(double));
+//     memcpy(phi_n_save, g->phi_n, grid_size * sizeof(double));
+//     if (g->phi_p != NULL) {
+//         memcpy(phi_p_save, g->phi_p, grid_size * sizeof(double));
+//     }
+
+//     // Ensure neighbors are up to date before looping.
+//     p->update_nearest_neighbors(p);
+
+//     double *charges_orig = p->charges;
+//     for (long int m = 0; m < np / 3; m++) {
+//         if (size_mpi > 1 && (m % size_mpi) != rank) {
+//             continue;
+//         }
+//         long int iO = m * 3;
+
+//         memset(charges_tmp, 0, np * sizeof(double));
+//         charges_tmp[iO] = charges_orig[iO];
+//         charges_tmp[iO + 1] = charges_orig[iO + 1];
+//         charges_tmp[iO + 2] = charges_orig[iO + 2];
+
+//         p->charges = charges_tmp;
+
+//         g->update_charges(g, p);
+//         // Use plain multigrid field update for correction (no MAZE state dependency).
+//         multigrid_grid_init_field(g);
+//         int corr_field_res = multigrid_grid_update_field(g);
+//         if (corr_field_res == -1) {
+//             int rank = get_rank();
+//             if (rank == 0) {
+//                 FILE *fp = solver_open_not_converged_log();
+//                 if (fp != NULL) {
+//                     fprintf(fp,
+//                             "electrostatic correction did not converge for molecule %ld/%ld; correction skipped\n",
+//                             m, np / 3);
+//                     fclose(fp);
+//                 }
+//             }
+//             continue;
+//         }
+
+//         compute_force_fd(
+//             g->n, p->n_p, g->h, p->num_neighbors,
+//             g->phi_n, p->neighbors, p->charges, p->pos, forces_tmp,
+//             p->charges_spread_func
+//         );
+
+//         // Subtractive correction: self-field contribution.
+//         daxpy(forces_tmp, p->fcs_corr, -1.0, size);
+//     }
+
+//     p->charges = charges_orig;
+
+//     // Restore global grid state to avoid altering the main simulation fields.
+//     memcpy(g->q, q_save, grid_size * sizeof(double));
+//     memcpy(g->phi_n, phi_n_save, grid_size * sizeof(double));
+//     if (g->phi_p != NULL) {
+//         memcpy(g->phi_p, phi_p_save, grid_size * sizeof(double));
+//     }
+
+//     free(q_save);
+//     free(phi_n_save);
+//     free(phi_p_save);
+//     free(forces_tmp);
+//     free(charges_tmp);
+
+//     #ifdef __MPI
+//     if (size_mpi > 1) {
+//         allreduce_sum(p->fcs_corr, np * 3);
+//         allreduce_sum(&energy_corr, 1);
+//     }
+//     #endif
+
+//     p->energy_corr = energy_corr;
+//     return p->energy_corr;
+// }
+
 
 double calc_h_ratio(double rad, double w2, double w3) {
     return (
@@ -806,6 +1451,11 @@ void particles_compute_forces_tot(particles *p) {
     if (p->fcs_np != NULL) {
         daxpy(p->fcs_np, p->fcs_tot, 1.0, size);
     }
+    if (p->is_water && p->fcs_intra != NULL && p->fcs_corr != NULL) {
+        daxpy(p->fcs_intra, p->fcs_tot, 1.0, size);
+        // fcs_corr is stored with negative sign; add it to subtract the correction.
+        daxpy(p->fcs_corr, p->fcs_tot, 1.0, size);
+    }
 } 
 
 
@@ -852,6 +1502,25 @@ void particles_get_momentum(particles *p, double *out) {
     out[2] = pz;
 }
 
+// works only for 2 species with same population, below is a more general version that does not assume that
+// void particles_rescale_velocities(particles *p) {
+//     double *init_vel = (double *)calloc(p->n_typ * 3, sizeof(double));
+
+//     for (int i = 0; i < p->n_p; i++) {
+//         for (int j = 0; j < 3; j++) {
+//             init_vel[p->types[i] * 3 + j] += p->vel[i * 3 + j];
+//         }
+//     }
+
+//     for (int i = 0; i < p->n_p; i++) {
+//         for (int j = 0; j < 3; j++) {
+//             p->vel[i * 3 + j] -= 2 * init_vel[p->types[i] * 3 + j] / p->n_p;
+//         }
+//     }
+
+//     free(init_vel);
+// }
+
 // removes average velocity per species
 void particles_rescale_velocities(particles *p) {
     double *init_vel = (double *)calloc(p->n_typ * 3, sizeof(double));
@@ -859,8 +1528,6 @@ void particles_rescale_velocities(particles *p) {
 
     if (init_vel == NULL || type_counts == NULL) {
         mpi_fprintf(stderr, "Failed to allocate buffers for velocity rescaling\n");
-        free(init_vel);
-        free(type_counts);
         exit(1);
     }
 
@@ -868,8 +1535,6 @@ void particles_rescale_velocities(particles *p) {
         int type = p->types[i];
         if (type < 0 || type >= p->n_typ) {
             mpi_fprintf(stderr, "Invalid particle type %d for particle %d\n", type, i);
-            free(init_vel);
-            free(type_counts);
             exit(1);
         }
 
@@ -932,4 +1597,49 @@ void particles_rescale_momenta(particles *p) {
         pz += p->mass[i] * p->vel[ni + 2];
     }
     mpi_printf("total momentum after rescale: %e %e %e\n", px, py, pz);
+}
+
+void particles_zero_linear(particles *p) {
+    double px = 0.0, py = 0.0, pz = 0.0;
+    double m_tot = 0.0;
+
+    // somma momento totale e massa totale
+    #pragma omp parallel for reduction(+:px,py,pz,m_tot)
+    for (int i = 0; i < p->n_p; i++) {
+        long int vi = i * 3;
+        double m = p->mass[i];
+        px += m * p->vel[vi];
+        py += m * p->vel[vi + 1];
+        pz += m * p->vel[vi + 2];
+        m_tot += m;
+    }
+
+    if (m_tot <= 0.0) {
+        return;
+    }
+
+    double vx_cm = px / m_tot;
+    double vy_cm = py / m_tot;
+    double vz_cm = pz / m_tot;
+
+    // sottrai la velocità COM a tutti gli atomi
+    #pragma omp parallel for
+    for (int i = 0; i < p->n_p; i++) {
+        long int vi = i * 3;
+        p->vel[vi]     -= vx_cm;
+        p->vel[vi + 1] -= vy_cm;
+        p->vel[vi + 2] -= vz_cm;
+    }
+
+    // opzionale: stampa momento totale dopo la correzione
+    double px2 = 0.0, py2 = 0.0, pz2 = 0.0;
+    #pragma omp parallel for reduction(+:px2,py2,pz2)
+    for (int i = 0; i < p->n_p; i++) {
+        long int vi = i * 3;
+        double m = p->mass[i];
+        px2 += m * p->vel[vi];
+        py2 += m * p->vel[vi + 1];
+        pz2 += m * p->vel[vi + 2];
+    }
+    mpi_printf("total momentum after zero linear: %e %e %e\n", px2, py2, pz2);
 }

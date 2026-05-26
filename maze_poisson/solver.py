@@ -53,6 +53,11 @@ precond_map: Dict[str, int] = {
     # 'BLOCKJACOBI': 4,  # Symmetric Successive Over-Relaxation
 }
 
+elec_corr_map: Dict[str, int] = {
+    # 'SPREAD': 0,
+    # 'SR': 1,
+}
+
 class SolverMD(Logger):
     """Base class for all solver classes."""
 
@@ -77,6 +82,10 @@ class SolverMD(Logger):
         self.potential_notelec = 0.0
         self.energy_nonpolar = 0.0
         self.potential_short_range = 0.0
+        self.energy_intra = 0.0
+        self.energy_elec = 0.0
+        self.energy_corr = 0.0
+        self.potential_notelec = 0.0
 
         if self.outset.print_restart:
             outset.restart_step = outset.restart_step or mdv.N_steps
@@ -121,6 +130,7 @@ class SolverMD(Logger):
         for _map, fname_num, fname_data in [
             (method_grid_map, 'get_grid_type_num', 'get_grid_type_str'),
             (potential_map, 'get_potential_type_num', 'get_potential_type_str'),
+            (elec_corr_map, 'get_water_electrostatic_type_num', 'get_water_electrostatic_type_str'),
             (ca_scheme_map, 'get_ca_scheme_type_num', 'get_ca_scheme_type_str'),
             (integrator_map, 'get_integrator_type_num', 'get_integrator_type_str'),
             (precond_map, 'get_precond_type_num', 'get_precond_type_str'),
@@ -238,6 +248,38 @@ class SolverMD(Logger):
 
         return sc_params_array
 
+    def validate_water_inputs(self, species_df: pd.DataFrame, coords_df: pd.DataFrame):
+        """Check that water-specific inputs are consistent when iswater flag is set."""
+        if not self.mdv.iswater:
+            return
+        required_col = 'type'
+        for name, df in [('species file', species_df), ('input file', coords_df)]:
+            if required_col not in df.columns:
+                raise ValueError(f"When iswater=True, the {name} must contain a '{required_col}' column.")
+
+        species_types = species_df['type'].astype(str).str.upper()
+        if not {'O', 'H'}.issubset(set(species_types)):
+            raise ValueError("When iswater=True, the species file must define both oxygen ('O') and hydrogen ('H').")
+
+        coord_types = coords_df['type'].astype(str).str.upper().to_numpy()
+        if len(coord_types) % 3 != 0:
+            raise ValueError("When iswater=True, the input file must list atoms in O-H-H triplets (row count must be a multiple of 3).")
+
+        unique_coord_types = set(coord_types)
+        if not unique_coord_types.issubset({'O', 'H'}):
+            extras = unique_coord_types.difference({'O', 'H'})
+            raise ValueError(f"When iswater=True, input file must contain only oxygen and hydrogen types; found extra types: {extras}.")
+
+        triplets = coord_types.reshape((-1, 3))
+        pattern = np.array(['O', 'H', 'H'])
+        mismatches = np.where((triplets != pattern).any(axis=1))[0]
+        if mismatches.size:
+            idx = mismatches[0]
+            raise ValueError(
+                f"When iswater=True, each molecule must be ordered as O-H-H in the 'type' column; "
+                f"molecule {idx} has types {triplets[idx].tolist()}."
+            )
+
     def get_lennard_jones_params(self, particles) -> np.ndarray:
         """Get the Lennard Jones parameters for the particles."""
         if self.mdv.potential_params_file is None:
@@ -276,11 +318,32 @@ class SolverMD(Logger):
         lj_params_array = np.ascontiguousarray(lj_params_array.flatten(), dtype=np.float64)
 
         return lj_params_array
+
+    @staticmethod
+    def pd_ensure_lowercase(df: pd.DataFrame, column: str) -> pd.DataFrame:
+        """Ensure that a specified column in a DataFrame is lowercase."""
+        if column not in df.columns:
+            for col in df.columns:
+                if col.lower() == column.lower():
+                    df.rename(columns={col: column}, inplace=True)
+                    break
+        return df
     
     def initialize_particles(self):
         """Initialize the particles."""
+        start_file = self.gset.input_file
+        
         self.logger.info(f"Reading particle definitions from file: {self.gset.particles_file}")
         particles = pd.read_csv(self.gset.particles_file)
+        self.logger.info(f"Reading starting positions from file: {start_file}")
+        df = pd.read_csv(start_file)
+        # Normalize column name for type if provided with different casing
+        particles = self.pd_ensure_lowercase(particles, 'type')
+        df = self.pd_ensure_lowercase(df, 'type')
+
+        if self.mdv.iswater:
+            self.logger.info("Water mode enabled (SPC): expecting O-H-H triplets (types O,H,H) in input coordinates.")
+            self.validate_water_inputs(particles, df)
         if len(particles) != self.gset.N_typs:
             raise ValueError(
                 f"Number of particle types in file ({len(particles)}) does not match N_typs ({self.gset.N_typs})."
@@ -306,10 +369,8 @@ class SolverMD(Logger):
             raise ValueError(f"Charge assignment scheme {cas_str} not recognized.")
         ca_scheme_id = ca_scheme_map[cas_str]
 
-        start_file = self.gset.input_file
         kBT = self.mdv.kBT
 
-        df = pd.read_csv(start_file)
         types = np.ascontiguousarray(particles.loc[df['type'], 'enum'].values, dtype=np.int32)
         pos = np.ascontiguousarray(df[['x', 'y', 'z']].values / cst.a0, dtype=np.float64)
         charges = np.ascontiguousarray(particles.loc[df['type'], 'charge'].values, dtype=np.float64)
@@ -335,10 +396,33 @@ class SolverMD(Logger):
 
         if potential == 'TF':
             pot_params = self.get_tosi_fumi_params(particles)
+            r_cut = self.mdv.r_cut_tf
+            lj_force_shift = 1
         elif potential == 'LJ':
             pot_params = self.get_lennard_jones_params(particles)
+            r_cut = self.mdv.r_cut_lj
+            lj_force_shift = int(bool(self.mdv.lj_force_shift))
+            if lj_force_shift:
+                self.logger.info("Using force-shifted LJ potential.")
+            else:
+                self.logger.info("Using LAMMPS-like unshifted LJ potential with tail energy correction.")
         elif potential == 'SC':
             pot_params = self.get_sc_params()
+            r_cut = self.mdv.r_cut_sc
+            lj_force_shift = 1
+
+        if r_cut is None:
+            r_cut = -1.0
+        else:
+            if r_cut <= 0.0:
+                raise ValueError("Optional non-electrostatic cutoff must be positive.")
+            max_cut = self.L / 2.0
+            if r_cut > max_cut:
+                raise ValueError(
+                    f"Requested cutoff {r_cut:.6f} a.u. exceeds the maximum allowed by minimum-image PBC, "
+                    f"L/2 = {max_cut:.6f} a.u."
+                )
+            self.logger.info(f"Using custom {potential} cutoff: {r_cut:.6f} a.u.")
 
         # Pass concrete smoothing parameters to the C API even when smoothing is disabled.
         R_c = 0.0
@@ -360,9 +444,19 @@ class SolverMD(Logger):
             self.N, self.N_typs, self.L, self.h, self.N_p,
             pot_id, ca_scheme_id,
             types, pos, vel, mass, charges,
-            pot_params, self.mdv.smoothing, R_c, sigma_gauss
+            pot_params, r_cut, lj_force_shift, self.mdv.smoothing, R_c, sigma_gauss
         )
-        
+
+        if self.mdv.iswater:
+            estatic_corr = self.mdv.electrostatic_correction.upper()
+            if estatic_corr not in elec_corr_map:
+                raise ValueError(
+                    f"Electrostatic correction '{self.mdv.electrostatic_correction}' not recognized. "
+                    f"Use one of: {', '.join(elec_corr_map.keys())}."
+                )
+            estatic_corr_id = elec_corr_map[estatic_corr]
+            capi.solver_initialize_particles_water(self.mdv.iswater, estatic_corr_id)
+
         if self.mdv.poisson_boltzmann:
             if 'radius' not in particles.columns:
                 raise ValueError("Probe radius must be provided in the input file for Poisson-Boltzmann.")
@@ -430,6 +524,13 @@ class SolverMD(Logger):
         if self.mdv.rescale:
             capi.solver_rescale_velocities()
 
+    def rescale_periodic(self, step: int):
+        """Periodically remove total momentum when rescaling is enabled."""
+        if not self.mdv.rescale or self.mdv.rescale_stride is None:
+            return
+        if step % self.mdv.rescale_stride == 0:
+            capi.solver_rescale_velocities()
+
     @Clock('update_eps_k2')
     def update_eps_k2(self):
         """Update the k^2 grid for Poisson-Boltzmann."""
@@ -459,8 +560,15 @@ class SolverMD(Logger):
             self.compute_forces_notelec()
         if self.mdv.poisson_boltzmann:
             self.compute_forces_pb()
-        # self.logger.debug("Computing total forces...")
+        if self.mdv.iswater:
+            self.energy_intra = capi.solver_compute_intramolecular_forces()
+            self.energy_corr = capi.solver_compute_forces_electrostatic_correction()
+        else:
+            self.energy_intra = 0.0
+            self.energy_corr = 0.0
         capi.solver_compute_forces_tot()
+        # Electrostatic energy from the grid (not printed in energy.csv per request)
+        self.energy_elec = capi.get_energy_elec()
 
     @Clock('forces_field')
     def compute_forces_field(self):
@@ -561,6 +669,7 @@ class SolverMD(Logger):
 
         for i in ProgressBar(self.mdv.N_steps):
             self.md_loop_iter()
+            self.rescale_periodic(i + 1)
             self.md_loop_output(i)
 
     def run(self):
@@ -586,17 +695,22 @@ class SolverMD(Logger):
         from .constants import density
         self.logger.info(f'Running a MD simulation with:')
         self.logger.info(f'  N_p = {self.N_p}, N_steps = {self.mdv.N_steps}, tol = {self.mdv.tol}')
-        self.logger.info(f'  N = {self.N}, L [A] = {self.L * cst.a0}, h [A] = {self.h / cst.a0}')
+        self.logger.info(f'  N = {self.N}, L [A] = {self.L * cst.a0}, h [A] = {self.h * cst.a0}')
         self.logger.info(f'  density = {density} g/cm^3')
         self.logger.info(f'  Solvent dielectric constant: {self.gset.eps_s}')
         self.logger.info(f'  Solver: {self.mdv.method},  Preconditioner: {self.gset.precond}')
         self.logger.info(f'  Charge assignment scheme: {self.gset.cas}')
         # self.logger.info(f'  Preconditioning: {self.mdv.preconditioning}')
-        self.logger.info(f'  Integrator: {self.mdv.integrator}, dt = {self.mdv.dt}')
+        self.logger.info(f'  Integrator: {self.mdv.integrator}, dt = {self.mdv.dt} au = {self.mdv.dt * cst.t_au} fs')
         self.logger.info(f'  Potential: {self.mdv.potential}')
+        self.logger.info(f'  Electrostatic correction: {self.mdv.electrostatic_correction}')
         self.logger.info(f'  Elec: {self.mdv.elec}    NotElec: {self.mdv.not_elec}')
         self.logger.info(f'  Temperature: {self.mdv.T} K,  Thermostat: {self.mdv.thermostat},  Gamma: {self.mdv.gamma}')
         self.logger.info(f'  Velocity rescaling: {self.mdv.rescale}')
+        if self.mdv.rescale and self.mdv.rescale_stride is not None:
+            self.logger.info(
+                f'  Periodic velocity rescaling: enabled every {self.mdv.rescale_stride} MD steps'
+            )
         if self.outset.print_restart:
             self.logger.info(f'  Restart step: {self.outset.restart_step}')
         if self.mdv.poisson_boltzmann:
@@ -612,5 +726,3 @@ class SolverMD(Logger):
             self.logger.info(f'  Ionic strength: {self.gset.I} M')
             self.logger.info(f'  Gamma NP: {self.mdv.gamma_np}')
             self.logger.info(f'  Beta NP: {self.mdv.beta_np}')
-
-

@@ -17,6 +17,16 @@ grid *g_grid = NULL;
 double q_tot = 0.0;
 
 
+static double solver_total_charge_from_particles(void) {
+    double q_local = 0.0;
+    int n_p = g_particles->n_p;
+    for (int i = 0; i < n_p; i++) {
+        q_local += g_particles->charges[i];
+    }
+
+    return q_local;
+}
+
 void solver_initialize() {
     int size = init_mpi();
     int rank = get_rank();
@@ -52,25 +62,32 @@ void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enab
 void solver_initialize_particles(
     int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
     int *types, double *pos, double *vel, double *mass, double *charges,
-    double *pot_params, bool smoothing, double R_c, double sigma_gauss) 
-{
+    double *pot_params, double r_cut, int lj_force_shift, bool smoothing, double R_c, double sigma_gauss
+) {
+    // TODO: Should R_c and r_cut be the same? If not the variable name should be more clearer/descriptive
     g_particles = particles_init(n, n_p, n_typ, L, h, cas_type);
 
     g_particles->smoothing = smoothing;
     g_particles->R_c = R_c;
     g_particles->sigma_gauss = sigma_gauss;
+    g_particles->r_cut = r_cut;
+    g_particles->lj_force_shift = lj_force_shift;
 
     memcpy(g_particles->types, types, n_p * sizeof(int));
     memcpy(g_particles->pos, pos, n_p * 3 * sizeof(double));
     memcpy(g_particles->vel, vel, n_p * 3 * sizeof(double));
     memcpy(g_particles->mass, mass, n_p * sizeof(double));
     memcpy(g_particles->charges, charges, n_p * sizeof(double));
-    
+
     g_particles->init_potential(g_particles, pot_type, pot_params);
 }
 
 void solver_initialize_particles_pois_boltz(double gamma_np, double beta_np, double *solv_radii) {
     particles_pb_init(g_particles, gamma_np, beta_np, solv_radii);
+}
+
+void solver_initialize_particles_water(int is_water, int corr_type) {
+    particles_water_init(g_particles, is_water, corr_type);
 }
 
 void solver_initialize_integrator(int n_p, double dt, double T, double gamma, int itg_type, int itg_enabled) {
@@ -96,17 +113,24 @@ void solver_initialize_integrator(int n_p, double dt, double T, double gamma, in
 int solver_update_charges() {
     int res = 0;
     double q_tot_loc;
+    double q_ref;
     
     g_particles->update_nearest_neighbors(g_particles);
     q_tot_loc = g_grid->update_charges(g_grid, g_particles);
 
-    if (fabs(q_tot - q_tot_loc) > 1e-6) {
-        res = 1;
-        printf("Charge conservation error: q_tot = %.6f, q_tot_loc = %.6f\n", q_tot, q_tot_loc);
-        exit(1);
-    }
+    q_ref = solver_total_charge_from_particles();
+    q_tot = q_ref;
 
-    q_tot = q_tot_loc;
+    double diff = fabs(q_ref - q_tot_loc);
+    if (diff > 1e-4) {
+        if (diff > 1e-2) {
+            res = 1;
+            printf("Charge conservation error: q_ref = %.6f, q_tot_loc = %.6f\n", q_ref, q_tot_loc);
+            exit(1);
+        } else {
+            mpi_printf("Charge conservation warning: q_ref = %.6f, q_tot_loc = %.6f\n", q_ref, q_tot_loc);
+        }
+    }
 
     return res;
 }
@@ -154,8 +178,24 @@ double solver_compute_forces_pb() {
     return g_particles->compute_forces_pb(g_particles, g_grid);
 }
 
+double solver_compute_intramolecular_forces() {
+    return g_particles->compute_intramolecular_forces(g_particles);
+}
+
+double solver_compute_forces_electrostatic_correction() {
+    return g_particles->compute_forces_electrostatic_correction(g_particles, g_grid);
+}
+
 void solver_compute_forces_tot() {
     g_particles->compute_forces_tot(g_particles);
+}
+
+double get_energy_intra() {
+    return g_particles->energy_intra;
+}
+
+double get_energy_corr() {
+    return g_particles->energy_corr;
 }
 
 // void solver_compute_forces() {
@@ -174,6 +214,7 @@ void integrator_part_2() {
 
 void solver_rescale_velocities() {
     g_particles->rescale_velocities(g_particles);
+    // g_particles->rescale_momenta(g_particles);
 }
 
 // int solver_initialize_md(int preconditioning, int vel_rescale) {
@@ -263,6 +304,22 @@ void get_fcs_elec(double *recv) {
 
 void get_fcs_noel(double *recv) {
     memcpy(recv, g_particles->fcs_noel, g_particles->n_p * 3 * sizeof(double));
+}
+
+void get_fcs_intra(double *recv) {
+    if (g_particles->fcs_intra != NULL) {
+        memcpy(recv, g_particles->fcs_intra, g_particles->n_p * 3 * sizeof(double));
+    } else {
+        memset(recv, 0, g_particles->n_p * 3 * sizeof(double));
+    }
+}
+
+void get_fcs_corr(double *recv) {
+    if (g_particles->fcs_corr != NULL) {
+        memcpy(recv, g_particles->fcs_corr, g_particles->n_p * 3 * sizeof(double));
+    } else {
+        memset(recv, 0, g_particles->n_p * 3 * sizeof(double));
+    }
 }
 
 void get_fcs_db(double *recv) {

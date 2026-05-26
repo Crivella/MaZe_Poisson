@@ -34,6 +34,10 @@
 #define PRECOND_TYPE_SSOR 3
 #define PRECOND_TYPE_BLOCKJACOBI 4
 
+#define WATER_ELECTROSTATIC_CORR_TYPE_NUM 2
+#define WATER_ELECTROSTATIC_CORR_TYPE_SPREAD 0
+#define WATER_ELECTROSTATIC_CORR_TYPE_SR 1
+
 // Struct typedefs
 typedef struct grid grid;
 typedef struct particles particles;
@@ -86,6 +90,9 @@ double fft_grid_update_charges(grid *grid, particles *p);
 void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
 void particles_pb_free(particles *p);
 
+void particles_water_init(particles *p, int is_water, int corr_type);
+void particles_water_free(particles *p);
+
 void particles_init_potential(particles *p, int pot_type, double *pot_params);
 void particles_init_potential_tf(particles *p, double *pot_params);
 void particles_init_potential_lj(particles *p, double *pot_params);
@@ -98,6 +105,9 @@ double particles_compute_forces_tf(particles *p);
 double particles_compute_forces_lj(particles *p);
 double particles_compute_forces_sc(particles *p);
 // double particles_compute_energy_short_range(particles *p);
+double particles_compute_intramolecular_forces(particles *p);
+double particles_compute_forces_electrostatic_correction_spread(particles *p, grid *g);
+double particles_compute_forces_electrostatic_correction_sr(particles *p, grid *g);
 double particles_compute_forces_pb(particles *p, grid *grid);
 void particles_compute_forces_tot(particles *p);
 
@@ -106,6 +116,7 @@ double particles_get_kinetic_energy(particles *p);
 void particles_get_momentum(particles *p, double *out);
 void particles_rescale_velocities(particles *p);
 void particles_rescale_momenta(particles *p);
+void particles_zero_linear(particles *p);
 
 void ovrvo_integrator_init(integrator *integrator);
 void ovrvo_integrator_part1(integrator *integrator, particles *p);
@@ -127,6 +138,8 @@ void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_st
 
 void precond_blockjacobi_init();
 void precond_blockjacobi_cleanup();
+
+char *get_water_electrostatic_type_str(int n);
 
 #define H_ARR_SIZE 4
 
@@ -194,9 +207,17 @@ struct particles {
     double *charges;  // Particle charges (n_p)
     long int *neighbors;  // Particle neighbors (n_p x 8 x 3)
 
+    int is_water;  // Flag to toggle water/SPC setup
+    int corr_type; // Type of electrostatic correction for water
+    double *fcs_intra; // Intramolecular forces total (n_p x 3)
+    double *fcs_corr; // Electrostatic correction forces (n_p x 3)
+    double energy_intra; // Intramolecular energy total
+    double energy_corr; // Intramolecular exclusion correction energy
+
     double r_cut;
     double sigma;
     double epsilon;
+    int lj_force_shift;
     double *tf_params;  // Parameters for the TF potential (7 x n_p x n_p)
     double *lj_params;  // Parameters for the LJ potential (4 x n_p x n_p)
     double *sc_params;  // Parameters for the SC potential (5)
@@ -212,6 +233,11 @@ struct particles {
     double *fcs_np; // Non-polar forces (n_p x 3)
     double *solv_radii; // Solvation radii for each particle (n_p)
 
+    // P3M specific
+    bool smoothing; 
+    double R_c;
+    double sigma_gauss;
+
     void    (*free)( particles *);
 
     void    (*init_potential)( particles *, int, double *);
@@ -224,16 +250,15 @@ struct particles {
     // double (*compute_energy_short_range)( particles *);
     void    (*compute_forces_tot)( particles *);
     double  (*compute_forces_pb)( particles *, grid *);
+    double (*compute_intramolecular_forces)( particles *);
+    double (*compute_forces_electrostatic_correction)( particles *, grid *);
 
     double  (*get_temperature)( particles *);
     double  (*get_kinetic_energy)( particles *);
     void    (*get_momentum)( particles *, double *);
 
     void    (*rescale_velocities)( particles *);
-
-    bool smoothing; 
-    double R_c;
-    double sigma_gauss;
+    void    (*rescale_momenta)( particles *);
 };
 
 struct integrator {

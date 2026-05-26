@@ -2,10 +2,165 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <stdbool.h>
 
 #include "mpi_base.h"
 #include "linalg.h"
-#include <stdbool.h>
+#include "omp_base.h"
+
+static inline void pbc_displacement(
+    const double *pos, long int ia, long int ib, double L, double *dx, double *dy, double *dz, double *dr2
+) {
+    double x = pos[ib * 3]     - pos[ia * 3];
+    double y = pos[ib * 3 + 1] - pos[ia * 3 + 1];
+    double z = pos[ib * 3 + 2] - pos[ia * 3 + 2];
+    x -= L * nearbyint(x / L);
+    y -= L * nearbyint(y / L);
+    z -= L * nearbyint(z / L);
+    *dx = x;
+    *dy = y;
+    *dz = z;
+    *dr2 = x * x + y * y + z * z;
+}
+
+double compute_forces_harmonic_bond(long int n_p, const double *pos, double *forces, double L, double k, double r0_val) {
+    double energy = 0.0;
+    const double eps = 1e-15;
+
+    long int n3 = n_p * 3;
+    long int n_triplets = n_p / 3; // Assuming water-like molecules with 3 sites per molecule (O, H1, H2).
+    double *fcs = forces;
+
+    memset(fcs, 0, n3 * sizeof(double));
+
+    #pragma omp parallel for reduction(+:energy)
+    for (long int m = 0; m < n_triplets; m++) {
+        long int iO = m * 3;
+        long int iH1 = iO + 1;
+        long int iH2 = iO + 2;
+
+        double dx, dy, dz, dr2, dr, fab;
+
+        // O - H1
+        pbc_displacement(pos, iO, iH1, L, &dx, &dy, &dz, &dr2);
+        dr = sqrt(dr2);
+        if (dr2 > eps) {
+            fab = -k * (dr - r0_val) / dr;
+        } else {
+            fab = 0.0;
+        }
+        fcs[iH1 * 3    ] += dx * fab;
+        fcs[iH1 * 3 + 1] += dy * fab;
+        fcs[iH1 * 3 + 2] += dz * fab;
+        fcs[iO  * 3    ] -= dx * fab;
+        fcs[iO  * 3 + 1] -= dy * fab;
+        fcs[iO  * 3 + 2] -= dz * fab;
+        energy += 0.5 * k * (dr - r0_val) * (dr - r0_val);
+
+        // O - H2
+        pbc_displacement(pos, iO, iH2, L, &dx, &dy, &dz, &dr2);
+        dr = sqrt(dr2);
+        if (dr2 > eps) {
+            fab = -k * (dr - r0_val) / dr;
+        } else {
+            fab = 0.0;
+        }
+        fcs[iH2 * 3    ] += dx * fab;
+        fcs[iH2 * 3 + 1] += dy * fab;
+        fcs[iH2 * 3 + 2] += dz * fab;
+        fcs[iO  * 3    ] -= dx * fab;
+        fcs[iO  * 3 + 1] -= dy * fab;
+        fcs[iO  * 3 + 2] -= dz * fab;
+        energy += 0.5 * k * (dr - r0_val) * (dr - r0_val);
+    }
+
+    return energy;
+}
+
+double compute_forces_harmonic_angle(long int n_p, const double *pos, double *forces, double L, double k, double theta0_val) {
+    double energy = 0.0;
+    const double eps = 1e-15;
+
+    long int n3 = n_p * 3;
+    long int n_triplets = n_p / 3; // Assuming water-like molecules with 3 sites per molecule (O, H1, H2).
+    double *fcs = forces;
+
+    memset(fcs, 0, n3 * sizeof(double));
+
+    #pragma omp parallel for reduction(+:energy)
+    for (long int m = 0; m < n_triplets; m++) {
+        long int iO = m * 3;
+        long int iH1 = iO + 1;
+        long int iH2 = iO + 2;
+
+        double dxab, dyab, dzab, drab2, drab;
+        double dxac, dyac, dzac, drac2, drac;
+        double dxbc, dybc, dzbc, drbc2, drbc;
+
+        pbc_displacement(pos, iO, iH1, L, &dxab, &dyab, &dzab, &drab2);
+        pbc_displacement(pos, iO, iH2, L, &dxac, &dyac, &dzac, &drac2);
+        pbc_displacement(pos, iH1, iH2, L, &dxbc, &dybc, &dzbc, &drbc2);
+
+        drab = sqrt(drab2);
+        drac = sqrt(drac2);
+        drbc = sqrt(drbc2);
+        if (drab2 < eps || drac2 < eps || drbc2 < eps) {
+            continue;
+        }
+
+        double cos_theta = (drab2 + drac2 - drbc2) / (2.0 * drab * drac);
+        if (cos_theta > 1.0) {
+            cos_theta = 1.0;
+        } else if (cos_theta < -1.0) {
+            cos_theta = -1.0;
+        }
+        double theta = acos(cos_theta);
+
+        double dudtheta = k * (theta - theta0_val);
+        double dacosdz;
+        if (cos_theta * cos_theta == 1.0) {
+            dacosdz = 0.0;
+        } else {
+            dacosdz = -1.0 / sqrt(1.0 - cos_theta * cos_theta);
+        }
+
+        double dzdab = (drab2 - drac2 + drbc2) / (2.0 * drab2 * drac);
+        double dzdac = (drac2 - drab2 + drbc2) / (2.0 * drac2 * drab);
+        double dzdbc = -drbc / (drac * drab);
+
+        double fab = -(dudtheta * dacosdz * dzdab) / drab;
+        double fac = -(dudtheta * dacosdz * dzdac) / drac;
+        double fbc = -(dudtheta * dacosdz * dzdbc) / drbc;
+
+        // ab contribution (O-H1)
+        fcs[iH1 * 3    ] += dxab * fab;
+        fcs[iH1 * 3 + 1] += dyab * fab;
+        fcs[iH1 * 3 + 2] += dzab * fab;
+        fcs[iO  * 3    ] -= dxab * fab;
+        fcs[iO  * 3 + 1] -= dyab * fab;
+        fcs[iO  * 3 + 2] -= dzab * fab;
+
+        // ac contribution (O-H2)
+        fcs[iH2 * 3    ] += dxac * fac;
+        fcs[iH2 * 3 + 1] += dyac * fac;
+        fcs[iH2 * 3 + 2] += dzac * fac;
+        fcs[iO  * 3    ] -= dxac * fac;
+        fcs[iO  * 3 + 1] -= dyac * fac;
+        fcs[iO  * 3 + 2] -= dzac * fac;
+
+        // bc contribution (H1-H2)
+        fcs[iH2 * 3    ] += dxbc * fbc;
+        fcs[iH2 * 3 + 1] += dybc * fbc;
+        fcs[iH2 * 3 + 2] += dzbc * fbc;
+        fcs[iH1 * 3    ] -= dxbc * fbc;
+        fcs[iH1 * 3 + 1] -= dybc * fbc;
+        fcs[iH1 * 3 + 2] -= dzbc * fbc;
+
+        energy += 0.5 * k * (theta - theta0_val) * (theta - theta0_val);
+    }
+
+    return energy;
+}
 
 double compute_force_short_range(
     int n_p,
@@ -272,6 +427,17 @@ double compute_tf_forces(int n_p, double L, double *pos, double *params, double 
             r_diff[2] = app;
             r_mag += app * app;
             r_mag = sqrt(r_mag);
+            if (!isfinite(r_mag) || r_mag <= 1e-12) {
+                mpi_fprintf(
+                    stderr,
+                    "Error: TF r_mag non-finite or too small (i=%d j=%d r=%e). "
+                    "pos_i=(%e %e %e) pos_j=(%e %e %e)\n",
+                    i, j, r_mag,
+                    pos[ip], pos[ip + 1], pos[ip + 2],
+                    pos[jp], pos[jp + 1], pos[jp + 2]
+                );
+                exit(1);
+            }
             if (r_mag > r_cut) {
                 continue;
             }
@@ -302,8 +468,6 @@ double compute_tf_forces(int n_p, double L, double *pos, double *params, double 
     return potential_energy / 2;
 }
 
-
-
 /*
 Compute the particle-particle forces using the tabulated Lennard-Jones potential
 
@@ -314,7 +478,41 @@ Compute the particle-particle forces using the tabulated Lennard-Jones potential
 @param r_cut: the cutoff radius
 @param forces: the output forces on each particle (n_p, 3)
 */
-double compute_lj_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces) {
+static double compute_lj_tail_correction(int n_p, double L, double *params, double r_cut) {
+    long int n_p_pow2 = n_p * n_p;
+    double *sigma_lj = params;
+    double *epsilon_lj = sigma_lj + n_p_pow2;
+    double volume = L * L * L;
+    double tail = 0.0;
+
+    if (r_cut <= 0.0 || volume <= 0.0) {
+        return 0.0;
+    }
+
+    for (int i = 0; i < n_p; i++) {
+        long int idx1 = i * n_p;
+        for (int j = 0; j < n_p; j++) {
+            long int idx = idx1 + j;
+            double sigma = sigma_lj[idx];
+            double epsilon = epsilon_lj[idx];
+            if (epsilon == 0.0) {
+                continue;
+            }
+
+            double sigma2 = sigma * sigma;
+            double sigma3 = sigma2 * sigma;
+            double sigma6 = sigma3 * sigma3;
+            double sigma12 = sigma6 * sigma6;
+            double rc3 = r_cut * r_cut * r_cut;
+            double rc9 = rc3 * rc3 * rc3;
+            tail += epsilon * (sigma12 / (9.0 * rc9) - sigma6 / (3.0 * rc3));
+        }
+    }
+
+    return 8.0 * M_PI * tail / volume;
+}
+
+double compute_lj_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces, int lj_force_shift) {
     int ip, jp;
     int n_p2 = 2 * n_p;
     long int n_p_pow2 = n_p * n_p;
@@ -357,6 +555,11 @@ double compute_lj_forces(int n_p, double L, double *pos, double *params, double 
             r_diff[2] = app;
             r_mag += app * app;
             r_mag = sqrt(r_mag);
+            if (!isfinite(r_mag) || r_mag <= 1e-12) {
+                // TODO: The first one is redundnat with the next check
+                //  The second one should never happen?
+                continue;
+            }
             if (r_mag > r_cut) {
                 continue;
             }
@@ -369,6 +572,14 @@ double compute_lj_forces(int n_p, double L, double *pos, double *params, double 
             epsilon = epsilon_lj[idx2];
             al = alpha[idx2];
             be = beta[idx2];
+            if (!isfinite(sigma) || !isfinite(epsilon) || !isfinite(al) || !isfinite(be)) {
+                mpi_fprintf(
+                    stderr,
+                    "Error: LJ params non-finite (i=%d j=%d sigma=%e epsilon=%e alpha=%e beta=%e)\n",
+                    i, j, sigma, epsilon, al, be
+                );
+                exit(1);
+            }
 
             //write f_mag and V_mag for lennard-jones potential
             f_mag = 4 * epsilon * (12 * pow(sigma / r_mag, 12) - 6 * pow(sigma / r_mag, 6)) / r_mag - al;
@@ -382,7 +593,11 @@ double compute_lj_forces(int n_p, double L, double *pos, double *params, double 
         }
     }
 
-    return potential_energy / 2;
+    potential_energy /= 2.0;
+    if (!lj_force_shift) {
+        potential_energy += compute_lj_tail_correction(n_p, L, params, r_cut);
+    }
+    return potential_energy;
 }
 
 
@@ -434,6 +649,11 @@ double compute_sc_forces(int n_p, double L, double *pos, double *params, double 
             }
 
             r_mag = sqrt(r_mag);
+            if (!isfinite(r_mag) || r_mag <= 1e-12) {
+                // TODO: The first one is redundnat with the next check
+                //  The second one should never happen?
+                continue;
+            }
             if (r_mag > r_cut) {
                 continue;
             }
@@ -463,3 +683,126 @@ double compute_coulomb_sr() {
     return 1;
 }
 
+
+double compute_lj_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces) {
+    double r2 = vx * vx + vy * vy + vz * vz;
+    double r = sqrt(r2);
+    if (r > r_cut || r < 1e-15) {
+        return 0.0;
+    }
+    long int ia3 = ia * 3;
+    long int ib3 = ib * 3;
+    long int idx = ia * np + ib;
+    double sigma = params[idx];
+    double epsilon = params[idx + np * np];
+    double alpha = params[idx + 2 * np * np];
+    double beta = params[idx + 3 * np * np];
+
+    double inv_r = 1.0 / r;
+    double sr = sigma * inv_r;
+    double sr2 = sr * sr;
+    double sr6 = sr2 * sr2 * sr2;
+    double sr12 = sr6 * sr6;
+
+    double f_mag = 4 * epsilon * (12 * sr12 - 6 * sr6) * inv_r - alpha;
+    double V_mag = 4 * epsilon * (sr12 - sr6) + alpha * r + beta;
+
+    double fx = -f_mag * vx * inv_r;
+    double fy = -f_mag * vy * inv_r;
+    double fz = -f_mag * vz * inv_r;
+
+    forces[ia3    ] += fx;
+    forces[ia3 + 1] += fy;
+    forces[ia3 + 2] += fz;
+
+    forces[ib3    ] -= fx;
+    forces[ib3 + 1] -= fy;
+    forces[ib3 + 2] -= fz;
+
+    return V_mag;
+}
+
+double compute_tf_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces) {
+    double r2 = vx * vx + vy * vy + vz * vz;
+    double r = sqrt(r2);
+    if (r > r_cut || r < 1e-15) {
+        return 0.0;
+    }
+    long int ia3 = ia * 3;
+    long int ib3 = ib * 3;
+    long int idx = ia * np + ib;
+    double *A = params;
+    double *B = A + np * np;
+    double *C = B + np * np;
+    double *D = C + np * np;
+    double *sigma = D + np * np;
+    double *alpha = sigma + np * np;
+    double *beta = alpha + np * np;
+
+    double a = A[idx];
+    double b = B[idx];
+    double c = C[idx];
+    double d = D[idx];
+    double sig = sigma[idx];
+    double al = alpha[idx];
+    double be = beta[idx];
+
+    double exp_term = exp(b * (sig - r));
+    double r6 = r2 * r2 * r2;
+    double r7 = r6 * r;
+    double r8 = r7 * r;
+    double r9 = r8 * r;
+
+    double f_mag = b * a * exp_term - 6.0 * c / r7 - 8.0 * d / r9 - al;
+    double V_mag = a * exp_term - c / r6 - d / r8 + al * r + be;
+
+    double inv_r = 1.0 / r;
+    double fx = -f_mag * vx * inv_r;
+    double fy = -f_mag * vy * inv_r;
+    double fz = -f_mag * vz * inv_r;
+
+    forces[ia3    ] += fx;
+    forces[ia3 + 1] += fy;
+    forces[ia3 + 2] += fz;
+
+    forces[ib3    ] -= fx;
+    forces[ib3 + 1] -= fy;
+    forces[ib3 + 2] -= fz;
+
+    return V_mag;
+}
+
+double compute_sc_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces) {
+    double r2 = vx * vx + vy * vy + vz * vz;
+    double r = sqrt(r2);
+    if (r > r_cut || r < 1e-15) {
+        return 0.0;
+    }
+    long int ia3 = ia * 3;
+    long int ib3 = ib * 3;
+
+    double nu    = params[0];
+    double d     = params[1];
+    double B_nu  = params[2];
+    double alpha = params[3];
+    double beta  = params[4];
+
+    double d_over_r_pow = pow(d / r, nu);
+    double V_mag = B_nu * d_over_r_pow + alpha * r + beta;
+    double f_mag = B_nu * nu * d_over_r_pow / r - alpha;
+
+    double inv_r = 1.0 / r;
+    double fx = -f_mag * vx * inv_r;
+    double fy = -f_mag * vy * inv_r;
+    double fz = -f_mag * vz * inv_r;
+
+    forces[ia3    ] += fx;
+    forces[ia3 + 1] += fy;
+    forces[ia3 + 2] += fz;
+
+    forces[ib3    ] -= fx;
+    forces[ib3 + 1] -= fy;
+    forces[ib3 + 2] -= fz;
+
+    return V_mag;
+}

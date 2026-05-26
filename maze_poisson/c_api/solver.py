@@ -35,7 +35,7 @@ capi.register_function(
 # void solverinitialize_particles(
 #     int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
 #     int *types, double *pos, double *vel, double *mass, double *charges,
-#     double *params
+#     double *params, double r_cut, int lj_force_shift, bool smoothing, double R_c, double sigma_gauss
 # ) {
 capi.register_function(
     'solver_initialize_particles', None, [
@@ -52,6 +52,8 @@ capi.register_function(
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+        ctypes.c_double,
+        ctypes.c_int,
         ctypes.c_bool,   # smoothing
         ctypes.c_double, # R_c
         ctypes.c_double  # sigma_gauss
@@ -64,6 +66,14 @@ capi.register_function(
         ctypes.c_double,
         ctypes.c_double,
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void solver_initialize_particles_water(int is_water, int corr_type);
+capi.register_function(
+    'solver_initialize_particles_water', None, [
+        ctypes.c_int,
+        ctypes.c_int,
     ],
 )
 
@@ -126,6 +136,16 @@ capi.register_function(
 # double solver_compute_forces_pb() {
 capi.register_function(
     'solver_compute_forces_pb', ctypes.c_double, [],
+)
+
+# double solver_compute_intramolecular_forces() {
+capi.register_function(
+    'solver_compute_intramolecular_forces', ctypes.c_double, [],
+)
+
+# double solver_compute_forces_electrostatic_correction() {
+capi.register_function(
+    'solver_compute_forces_electrostatic_correction', ctypes.c_double, [],
 )
 
 # void solver_compute_forces_tot() {

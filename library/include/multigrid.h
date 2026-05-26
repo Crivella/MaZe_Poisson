@@ -2,6 +2,8 @@
 #define __MP_MULTIGRID_H
 
 #define MG_ITER_LIMIT 1000
+#define MG_CG_ITER_LIMIT 20 // 20 for SPC water, 50 for NaCl
+#define MG_CG_TOL 1e-3 // 1e-3 for SPC water, 1e-5 for NaCl 
 
 #define MG_SOLVE_SM 3
 #define MG_RECURSION_FACTOR 2

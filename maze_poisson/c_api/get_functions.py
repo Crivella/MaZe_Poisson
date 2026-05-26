@@ -42,6 +42,18 @@ capi.register_function(
     ],
 )
 
+# int get_water_electrostatic_type_num() {
+capi.register_function(
+    'get_water_electrostatic_type_num', ctypes.c_int, [],
+)
+
+# char *get_water_electrostatic_type_str(int n) {
+capi.register_function(
+    'get_water_electrostatic_type_str', ctypes.c_char_p, [
+        ctypes.c_int,
+    ],
+)
+
 # int get_integrator_type_num() {
 capi.register_function(
     'get_integrator_type_num', ctypes.c_int, [],
@@ -90,6 +102,20 @@ capi.register_function(
 # void get_fcs_noel(double *recv) {
 capi.register_function(
     'get_fcs_noel', None, [
+        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void get_fcs_intra(double *recv) {
+capi.register_function(
+    'get_fcs_intra', None, [
+        npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# void get_fcs_corr(double *recv) {
+capi.register_function(
+    'get_fcs_corr', None, [
         npct.ndpointer(dtype=np.float64, ndim=2, flags='C_CONTIGUOUS'),
     ],
 )
@@ -184,6 +210,16 @@ capi.register_function(
 # double get_energy_elec() {
 capi.register_function(
     'get_energy_elec', ctypes.c_double, [],
+)
+
+# double get_energy_corr() {
+capi.register_function(
+    'get_energy_corr', ctypes.c_double, [],
+)
+
+# double get_energy_intra() {
+capi.register_function(
+    'get_energy_intra', ctypes.c_double, [],
 )
 
 # void get_momentum(double *recv) {

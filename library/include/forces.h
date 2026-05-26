@@ -18,7 +18,29 @@ double compute_force_short_range(
 );
 double compute_tf_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces);
 double compute_sc_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces);
-double compute_lj_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces);
+double compute_lj_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces, int lj_force_shift);
 double compute_coulomb_sr();
+
+// Pairwise nonbonded contribution for intramolecular exclusions (applies opposite sign)
+double compute_lj_pair_force_excl(
+    long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np,
+    double *params, double *forces
+);
+double compute_tf_pair_force_excl(
+    long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np,
+    double *params, double *forces
+);
+double compute_sc_pair_force_excl(
+    long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np,
+    double *params, double *forces
+);
+
+// Intramolecular harmonic bond and angle forces (water-like molecules: 3 sites per molecule).
+double compute_forces_harmonic_bond(
+    long int n_p, const double *pos, double *forces, double L, double k, double r0_val
+);
+double compute_forces_harmonic_angle(
+    long int n_p, const double *pos, double *forces, double L, double k, double theta0_val
+);
 
 #endif

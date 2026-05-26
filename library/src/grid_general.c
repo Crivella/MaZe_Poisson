@@ -314,3 +314,6 @@ double grid_get_energy_elec(grid *g){
 
     return energy;
 }
+
+
+
