@@ -279,6 +279,7 @@ EXTERN_C int verlet_pb_multigrid_eps_field(
     int size1, int size2, double *eps_x, double *eps_y, double *eps_z, double *k2_screen,
     grid *grid_ctx
 ) {
+    // TODO ideally these function should be agnostic to the structure of the grid and particle structs
     if (grid_ctx == NULL || grid_ctx->kBT <= 0.0) {
         mpi_printf("Warning: field-dependent dielectric requested without valid kBT. Running single PB solve.\n");
     }
@@ -304,10 +305,13 @@ EXTERN_C int verlet_pb_multigrid_eps_field(
 
     double max_diff = EPS_FIELD_TOL + 1.0;
     int eps_iter = 0;
+    if (grid_ctx != NULL) {
+        grid_ctx->eps_phi_iters = 0;
+    }
 
     while (max_diff > EPS_FIELD_TOL && eps_iter < EPS_FIELD_MAX_ITER) {
         if (grid_ctx != NULL && grid_ctx->kBT > 0.0) {
-            max_diff = grid_update_eps_field_dependent(grid_ctx, NULL, grid_ctx->kBT); 
+            max_diff = grid_update_eps_field_dependent(grid_ctx, NULL); 
         } else {
             max_diff = 0.0;  // Skip epsilon loop if no context
         }

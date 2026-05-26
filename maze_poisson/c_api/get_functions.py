@@ -30,6 +30,39 @@ capi.register_function(
     ],
 )
 
+# int get_eps_map_type_num() {
+capi.register_function(
+    'get_eps_map_type_num', ctypes.c_int, [],
+)
+# char *get_eps_map_type_str(int n) {
+capi.register_function(
+    'get_eps_map_type_str', ctypes.c_char_p, [
+        ctypes.c_int,
+    ],
+)
+
+# int get_pb_force_type_num() {
+capi.register_function(
+    'get_pb_force_type_num', ctypes.c_int, [],
+)
+# char *get_pb_force_type_str(int n) {
+capi.register_function(
+    'get_pb_force_type_str', ctypes.c_char_p, [
+        ctypes.c_int,
+    ],
+)
+
+# int get_stress_tensor_bc_type_num() {
+capi.register_function(
+    'get_stress_tensor_bc_type_num', ctypes.c_int, [],
+)
+# char *get_stress_tensor_bc_type_str(int n) {
+capi.register_function(
+    'get_stress_tensor_bc_type_str', ctypes.c_char_p, [
+        ctypes.c_int,
+    ],
+)
+
 # int get_ca_scheme_type_num() {
 capi.register_function(
     'get_ca_scheme_type_num', ctypes.c_int, [],

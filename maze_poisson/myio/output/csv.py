@@ -35,7 +35,7 @@ class CSVOutputFile(BaseOutputFile):
 
     @property
     @abstractmethod
-    def headers(self):
+    def headers(self) -> list[str]:
         pass
 
     @abstractmethod
@@ -183,6 +183,34 @@ class RestartFieldCSVOutputFile(CSVOutputFile):
 
         return df
 
+class EpsMapCSVOutputFile(CSVOutputFile):
+    name = 'epsilon_map'
+    headers = ['iter', 'eps_x', 'eps_y', 'eps_z']
+    def get_data(self, iter, solver):
+        df = pd.DataFrame()
+        tmp_x = np.empty((solver.N, solver.N, solver.N), dtype=np.float64)
+        tmp_y = np.empty((solver.N, solver.N, solver.N), dtype=np.float64)
+        tmp_z = np.empty((solver.N, solver.N, solver.N), dtype=np.float64)
+        capi.get_eps_map(tmp_x, tmp_y, tmp_z)
+
+        df['eps_x'] = tmp_x.flatten()
+        df['eps_y'] = tmp_y.flatten()
+        df['eps_z'] = tmp_z.flatten()
+        
+        df['iter'] = iter
+
+        return df
+        # np.savez_compressed(
+        #     filename,
+        #     eps_x=eps_x,
+        #     eps_y=eps_y,
+        #     eps_z=eps_z,
+        #     h=self.h,
+        #     L=self.L,
+        #     eps_s=self.gset.eps_s,
+        #     eps_int=self.gset.eps_int,
+        #     iter=iter_idx,
+        # )
 
 OutputFiles.register_format(
     'csv',
@@ -195,6 +223,7 @@ OutputFiles.register_format(
         'tot_force': TotForcesCSVOutputFile,
         'forces_pb': ForcesPBoltzCSVOutputFile,
         'restart': RestartCSVOutputFile,
-        'restart_field': RestartFieldCSVOutputFile
+        'restart_field': RestartFieldCSVOutputFile,
+        'eps_map': EpsMapCSVOutputFile,
     }
 )
