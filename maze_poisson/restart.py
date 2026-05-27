@@ -11,7 +11,7 @@ def generate_restart(md_variables, grid_setting, output_settings, iter = None):
     N = grid_setting.N
     path = output_settings.path
     restart_path = os.path.join('restart_files', 'density_'+str(np.round(density,3)))
-    if thermostat == True: 
+    if thermostat: 
         path = os.path.join(path, 'Thermostatted')
     filename = os.path.join(path, 'solute_N' + str(N) + '_N_p_'+str(N_p)+ '.csv')
 
@@ -27,7 +27,7 @@ def generate_restart(md_variables, grid_setting, output_settings, iter = None):
         new_df = df[df['iter'] == iter][['charge','x','y','z','vx','vy','vz']] 
 
     col_mass_bool = new_df['charge'] == 1
-    col_mass = [m_Na if bool == True else m_Cl for bool in col_mass_bool]
+    col_mass = [m_Na if bool else m_Cl for bool in col_mass_bool]
 
     new_df.insert(loc=1, column='mass',value=col_mass)
     print(np.shape(new_df))
@@ -36,7 +36,7 @@ def generate_restart(md_variables, grid_setting, output_settings, iter = None):
     if md_variables.method == 'PB MaZe':
         radius_Na = 0.95
         radius_Cl = 1.81
-        col_radius = [radius_Na if bool == True else radius_Cl for bool in col_mass_bool]
+        col_radius = [radius_Na if bool else radius_Cl for bool in col_mass_bool]
         new_df.insert(loc=1, column='radius',value=col_radius)
 
     new_df['x'] = new_df['x'] * a0

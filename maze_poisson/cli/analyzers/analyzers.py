@@ -217,7 +217,7 @@ def compute_diffusion_coefficient(msd, dt, time_intervals, species_name, path, s
     # Save the plot as an image file
     plot_filename = path + str(species_name) + "_MSD_plot.pdf"
     plt.savefig(plot_filename)
-    if parallel == False:
+    if not parallel:
         plt.show()
     plt.close()  
 

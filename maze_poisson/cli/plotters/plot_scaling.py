@@ -42,12 +42,12 @@ def plot_time_iterNgrid(N_p):
     
     path_all_files = [(filename_MaZe + str(i) + '_N_p'+str(N_p)+'.csv') for i in N_vector]
     isExist = [os.path.exists(i) for i in path_all_files]
-    if all(isExist) == False:
+    if not all(isExist):
         print(isExist)
         print(isExist)
         logger.error(str(len(N_vector))+ " files are needed. The files needed do not exist at "+filename_MaZe)
         raise FileNotFoundError(str(len(N_vector))+ " files are needed. The files needed do not exist at "+filename_MaZe)
-    elif all(isExist) == True:
+    elif all(isExist):
         df_list_MaZe = [pd.read_csv(filename_MaZe + str(i) + '_N_p'+str(N_p)+'.csv') for i in N_vector]
 
     avg1 = []
@@ -103,10 +103,10 @@ def plot_convNgrid(N_p):
 
     path_all_files = [(filename_MaZe + str(i) + '_N_p'+str(N_p)+'.csv') for i in N_vector]
     isExist = [os.path.exists(i) for i in path_all_files]
-    if all(isExist) == False:
+    if not all(isExist):
         logger.error(str(len(N_vector))+ " files are needed. The files needed do not exist at "+filename_MaZe)
         raise FileNotFoundError(str(len(N_vector))+ " files are needed. The files needed do not exist at "+filename_MaZe)
-    elif all(isExist) == True:
+    elif all(isExist):
         df_list_MaZe = [pd.read_csv(filename_MaZe + str(i) + '_N_p'+str(N_p)+'.csv') for i in N_vector]
 
     avg1 = []
