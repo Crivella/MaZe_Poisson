@@ -202,11 +202,6 @@ capi.register_function(
     'get_kinetic_energy', ctypes.c_double, [],
 )
 
-#double compute_energy_short_range() {
-# capi.register_function(
-#     'compute_energy_short_range', ctypes.c_double, [],
-# )
-
 # double get_energy_elec() {
 capi.register_function(
     'get_energy_elec', ctypes.c_double, [],

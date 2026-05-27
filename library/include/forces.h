@@ -19,7 +19,6 @@ double compute_force_short_range(
 double compute_tf_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces);
 double compute_sc_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces);
 double compute_lj_forces(int n_p, double L, double *pos, double *params, double r_cut, double *forces, int lj_force_shift);
-double compute_coulomb_sr();
 
 // Pairwise nonbonded contribution for intramolecular exclusions (applies opposite sign)
 double compute_lj_pair_force_excl(

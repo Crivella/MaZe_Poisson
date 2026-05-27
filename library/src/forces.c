@@ -285,6 +285,7 @@ double compute_force_fd(
     long int k0, k1, k2;
     double E, qc;
 
+    double potential_sr = 0;
     
     int n_loc = get_n_loc();
     int n_start = get_n_start();
@@ -341,9 +342,11 @@ double compute_force_fd(
             forces[j0 + 2] += qc * E;
         }
     }
+  
+    allreduce_sum(&sum_q, 1);
+    allreduce_sum(forces, 3 * n_p);
 
-    double potential_sr = 0;
-
+    // This part does not depend on the MPI decomposition, so we compute it after the reduction
     if (smoothing) {
         double *forces_sr = calloc(3 * n_p, sizeof(double)); // Temporary array to store short-range forces
         
@@ -358,14 +361,11 @@ double compute_force_fd(
             L
         );
 
-        // // add short-range forces to total forces
+        // add short-range forces to total forces
         daxpy(forces_sr, forces, 1, 3 * n_p); // forces = forces + forces_sr
 
         free(forces_sr);
     }
-  
-    allreduce_sum(&sum_q, 1);
-    allreduce_sum(forces, 3 * n_p);
 
     
     return potential_sr;
@@ -673,16 +673,6 @@ double compute_sc_forces(int n_p, double L, double *pos, double *params, double 
     }
     return potential_energy;
 }
-
-
-/*
-Compute the short range contribution of Coulomb's forces
-
-*/
-double compute_coulomb_sr() {
-    return 1;
-}
-
 
 double compute_lj_pair_force_excl(long int ia, long int ib, double vx, double vy, double vz, double r_cut, long int np, double *params, double *forces) {
     double r2 = vx * vx + vy * vy + vz * vz;

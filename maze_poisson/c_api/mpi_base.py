@@ -7,6 +7,7 @@ IO_NODE = 0
 
 capi.register_function('init_mpi', ctypes.c_int, [], lambda: 1)
 capi.register_function('get_rank', ctypes.c_int, [], lambda: 0)
+capi.register_function('get_size', ctypes.c_int, [], lambda: 1)
 
 def check_mpi():
     size = capi.init_mpi()

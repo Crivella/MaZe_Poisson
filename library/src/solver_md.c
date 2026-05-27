@@ -14,9 +14,6 @@ particles *g_particles = NULL;
 integrator *g_integrator = NULL;
 grid *g_grid = NULL;
 
-double q_tot = 0.0;
-
-
 static double solver_total_charge_from_particles(void) {
     double q_local = 0.0;
     int n_p = g_particles->n_p;
@@ -119,7 +116,6 @@ int solver_update_charges() {
     q_tot_loc = g_grid->update_charges(g_grid, g_particles);
 
     q_ref = solver_total_charge_from_particles();
-    q_tot = q_ref;
 
     double diff = fabs(q_ref - q_tot_loc);
     if (diff > 1e-4) {
@@ -140,20 +136,12 @@ void solver_init_field() {
 }
 
 void solver_set_field(double *phi) {
-    int n = g_grid->n;
-    long int n2 = n * n;
-    int n_start = get_n_start();
-
-    memcpy(g_grid->phi_n, phi + n_start * n2, g_grid->size * sizeof(double));
+    mpi_grid_distribute_buffer(g_grid->phi_n, phi, g_grid->n);
 }
 
 void solver_set_field_prev(double *phi) {
     if (g_grid->phi_p != NULL) {
-        int n = g_grid->n;
-        long int n2 = n * n;
-        int n_start = get_n_start();
-
-        memcpy(g_grid->phi_p, phi + n_start * n2, g_grid->size * sizeof(double));
+        mpi_grid_distribute_buffer(g_grid->phi_p, phi, g_grid->n);
     }
 }
 
@@ -399,13 +387,13 @@ void get_q(double *recv) {
     mpi_grid_collect_buffer(g_grid->q, recv, g_grid->n);
 }
 
+void set_q(double *q_new) {
+    mpi_grid_distribute_buffer(g_grid->q, q_new, g_grid->n);
+}
+
 double get_kinetic_energy() {
     return g_particles->get_kinetic_energy(g_particles);
 }
-
-// double compute_energy_short_range() {
-//     return g_particles->compute_energy_short_range(g_particles);
-// }
 
 double get_energy_elec() {
     return grid_get_energy_elec(g_grid);
@@ -417,9 +405,4 @@ void get_momentum(double *recv) {
 
 double get_temperature() {
     return g_particles->get_temperature(g_particles);
-}
-
-void set_q(double *q_new) {
-    long int size = g_grid->n * g_grid->n * g_grid->n;
-    memcpy(g_grid->q, q_new, size * sizeof(double));
 }

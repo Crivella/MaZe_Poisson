@@ -45,5 +45,6 @@ double * mpi_grid_allocate(int size1, int size2);
 void mpi_grid_free(double *data, int n);
 void mpi_grid_exchange_bot_top(double *grid, int size1, int size2);
 void mpi_grid_collect_buffer(double *data, double *recv, int n);
+void mpi_grid_distribute_buffer(double *send, double *data, int n);
 
 #endif

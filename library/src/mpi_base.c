@@ -164,6 +164,27 @@ void mpi_grid_collect_buffer(double *data, double *recv, int n) {
     }
 }
 
+void mpi_grid_distribute_buffer(double *data, double *send, int n) {
+    int n_loc = global_mpi_data->n_loc;
+    int n_loc_start;
+    int size = global_mpi_data->size;
+    int rank = global_mpi_data->rank;
+
+    long int n2 = n * n;
+    long int n3_loc = n_loc * n2;
+
+    if (rank == 0) {
+        memcpy(data, send, n3_loc * sizeof(double));
+        for (int i=1; i<size; i++) {
+            n_loc = global_mpi_data->n_loc_list[i];
+            n_loc_start = global_mpi_data->n_start_list[i];
+            MPI_Send(send + n_loc_start * n2, n_loc * n2, MPI_DOUBLE, i, 0, global_mpi_data->comm);
+        }
+    } else {
+        MPI_Recv(data, n3_loc, MPI_DOUBLE, 0, 0, global_mpi_data->comm, MPI_STATUS_IGNORE);
+    }
+}
+
 #else
 
 int init_mpi() {
@@ -215,6 +236,12 @@ void barrier() {
 void mpi_grid_collect_buffer(double *data, double *recv, int n) {
     if (data != recv) {
         memcpy(recv, data, n * n * n * sizeof(double));
+    }
+}
+
+void mpi_grid_distribute_buffer(double *data, double *send, int n) {
+    if (data != send) {
+        memcpy(data, send, n * n * n * sizeof(double));
     }
 }
 

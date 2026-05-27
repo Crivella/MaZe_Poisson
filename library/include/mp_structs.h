@@ -104,7 +104,6 @@ double particles_compute_forces_field(particles *p, grid *grid);
 double particles_compute_forces_tf(particles *p);
 double particles_compute_forces_lj(particles *p);
 double particles_compute_forces_sc(particles *p);
-// double particles_compute_energy_short_range(particles *p);
 double particles_compute_intramolecular_forces(particles *p);
 double particles_compute_forces_electrostatic_correction_spread(particles *p, grid *g);
 double particles_compute_forces_electrostatic_correction_sr(particles *p, grid *g);
@@ -247,7 +246,6 @@ struct particles {
 
     double  (*compute_forces_field)( particles *, grid *);
     double  (*compute_forces_noel)( particles *);
-    // double (*compute_energy_short_range)( particles *);
     void    (*compute_forces_tot)( particles *);
     double  (*compute_forces_pb)( particles *, grid *);
     double (*compute_intramolecular_forces)( particles *);

@@ -127,7 +127,6 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
     p->compute_forces_tot = particles_compute_forces_tot;
     p->get_temperature = particles_get_temperature;
     p->get_kinetic_energy = particles_get_kinetic_energy;
-    // p-> compute_energy_short_range = particles_compute_energy_short_range;
     p->get_momentum = particles_get_momentum;
     p->rescale_velocities = particles_rescale_velocities;
     // p->rescale_velocities = particles_zero_linear;
@@ -474,13 +473,6 @@ double particles_compute_forces_sc(particles *p) {
 double particles_compute_forces_lj(particles *p) { 
     return compute_lj_forces(p->n_p, p->L, p->pos, p->lj_params, p->r_cut, p->fcs_noel, p->lj_force_shift);
 }
-
-// double particles_compute_energy_short_range(particles *p) {
-//     if (! p->smoothing) {
-//         return 0.0;  // No short-range contribution if smoothing is not enabled
-//     }
-//     return compute_energy_short_range_pairwise(p->n_p, p->pos, p->charges, p->R_c, p->L);
-// }
 
 /*
 Legacy intramolecular implementation (bond + angle in one loop).

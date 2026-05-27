@@ -2,7 +2,6 @@
 #include <math.h>
 
 #include "mpi_base.h"
-#include "mp_structs.h" 
 
 // CIC weight function as defined in the paper Im et al. (1998) - eqn 24
 double spread_cic(double x, double L, double h) {
@@ -65,7 +64,7 @@ double update_charges(
         q[i] = 0.0;
     }
 
-    #pragma omp parallel for private(i1, i2, ni, nj, nk, ni_loc, px, py, pz, app, upd, chg) reduction(+:q_tot)
+    // #pragma omp parallel for private(i1, i2, ni, nj, nk, ni_loc, px, py, pz, app, upd, chg) reduction(+:q_tot)
     for (long int i=0; i<n_p; i++) {
         i1 = i * 3;
         i2 = i * nn3;
@@ -142,6 +141,5 @@ double update_charges(
 
     return q_tot;
 }
-
 
 #endif

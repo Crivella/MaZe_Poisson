@@ -78,6 +78,10 @@ class SolverMD(Logger):
         self.thermostat = mdv.thermostat
 
         self.n_iters = 0
+        self.t_charges = 0.0
+        self.t_smoothing = 0.0
+        self.t_field = 0.0
+        self.t_elec_total = 0.0
 
         self.potential_notelec = 0.0
         self.energy_nonpolar = 0.0
@@ -110,6 +114,9 @@ class SolverMD(Logger):
     def initialize(self):
         """Initialize the solver."""
         capi.solver_initialize()
+
+        self.mpi_rank = capi.get_rank()
+        self.mpi_size = capi.get_size()
 
         self.initialize_str_maps()
 
@@ -437,6 +444,7 @@ class SolverMD(Logger):
             )
             R_c = self.mdv.R_c / cst.a0
             sigma_gauss = sigma_gauss_ang / cst.a0
+        self.sigma_gauss = sigma_gauss
 
         # print(f"Using potential parameters: {pot_params}")
 
@@ -488,7 +496,7 @@ class SolverMD(Logger):
             # STEP 0 Verlet
             # self.logger.debug("Running first step of MD loop (Verlet)...")
             self.update_charges()
-            if self.mdv.smoothing == True:
+            if self.mdv.smoothing:
                 self.smoothing(); 
             # self.logger.debug("Updating k^2 grid for Poisson-Boltzmann...")
             self.update_eps_k2()
@@ -502,7 +510,7 @@ class SolverMD(Logger):
             self.integrator_part1()
             # self.logger.debug("Updating charges...")
             self.update_charges()
-            if self.mdv.smoothing == True:
+            if self.mdv.smoothing:
                 self.smoothing(); 
             # self.logger.debug("Updating k^2 grid for Poisson-Boltzmann...")
             self.update_eps_k2()
@@ -513,10 +521,16 @@ class SolverMD(Logger):
             # self.logger.debug("Running second part of integrator...")
             self.integrator_part2()
         elif ffile:
-            df = pd.read_csv(ffile)
-            phi = np.ascontiguousarray(df['phi'].values).reshape((self.N, self.N, self.N))
+            if self.mpi_rank == 0:
+                df = pd.read_csv(ffile)
+                phi = np.ascontiguousarray(df['phi'].values).reshape((self.N, self.N, self.N))
+            else:
+                phi = np.empty((0, 0, 0), dtype=np.float64)  # Dummy array for non-root ranks
             capi.solver_set_field(phi)
-            phi = np.ascontiguousarray(df['phi_prev'].values).reshape((self.N, self.N, self.N))
+            if self.mpi_rank == 0:
+                phi = np.ascontiguousarray(df['phi_prev'].values).reshape((self.N, self.N, self.N))
+            else:
+                phi = np.empty((0, 0, 0), dtype=np.float64)
             capi.solver_set_field_prev(phi)
 
             self.logger.info(f"Initialization step skipped due to field loaded from file.")
@@ -600,25 +614,29 @@ class SolverMD(Logger):
             self.logger.error('Error: change initial position, charge is not preserved.')
             sys.exit(1)
 
-    #Does not change the charge for testing purpose
     @Clock('smoothing')
     def smoothing(self):
-        #print("Performing smoothing.")
-        if self.mdv.R_c is None:
-            raise ValueError("Cutoff radius not specified (R_c is None)")
-        sigma_gauss_ang = (
-            self.mdv.sigma_gauss
-            if self.mdv.sigma_gauss is not None
-            else self.mdv.R_c / 3.0
-        )
-        rho = np.zeros((self.N, self.N, self.N), dtype=np.float64)
-        capi.get_q(rho)
+        self._smoothing_gauss()
 
-        # gaussian_filter expects sigma in grid-cell units, while sigma_gauss is in length units.
-        sigma_grid = (sigma_gauss_ang / cst.a0) / self.h
-        rho_smooth = gaussian_filter(rho, sigma=sigma_grid, mode='wrap')
-        rho_smooth = np.ascontiguousarray(rho_smooth)
-        
+    def _smoothing_gauss(self):
+        if self.mpi_rank == 0:
+            rho = np.zeros((self.N, self.N, self.N), dtype=np.float64)
+        else:
+            rho = np.empty((0, 0, 0), dtype=np.float64)  # Dummy array for non-root ranks
+
+        # Only rank 0 performs the smoothing and then broadcasts the smoothed charge density to all ranks.
+        # The get/set functions have to be called by all ranks to collect/distribute the data
+        # - For collection, only rank 0 gets the full buffer
+        # - For broadcasting only rank 0 needs the actual data
+        capi.get_q(rho)
+        if self.mpi_rank == 0:
+            # gaussian_filter expects sigma in grid-cell units, while sigma_gauss is in length units.
+            sigma_grid = self.sigma_gauss / self.h
+            rho_smooth = gaussian_filter(rho, sigma=sigma_grid, mode='wrap')
+            rho_smooth = np.ascontiguousarray(rho_smooth)    
+        else:
+            rho_smooth = np.empty((0, 0, 0), dtype=np.float64)
+
         # Injection in C
         capi.set_q(rho_smooth)
     
@@ -635,10 +653,6 @@ class SolverMD(Logger):
     def md_loop_iter(self):
         """Run one iteration of the molecular dynamics loop."""
         self.integrator_part1()
-        self.t_charges = 0.0
-        self.t_smoothing = 0.0
-        self.t_field = 0.0
-        self.t_elec_total = 0.0
         if self.mdv.elec:
             self.update_charges()
             self.t_charges = Clock.get_clock('charges').last_call
