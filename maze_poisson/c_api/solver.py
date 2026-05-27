@@ -32,10 +32,21 @@ capi.register_function(
     ],
 )
 
+# void solver_initialize_grid_smoothing(int method, int steps, double r_cut, double sigma, double D) {
+capi.register_function(
+    'solver_initialize_grid_smoothing', None, [
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_double,
+        ctypes.c_double,
+        ctypes.c_double,
+    ],
+)
+
 # void solverinitialize_particles(
 #     int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
 #     int *types, double *pos, double *vel, double *mass, double *charges,
-#     double *params, double r_cut, int lj_force_shift, bool smoothing, double R_c, double sigma_gauss
+#     double *params, double r_cut, int lj_force_shift, bool smoothing,
 # ) {
 capi.register_function(
     'solver_initialize_particles', None, [
@@ -54,9 +65,6 @@ capi.register_function(
         npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
         ctypes.c_double,
         ctypes.c_int,
-        ctypes.c_bool,   # smoothing
-        ctypes.c_double, # R_c
-        ctypes.c_double  # sigma_gauss
     ],
 )
 
@@ -92,6 +100,11 @@ capi.register_function(
 # int solver_update_charges() {
 capi.register_function(
     'solver_update_charges', ctypes.c_int, [],
+)
+
+# void solver_smoothing() {
+capi.register_function(
+    'solver_smoothing', None, [],
 )
 
 # void solver_init_field() {

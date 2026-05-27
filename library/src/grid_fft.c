@@ -82,8 +82,8 @@ void fft_grid_init(grid * grid) {
     long int size2 = (n_loc+2) * n2;
     grid->size = size1;
 
-    grid->q = (double *)malloc(size1 * sizeof(double));
     grid->ig2 = (double *)malloc(n_loc * n * nh * sizeof(double));
+    grid->q = mpi_grid_allocate(n_loc, n);
     grid->phi_n = mpi_grid_allocate(n_loc, n);
     
     double const pi2 = 2 * M_PI;
@@ -127,8 +127,8 @@ void fft_grid_init(grid * grid) {
 void fft_grid_cleanup(grid * grid) {
     cleanup_fftw();
 
-    free(grid->q);
     free(grid->ig2);
+    mpi_grid_free(grid->q, grid->n);
     mpi_grid_free(grid->phi_n, grid->n);
 }   
 

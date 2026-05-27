@@ -173,6 +173,14 @@ double compute_force_short_range(
 ) {
     double shift_potential, potential = 0.0;
 
+    double R_c2 = R_c * R_c;
+    double inv_rc = 1.0 / R_c;
+    double inv_r2c = inv_rc * inv_rc;
+    double inv_r3c = inv_r2c * inv_rc;
+    double xc = R_c / (sqrt(2.0) * sigma_gauss);
+    double erf_term_c = 1.0 - erf(xc);
+    double exp_term_c = exp(-xc*xc);
+
     for (int ip = 0; ip < n_p; ip++) {
         // mpi_fprintf(stderr,"Computing short-range forces for particle %d...\n", ip);
         double px = pos[3*ip];
@@ -191,9 +199,10 @@ double compute_force_short_range(
             dz -= L * round(dz / L);
 
             double r2 = dx*dx + dy*dy + dz*dz;
-            double r = sqrt(r2);
 
-            if (r > R_c || r == 0.0) continue;
+            if (r2 > R_c2 || r2 == 0.0) continue;
+    
+            double r = sqrt(r2);
 
             double qj = charges[jp];
 
@@ -206,12 +215,6 @@ double compute_force_short_range(
             double erf_term = 1.0 - erf(x);
             double exp_term = exp(-x*x);
 
-            double inv_rc  =1.0 / R_c;
-            double inv_r2c = inv_rc * inv_rc;
-            double inv_r3c = inv_r2c * inv_rc;
-            double xc = R_c / (sqrt(2.0) * sigma_gauss);
-            double erf_term_c = 1.0 - erf(xc);
-            double exp_term_c = exp(-xc*xc);
 
             double factor_c =
                 qi * qj *
@@ -273,7 +276,7 @@ double compute_force_short_range(
 double compute_force_fd(
     int n_grid, int n_p, double h, int num_neigh,
     double *phi, long int *neighbors, double *charges, double *pos, double *forces,
-    double (*g)(double, double, double), bool smoothing, double R_c, double sigma_gauss
+    double (*g)(double, double, double)
 ) {
     int nn3 = num_neigh * 3;
     long int n = n_grid;
@@ -284,8 +287,6 @@ double compute_force_fd(
     long int j0, j1, j2;
     long int k0, k1, k2;
     double E, qc;
-
-    double potential_sr = 0;
     
     int n_loc = get_n_loc();
     int n_start = get_n_start();
@@ -345,30 +346,8 @@ double compute_force_fd(
   
     allreduce_sum(&sum_q, 1);
     allreduce_sum(forces, 3 * n_p);
-
-    // This part does not depend on the MPI decomposition, so we compute it after the reduction
-    if (smoothing) {
-        double *forces_sr = calloc(3 * n_p, sizeof(double)); // Temporary array to store short-range forces
-        
-        // compute sr electrostic forces
-        potential_sr = compute_force_short_range(
-            n_p,
-            pos,
-            charges,
-            forces_sr, 
-            R_c,
-            sigma_gauss,
-            L
-        );
-
-        // add short-range forces to total forces
-        daxpy(forces_sr, forces, 1, 3 * n_p); // forces = forces + forces_sr
-
-        free(forces_sr);
-    }
-
     
-    return potential_sr;
+    return 0.0;
 }
 
 /*

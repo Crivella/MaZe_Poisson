@@ -78,6 +78,18 @@ capi.register_function(
     ],
 )
 
+# int get_smoothing_type_num() {
+capi.register_function(
+    'get_smoothing_type_num', ctypes.c_int, [],
+)
+
+# char *get_smoothing_type_str(int n) {
+capi.register_function(
+    'get_smoothing_type_str', ctypes.c_char_p, [
+        ctypes.c_int,
+    ],
+)
+
 # void get_pos(double *recv) {
 capi.register_function(
     'get_pos', None, [

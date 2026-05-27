@@ -62,7 +62,7 @@ void multigrid_grid_init(grid * grid) {
     long int size = grid->n_local * n2;
     grid->size = size;
 
-    grid->q = (double *)malloc(size * sizeof(double));
+    grid->q = mpi_grid_allocate(n_loc, n);
     grid->y = mpi_grid_allocate(n_loc, n);
     grid->phi_p = mpi_grid_allocate(n_loc, n);
     grid->phi_n = mpi_grid_allocate(n_loc, n);
@@ -76,8 +76,7 @@ void multigrid_grid_init(grid * grid) {
 }
 
 void multigrid_grid_cleanup(grid * grid) {
-    free(grid->q);
-
+    mpi_grid_free(grid->q, grid->n);
     mpi_grid_free(grid->y, grid->n);
     mpi_grid_free(grid->phi_p, grid->n);
     mpi_grid_free(grid->phi_n, grid->n);

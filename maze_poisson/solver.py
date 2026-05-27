@@ -58,6 +58,12 @@ elec_corr_map: Dict[str, int] = {
     # 'SR': 1,
 }
 
+smoothing_map: Dict[str, int] = {
+    # 'NONE': 0,
+    # 'GAUSS': 1,
+    # 'DIFFUSION': 2,
+}
+
 class SolverMD(Logger):
     """Base class for all solver classes."""
 
@@ -141,11 +147,54 @@ class SolverMD(Logger):
             (ca_scheme_map, 'get_ca_scheme_type_num', 'get_ca_scheme_type_str'),
             (integrator_map, 'get_integrator_type_num', 'get_integrator_type_str'),
             (precond_map, 'get_precond_type_num', 'get_precond_type_str'),
+            (smoothing_map, 'get_smoothing_type_num', 'get_smoothing_type_str'),
         ]:
             n = getattr(capi, fname_num)()
             for i in range(n):
                 ptr = getattr(capi, fname_data)(i)
                 _map[ptr.decode('utf-8').upper()] = i
+
+    def initialize_grid_smoothing(self):
+        """Initialize the smoothing."""
+        smoothing = self.smoothing_type = self.gset.charge_smoothing
+        steps = self.gset.smoothing_steps
+        diffusion_coeff = self.gset.smoothing_diffusion_coeff
+
+        self.logger.info(f"Initializing smoothing with method: {smoothing}")
+        method = smoothing.upper()
+        if not method in smoothing_map:
+            raise ValueError(f"Smoothing method {method} not recognized.")
+
+        method_id = smoothing_map[method]
+        self.smoothing_rcut = self.gset.smoothing_rcut / cst.a0
+        if self.gset.smoothing_sigma is None:
+            self.smoothing_sigma = self.smoothing_rcut / 3.0
+        else:
+            self.smoothing_sigma = self.gset.smoothing_sigma / cst.a0
+
+        capi.solver_initialize_grid_smoothing(method_id, steps, self.smoothing_rcut, self.smoothing_sigma, diffusion_coeff)
+    
+    def initialize_grid_pb(self):
+        """Initialize the grid for Poisson-Boltzmann."""
+        if not self.mdv.poisson_boltzmann:
+            return
+        self.logger.info("Initializing grid for Poisson-Boltzmann.")
+        eps_s = self.gset.eps_s
+        # eps_int = self.gset.eps_int
+        kbar2 = (
+            8 * np.pi * cst.NA * cst.EC**2 * self.gset.I * 1e3
+        ) / (
+            eps_s * cst.eps0 * cst.kB_si * self.mdv.T
+        ) * cst.BR ** 2 * self.h ** 2
+
+        if self.mdv.nonpolar_forces:
+            nonpolar_enabled = 1
+        else:  
+            nonpolar_enabled = 0   
+
+        capi.solver_initialize_grid_pois_boltz(
+            self.gset.w, kbar2, nonpolar_enabled
+        )
 
     def initialize_grid(self):
         """Initialize the grid."""
@@ -164,24 +213,8 @@ class SolverMD(Logger):
             grid_id, precond_id
         )
 
-        if self.mdv.poisson_boltzmann:
-            eps_s = self.gset.eps_s
-            # eps_int = self.gset.eps_int
-            kbar2 = (
-                8 * np.pi * cst.NA * cst.EC**2 * self.gset.I * 1e3
-            ) / (
-                eps_s * cst.eps0 * cst.kB_si * self.mdv.T
-            ) * cst.BR ** 2 * self.h ** 2
-            self.logger.info("Initializing grid for Poisson-Boltzmann.")
-
-            if self.mdv.nonpolar_forces:
-                nonpolar_enabled = 1
-            else:  
-                nonpolar_enabled = 0   
-
-            capi.solver_initialize_grid_pois_boltz(
-                self.gset.w, kbar2, nonpolar_enabled
-            )
+        self.initialize_grid_pb()
+        self.initialize_grid_smoothing()
 
     def get_tosi_fumi_params(self, particles) -> np.ndarray:
         """Get the Tosi-Fumi parameters for the particles."""
@@ -431,28 +464,11 @@ class SolverMD(Logger):
                 )
             self.logger.info(f"Using custom {potential} cutoff: {r_cut:.6f} a.u.")
 
-        # Pass concrete smoothing parameters to the C API even when smoothing is disabled.
-        R_c = 0.0
-        sigma_gauss = 0.0
-        if self.mdv.smoothing:
-            if self.mdv.R_c is None:
-                raise ValueError("Cutoff radius not specified (R_c is None)")
-            sigma_gauss_ang = (
-                self.mdv.sigma_gauss
-                if self.mdv.sigma_gauss is not None
-                else self.mdv.R_c / 3.0
-            )
-            R_c = self.mdv.R_c / cst.a0
-            sigma_gauss = sigma_gauss_ang / cst.a0
-        self.sigma_gauss = sigma_gauss
-
-        # print(f"Using potential parameters: {pot_params}")
-
         capi.solver_initialize_particles(
             self.N, self.N_typs, self.L, self.h, self.N_p,
             pot_id, ca_scheme_id,
             types, pos, vel, mass, charges,
-            pot_params, r_cut, lj_force_shift, self.mdv.smoothing, R_c, sigma_gauss
+            pot_params, r_cut, lj_force_shift
         )
 
         if self.mdv.iswater:
@@ -495,9 +511,10 @@ class SolverMD(Logger):
         if ffile is None or not self.mdv.invert_time:
             # STEP 0 Verlet
             # self.logger.debug("Running first step of MD loop (Verlet)...")
+            # self.logger.debug("Updating charges...")
             self.update_charges()
-            if self.mdv.smoothing:
-                self.smoothing(); 
+            # self.logger.debug("Smoothing charges...")
+            self.smoothing(); 
             # self.logger.debug("Updating k^2 grid for Poisson-Boltzmann...")
             self.update_eps_k2()
             # self.logger.debug("Initializing field...")
@@ -510,8 +527,7 @@ class SolverMD(Logger):
             self.integrator_part1()
             # self.logger.debug("Updating charges...")
             self.update_charges()
-            if self.mdv.smoothing:
-                self.smoothing(); 
+            self.smoothing(); 
             # self.logger.debug("Updating k^2 grid for Poisson-Boltzmann...")
             self.update_eps_k2()
             # self.logger.debug("Updating field...")
@@ -616,7 +632,10 @@ class SolverMD(Logger):
 
     @Clock('smoothing')
     def smoothing(self):
-        self._smoothing_gauss()
+        if self.smoothing_type.upper() == 'GAUSS':
+            self._smoothing_gauss()
+        else:
+            capi.solver_smoothing()
 
     def _smoothing_gauss(self):
         if self.mpi_rank == 0:
@@ -631,7 +650,7 @@ class SolverMD(Logger):
         capi.get_q(rho)
         if self.mpi_rank == 0:
             # gaussian_filter expects sigma in grid-cell units, while sigma_gauss is in length units.
-            sigma_grid = self.sigma_gauss / self.h
+            sigma_grid = self.smoothing_sigma / self.h
             rho_smooth = gaussian_filter(rho, sigma=sigma_grid, mode='wrap')
             rho_smooth = np.ascontiguousarray(rho_smooth)    
         else:
@@ -656,9 +675,8 @@ class SolverMD(Logger):
         if self.mdv.elec:
             self.update_charges()
             self.t_charges = Clock.get_clock('charges').last_call
-            if self.mdv.smoothing:
-                self.smoothing()
-                self.t_smoothing = Clock.get_clock('smoothing').last_call
+            self.smoothing()
+            self.t_smoothing = Clock.get_clock('smoothing').last_call
             self.update_eps_k2()
             self.n_iters = self.update_field()
             self.t_field = Clock.get_clock('field').last_call

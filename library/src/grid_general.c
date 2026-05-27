@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include "mpi_base.h"
+#include "linalg.h"
 #include "mp_structs.h"
 
 char grid_type_str[GRID_TYPE_NUM][16] = {"LCG", "FFT", "MULTIGRID", "MAZE-LCG", "MAZE-MULTIGRID"}; 
@@ -19,6 +20,15 @@ int get_precond_type_num() {
 }
 char *get_precond_type_str(int n) {
     return precond_type_str[n];
+}
+
+char smoothing_type_str[SMOOTHING_TYPE_NUM][16] = {"NONE", "GAUSS", "DIFFUSION"};
+int get_smoothing_type_num() {
+    return SMOOTHING_TYPE_NUM;
+}
+
+char *get_smoothing_type_str(int n) {
+    return smoothing_type_str[n];
 }
 
 grid * grid_init(int n, double L, double h, double tol, double eps, double eps_int, int grid_type, int precond_type) {
@@ -109,6 +119,134 @@ void grid_pb_free(grid *grid) {
     }
 }
 
+void smooth_charges_none(grid *grid, particles *p) {
+    // No smoothing, return the original charges
+}
+
+void smooth_charges_diffusion(grid *grid, particles *p) {
+    // Placeholder for diffusion-based smoothing implementation
+    // This function would perform a diffusion process on the charge distribution
+    // to smooth it out, and return the energy contribution from the smoothing
+    // mpi_fprintf(stderr, "Diffusion-based smoothing is not yet implemented.\n");
+    // exit(1);
+
+    // mpi_fprintf(stderr, "Starting diffusion-based smoothing");
+    // mpi_printf("Performing diffusion-based smoothing with sigma = %f and r_cut = %f\n", grid->smoothing_sigma, grid->smoothing_rcut);
+
+    int n = grid->n;
+    int n_loc = grid->n_local;
+    int n_start = grid->n_start;
+
+    long int i, j, k;
+    long int i0, i1, i2;
+    long int j0, j1, j2;
+    long int k1, k2;
+    long int n2 = n * n;
+
+    // Precompute neighbor indices for periodic BCs in j and k
+    int jprev[n];
+    int jnext[n];
+    int kprev[n];
+    int knext[n];
+    for (int t = 0; t < n; ++t) {
+        kprev[t] = ((t - 1 + n ) % n);
+        knext[t] = ((t + 1      ) % n);
+        jprev[t] = kprev[t] * n;
+        jnext[t] = knext[t] * n;
+    }
+
+    // double D = grid->smoothing_sigma * grid->smoothing_sigma / (2.0 * grid->smoothing_steps);  // Diffusion coefficient based on the smoothing parameters
+    // D *= grid->smoothing_rcut / grid->L;
+    double D = grid->smoothing_D;
+    // mpi_fprintf(stderr, "Diffusion coefficient D = %f\n", D);
+
+    double *u = grid->q;  // Input charge distribution
+    double *u_new = (double *)malloc(n_loc * n * n * sizeof(double));  // Temporary array for the new charge distribution
+    vec_copy(u, u_new, n_loc * n * n);  // Initialize the new charge distribution with the current values
+
+    for (int step = 0; step < grid->smoothing_steps; step++) {
+        // Exchange the top and bottom slices
+        mpi_grid_exchange_bot_top(grid->q, n_loc, n);
+
+        #pragma omp parallel for private(i, j, k, i0, i1, i2, j0, j1, j2, k1, k2)
+        for (i = 0; i < n_loc; i++) {
+            i0 = i * n2;
+            i1 = i0 + n2;
+            i2 = i0 - n2;
+            for (j = 0; j < n; j++) {
+                j0 = j * n;
+                j1 = jnext[j];
+                j2 = jprev[j];
+                for (k = 0; k < n; k++) {
+                    k1 = knext[k];
+                    k2 = kprev[k];
+                    u_new[i0 + j0 + k] += D * (
+                        u[i1 + j0 + k] +
+                        u[i2 + j0 + k] +
+                        u[i0 + j1 + k] +
+                        u[i0 + j2 + k] +
+                        u[i0 + j0 + k1] +
+                        u[i0 + j0 + k2] -
+                        u[i0 + j0 + k] * 6.0
+                    );
+                }
+            }
+        }
+
+        vec_copy(u_new, u, n_loc * n * n);  // Copy the new charge distribution back to the original array
+    }
+
+    free(u_new);
+}
+
+void grid_smoothing_init(grid *grid, int method, int steps, double r_cut, double sigma, double D) {
+    grid->smoothing = method;
+    grid->smoothing_rcut = r_cut;
+    grid->smoothing_sigma = sigma;
+    grid->smoothing_steps = steps;
+    grid->smoothing_D = D;
+
+    switch (grid->smoothing) {
+        case SMOOTHING_TYPE_NONE:
+            grid->smooth_charges = smooth_charges_none;
+            break;
+        case SMOOTHING_TYPE_GAUSS:
+            // For now performed outside in theh python code
+            grid->smooth_charges = smooth_charges_none;
+            if (grid->smoothing_rcut <= 0.0 || grid->smoothing_sigma <= 0.0) {
+                mpi_fprintf(stderr, "Invalid parameters for Gaussian smoothing:\n");
+                mpi_fprintf(
+                    stderr, "r_cut: %f, sigma: %f\n", grid->smoothing_rcut, grid->smoothing_sigma
+                );
+                exit(1);
+            }
+            break;
+        case SMOOTHING_TYPE_DIFFUSION:
+            grid->smooth_charges = smooth_charges_diffusion;
+            if (
+                grid->smoothing_rcut <= 0.0 || grid->smoothing_sigma <= 0.0 || grid->smoothing_steps <= 0 ||
+                grid->smoothing_D <= 0.0
+            ) {
+                mpi_fprintf(stderr, "Invalid parameters for diffusion-based smoothing:\n");
+                mpi_fprintf(
+                    stderr, "r_cut: %f, sigma: %f, steps: %d, D: %f\n",
+                    grid->smoothing_rcut, grid->smoothing_sigma, grid->smoothing_steps, grid->smoothing_D
+                );
+                exit(1);
+            }
+            break;
+        // Additional smoothing methods can be added here
+        default:
+            break;
+    }
+
+    // Additional initialization for smoothing can be added here if needed
+}
+
+void grid_smoothing_free(grid *grid) {
+    // No dynamic memory allocated for smoothing, so nothing to free
+}
+
 void grid_free(grid *grid) {
     switch (grid->type) {
         case GRID_TYPE_LCG:
@@ -131,6 +269,7 @@ void grid_free(grid *grid) {
     }
 
     grid_pb_free(grid);
+    grid_smoothing_free(grid);
 
     free(grid);
 }

@@ -90,6 +90,12 @@ class GridSetting(BaseFileInput):
     precond: str = 'NONE'
     smoother: str = 'LCG'
 
+    charge_smoothing: int = 0 #Decide wether perform smoohting of the charges or not
+    smoothing_rcut: float = 0 #Cutoff distance
+    smoothing_sigma: float = 0 # Gaussian smoothing width
+    smoothing_steps: int = 0 # Number of steps for iterative smoothing methods
+    smoothing_diffusion_coeff: float = 0 # Diffusion coefficient for diffusion-based smoothing methods
+
     # Poisson-Boltzmann specific
     I: float = None  # Ionic strength
     w: float = None  # Width of the transition region in Angstroms
@@ -125,10 +131,6 @@ class MDVariables(BaseFileInput):
 
     iswater: bool = False  # Flag to toggle SPC water setup
     electrostatic_correction: str = 'SR'  # SPREAD | SR 
-
-    smoothing: bool = False #Decide wether perform smoohting of the charges or not
-    R_c: float = None #Cutoff distance
-    sigma_gauss: float = None # Gaussian smoothing width
     
     thermostat: bool = False  # Whether to use a thermostat
     gamma: float = 1e-3  # Damping coefficient for the thermostat

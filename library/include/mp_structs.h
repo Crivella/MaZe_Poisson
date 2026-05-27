@@ -38,6 +38,11 @@
 #define WATER_ELECTROSTATIC_CORR_TYPE_SPREAD 0
 #define WATER_ELECTROSTATIC_CORR_TYPE_SR 1
 
+#define SMOOTHING_TYPE_NUM 3
+#define SMOOTHING_TYPE_NONE 0
+#define SMOOTHING_TYPE_GAUSS 1
+#define SMOOTHING_TYPE_DIFFUSION 2
+
 // Struct typedefs
 typedef struct grid grid;
 typedef struct particles particles;
@@ -54,6 +59,8 @@ void integrator_free(integrator *integrator);
 
 void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled);
 void grid_pb_free(grid *grid);
+void grid_smoothing_init(grid *grid, int method, int steps, double r_cut, double sigma, double D);
+void grid_smoothing_free(grid *grid);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
 double grid_get_energy_elec(grid *grid);
 
@@ -135,6 +142,11 @@ void precond_mg_apply(double *in, double *out, int s1, int s2, int n_start);
 void precond_ssor_apply(double *in, double *out, int s1, int s2, int n_start);
 void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_start);
 
+// Smoothing function definitions
+void smooth_charges_none(grid *grid, particles *p);
+// void smooth_charges_gauss(grid *grid, particles *p);
+void smooth_charges_diffusion(grid *grid, particles *p);
+
 void precond_blockjacobi_init();
 void precond_blockjacobi_cleanup();
 
@@ -168,11 +180,17 @@ struct grid {
     int nonpolar_enabled; // Nonpolar forces enabled
     double w;  // Ionic boundary width
     double kbar2;  // Screening factor
-
     double *k2;  // Screening factor
     double *eps_x;  // Dielectric constant
     double *eps_y;  // Dielectric constant
     double *eps_z;  // Dielectric constant
+
+    // P3M specific
+    int smoothing; 
+    int smoothing_steps;
+    double smoothing_rcut;
+    double smoothing_sigma;
+    double smoothing_D;
 
     double tol;  // Tolerance for the LCG
     long int n_iters;  // Number of iterations for convergence of the LCG
@@ -182,6 +200,7 @@ struct grid {
     void    (*apply_precond)( double *, double *, int, int, int);
     int     (*update_field)( grid *);
     double  (*update_charges)( grid *, particles *);
+    void    (*smooth_charges)( grid *, particles *);
 };
 
 struct particles {
@@ -231,11 +250,6 @@ struct particles {
     double *fcs_ib; // Ionic boundary forces (n_p x 3)
     double *fcs_np; // Non-polar forces (n_p x 3)
     double *solv_radii; // Solvation radii for each particle (n_p)
-
-    // P3M specific
-    bool smoothing; 
-    double R_c;
-    double sigma_gauss;
 
     void    (*free)( particles *);
 

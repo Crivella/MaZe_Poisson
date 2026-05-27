@@ -56,17 +56,19 @@ void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enab
     grid_pb_init(g_grid, w, kbar2, nonpolar_enabled);
 }
 
+void solver_initialize_grid_smoothing(int method, int steps, double r_cut, double sigma, double D) {
+    // Initialize the charge smoothing to perform after charge assignment
+    grid_smoothing_init(g_grid, method, steps, r_cut, sigma, D);
+}
+
 void solver_initialize_particles(
     int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
     int *types, double *pos, double *vel, double *mass, double *charges,
-    double *pot_params, double r_cut, int lj_force_shift, bool smoothing, double R_c, double sigma_gauss
+    double *pot_params, double r_cut, int lj_force_shift
 ) {
     // TODO: Should R_c and r_cut be the same? If not the variable name should be more clearer/descriptive
     g_particles = particles_init(n, n_p, n_typ, L, h, cas_type);
 
-    g_particles->smoothing = smoothing;
-    g_particles->R_c = R_c;
-    g_particles->sigma_gauss = sigma_gauss;
     g_particles->r_cut = r_cut;
     g_particles->lj_force_shift = lj_force_shift;
 
@@ -129,6 +131,10 @@ int solver_update_charges() {
     }
 
     return res;
+}
+
+void solver_smoothing() {
+    g_grid->smooth_charges(g_grid, g_particles);
 }
 
 void solver_init_field() {

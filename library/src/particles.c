@@ -133,9 +133,6 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
     p->rescale_momenta = particles_rescale_momenta;
     // p->rescale_momenta = particles_rescale_momenta_water;
 
-    p-> smoothing = false;
-    p->R_c = 0.0;
-    p->sigma_gauss = 0.0;
     return p;
 }
 
@@ -455,11 +452,17 @@ void particles_update_nearest_neighbors_spline(particles *p) {
 }
 
 double particles_compute_forces_field(particles *p, grid *grid) {
-    return compute_force_fd(
+    double res = compute_force_fd(
         p->n, p->n_p, p->h, p->num_neighbors,
         grid->phi_n, p->neighbors, p->charges, p->pos, p->fcs_elec,
-        p->charges_spread_func, p->smoothing, p->R_c, p->sigma_gauss
+        p->charges_spread_func
     );
+    if ( grid->smoothing != SMOOTHING_TYPE_NONE) {
+        res += compute_force_short_range(
+            p->n_p, p->pos, p->charges, p->fcs_elec, grid->smoothing_rcut, grid->smoothing_sigma, p->L
+        );
+    }
+    return res;
 }
 
 double particles_compute_forces_tf(particles *p) {

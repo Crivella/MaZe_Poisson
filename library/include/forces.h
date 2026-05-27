@@ -5,7 +5,7 @@
 double compute_force_fd(
     int n_grid, int n_p, double h, int num_neigh,
     double *phi, long int *neighbors, double *charges, double *pos, double *forces,
-    double (*g)(double, double, double), bool smoothing, double R_c, double sigma_gauss
+    double (*g)(double, double, double)
 );
 double compute_force_short_range(
     int n_p,
