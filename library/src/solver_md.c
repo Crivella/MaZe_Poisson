@@ -81,6 +81,10 @@ void solver_initialize_particles(
     g_particles->init_potential(g_particles, pot_type, pot_params);
 }
 
+void solver_initialize_particle_pneigh(int pneigh_method, double r_cut) {
+    particle_pneigh_init(g_particles, pneigh_method, r_cut);
+}
+
 void solver_initialize_particles_pois_boltz(double gamma_np, double beta_np, double *solv_radii) {
     particles_pb_init(g_particles, gamma_np, beta_np, solv_radii);
 }
@@ -114,7 +118,8 @@ int solver_update_charges() {
     double q_tot_loc;
     double q_ref;
     
-    g_particles->update_nearest_neighbors(g_particles);
+    g_particles->update_particle_neighbors(g_particles);
+    g_particles->update_grid_nearest_neighbors(g_particles);
     q_tot_loc = g_grid->update_charges(g_grid, g_particles);
 
     q_ref = solver_total_charge_from_particles();

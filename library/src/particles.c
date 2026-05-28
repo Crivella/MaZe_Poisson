@@ -47,6 +47,17 @@ char *get_water_electrostatic_type_str(int n) {
     return water_electrostatic_type_str[n];
 }
 
+// Particle neighbor method
+char particle_neighbor_type_str[PARTICLE_NEIGHBOR_TYPE_NUM][16] = {"SPHERE", "CELL_LIST"};
+
+int get_particle_neighbor_type_num() {
+    return PARTICLE_NEIGHBOR_TYPE_NUM;
+}
+
+char *get_particle_neighbor_type_str(int n) {
+    return particle_neighbor_type_str[n];
+}
+
 void particle_charges_init(particles *p, int cas_type) {
     int n_p = p->n_p;
 
@@ -54,20 +65,20 @@ void particle_charges_init(particles *p, int cas_type) {
     switch (cas_type) {
         case CHARGE_ASS_SCHEME_TYPE_CIC:
             p->num_neighbors = NUM_NEIGH_CIC;
-            p->neighbors = (long int *)malloc(n_p * NUM_NEIGH_CIC * 3 * sizeof(long int));
-            p->update_nearest_neighbors = particles_update_nearest_neighbors_cic;
+            p->grid_neighbors = (long int *)malloc(n_p * NUM_NEIGH_CIC * 3 * sizeof(long int));
+            p->update_grid_nearest_neighbors = particles_update_grid_nearest_neighbors_cic;
             p->charges_spread_func = spread_cic;
             break;
         case CHARGE_ASS_SCHEME_TYPE_SPLQUAD:
             p->num_neighbors = NUM_NEIGH_SPLINE;
-            p->neighbors = (long int *)malloc(n_p * NUM_NEIGH_SPLINE * 3 * sizeof(long int));
-            p->update_nearest_neighbors = particles_update_nearest_neighbors_spline;
+            p->grid_neighbors = (long int *)malloc(n_p * NUM_NEIGH_SPLINE * 3 * sizeof(long int));
+            p->update_grid_nearest_neighbors = particles_update_grid_nearest_neighbors_spline;
             p->charges_spread_func = spread_spline_quadr;
             break;
         case CHARGE_ASS_SCHEME_TYPE_SPLCUB:
             p->num_neighbors = NUM_NEIGH_SPLINE;
-            p->neighbors = (long int *)malloc(n_p * NUM_NEIGH_SPLINE * 3 * sizeof(long int));
-            p->update_nearest_neighbors = particles_update_nearest_neighbors_spline;
+            p->grid_neighbors = (long int *)malloc(n_p * NUM_NEIGH_SPLINE * 3 * sizeof(long int));
+            p->update_grid_nearest_neighbors = particles_update_grid_nearest_neighbors_spline;
             p->charges_spread_func = spread_spline_cubic;
             break;
         default:
@@ -75,6 +86,157 @@ void particle_charges_init(particles *p, int cas_type) {
             exit(1);
             break;
     }   
+}
+
+void particle_pneigh_sphere(particles *p) {
+    long int np = p->n_p;
+    long int np1 = np + 1;
+    long int idx;
+
+    double *pos = p->pos;
+    double *dist = p->particle_neighbor_distances;
+    long int *neigh = p->particle_neighbors;
+
+    double dx, dy, dz, dr2;
+    double rc2 = p->r_cut * p->r_cut;
+
+    for (int i = 0; i < np; i++) {
+        idx = 0;
+
+        for (int j = 0; j < np; j++) {
+            if (i == j) {
+                continue;
+            }
+            pbc_displacement(p->pos, j, i, p->L, &dx, &dy, &dz, &dr2);
+            if (dr2 < rc2) {
+                neigh[i * np1 + idx] = j;
+                dist[i * np1 * 4 + idx * 4 + 0] = dx;
+                dist[i * np1 * 4 + idx * 4 + 1] = dy;
+                dist[i * np1 * 4 + idx * 4 + 2] = dz;
+                dist[i * np1 * 4 + idx * 4 + 3] = sqrt(dr2);
+                idx++;
+            }
+        }
+        neigh[i * np1 + idx] = -1;  // Sentinel value to indicate end of neighbors for particle i
+    }
+}
+
+void particle_pneigh_cell_list(particles *p) {
+    long int np = p->n_p;
+    long int np1 = np + 1;
+    long int idx;
+
+    double *pos = p->pos;
+    double *dist = p->particle_neighbor_distances;
+    long int *neigh = p->particle_neighbors;
+
+    double dx, dy, dz, dr2;
+    double rc2 = p->r_cut * p->r_cut;
+
+    int s1 = p->cell_list_size;
+    int cell_idx;
+    int cx, cy, cz;
+
+    // Build cell list
+    memset(p->cell_list_head, -1, s1 * s1 * s1 * sizeof(long int));  // Initialize cell list heads to -1
+    for (int i = 0; i < np; i++) {
+        cx = (int)(pos[3*i + 0] / p->cell_list_size);
+        cy = (int)(pos[3*i + 1] / p->cell_list_size);
+        cz = (int)(pos[3*i + 2] / p->cell_list_size);
+        cell_idx = cx * s1 * s1 + cy * s1 + cz;
+        p->cell_list_next[i] = p->cell_list_head[cell_idx];
+        p->cell_list_head[cell_idx] = i;
+    }
+
+    // Find neighbors using cell list
+    for (int i = 0; i < np; i++) {
+        idx = 0;
+
+        cx = (int)(pos[3*i + 0] / p->cell_list_size);
+        cy = (int)(pos[3*i + 1] / p->cell_list_size);
+        cz = (int)(pos[3*i + 2] / p->cell_list_size);
+
+        mpi_fprintf(stderr, "Finding neighbors for particle %d in cell (%d, %d, %d)\n", i, cx, cy, cz);
+        mpi_fprintf(stderr, "x = %f, y = %f, z = %f, cell size = %f\n", pos[3*i + 0], pos[3*i + 1], pos[3*i + 2], p->cell_list_size);
+
+        for (int dx_cell = -1; dx_cell <= 1; dx_cell++) {
+            for (int dy_cell = -1; dy_cell <= 1; dy_cell++) {
+                for (int dz_cell = -1; dz_cell <= 1; dz_cell++) {
+                    int ncx = (cx + dx_cell + s1) % s1;
+                    int ncy = (cy + dy_cell + s1) % s1;
+                    int ncz = (cz + dz_cell + s1) % s1;
+                    cell_idx = ncx * s1 * s1 + ncy * s1 + ncz;
+
+                    long int j = p->cell_list_head[cell_idx];
+                    while (j != -1) {
+                        if (i != j) {
+                            mpi_fprintf(stderr, "Checking particles %d and %d in cell (%d, %d, %d)\n", i, j, ncx, ncy, ncz);
+                            pbc_displacement(p->pos, j, i, p->L, &dx, &dy, &dz, &dr2);
+                            if (dr2 < rc2) {
+                                neigh[i * np1 + idx] = j;
+                                dist[i * np1 * 4 + idx * 4 + 0] = dx;
+                                dist[i * np1 * 4 + idx * 4 + 1] = dy;
+                                dist[i * np1 * 4 + idx * 4 + 2] = dz;
+                                dist[i * np1 * 4 + idx * 4 + 3] = sqrt(dr2);
+                                idx++;
+                            }
+                        }
+                        j = p->cell_list_next[j];
+                    }
+                }
+            }
+        }
+        neigh[i * np1 + idx] = -1;  // Sentinel value to indicate end of neighbors for particle i
+    }
+}
+
+void particle_pneigh_init(particles *p, int method, double r_cut) {
+    int np = p->n_p;
+    int np1 = np + 1;
+
+    mpi_printf("Initializing particle neighbor method: %s\n", get_particle_neighbor_type_str(method));
+
+    p->particle_neighbor_method = method;
+    p->particle_neighbors = (long int *)malloc(np * np1 * sizeof(long int));
+    p->particle_neighbor_distances = (double *)malloc(np * np1 * 4 * sizeof(double));
+
+    switch (method)
+    {
+    case PARTICLE_NEIGHBOR_TYPE_SPHERE:
+        p->update_particle_neighbors = particle_pneigh_sphere;
+        break;
+    case PARTICLE_NEIGHBOR_TYPE_CELL_LIST:
+        p->cell_list_size = p->L / r_cut;
+        // int s1 = p->cell_list_size + 2;  // Add ghost cells for periodic boundaries
+        int s1 = p->cell_list_size;
+        mpi_printf("Cell list size: %d\n", p->cell_list_size);
+        p->cell_list_head = (long int *)malloc(s1 * s1 * s1 * sizeof(long int));
+        p->cell_list_next = (long int *)malloc(np * sizeof(long int));
+        p->update_particle_neighbors = particle_pneigh_cell_list;
+        break;
+    
+    default:
+        break;
+    }
+}
+
+void particle_pneigh_free(particles *p) {
+    if (p->particle_neighbors != NULL) {
+        free(p->particle_neighbors);
+        p->particle_neighbors = NULL;
+    }
+    if (p->particle_neighbor_distances != NULL) {
+        free(p->particle_neighbor_distances);
+        p->particle_neighbor_distances = NULL;
+    }
+    if (p->cell_list_head != NULL) {
+        free(p->cell_list_head);
+        p->cell_list_head = NULL;
+    }
+    if (p->cell_list_next != NULL) {
+        free(p->cell_list_next);
+        p->cell_list_next = NULL;
+    }
 }
 
 /*
@@ -97,6 +259,11 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
     p->fcs_tot = (double *)calloc(n_p * 3, sizeof(double));
     p->mass = (double *)malloc(n_p * sizeof(double));
     p->charges = (double *)malloc(n_p * sizeof(double));
+
+    p->particle_neighbor_method = PARTICLE_NEIGHBOR_TYPE_SPHERE;
+    p->particle_neighbors = NULL;
+    p->cell_list_head = NULL;
+    p->cell_list_next = NULL;
 
     p->is_water = 0;
     p->fcs_intra = NULL; // Intramolecular forces total
@@ -204,7 +371,7 @@ void particles_free(particles *p) {
     free(p->fcs_tot);
     free(p->mass);
     free(p->charges);
-    free(p->neighbors);
+    free(p->grid_neighbors);
     if (p->tf_params != NULL) {
         free(p->tf_params);
     }
@@ -212,6 +379,7 @@ void particles_free(particles *p) {
         free(p->sc_params);
     }
 
+    particle_pneigh_free(p);
     particles_pb_free(p);
     particles_water_free(p);
 
@@ -361,13 +529,13 @@ void particles_init_potential_sc(particles *p, double *pot_params) {
     p->compute_forces_noel = particles_compute_forces_sc;
 }
 
-void particles_update_nearest_neighbors_cic(particles *p) {
+void particles_update_grid_nearest_neighbors_cic(particles *p) {
     int np = p->n_p;
     int n = p->n;
     double h = p->h;
     double L = p->L;
 
-    long int *neighbors = p->neighbors;
+    long int *neighbors = p->grid_neighbors;
     double *pos = p->pos;
 
     int i, j;
@@ -412,13 +580,13 @@ void particles_update_nearest_neighbors_cic(particles *p) {
     }
 }
 
-void particles_update_nearest_neighbors_spline(particles *p) {    
+void particles_update_grid_nearest_neighbors_spline(particles *p) {    
     int np = p->n_p;
     int n = p->n;
     double h = p->h;
     double L = p->L;
 
-    long int *neighbors = p->neighbors;
+    long int *neighbors = p->grid_neighbors;
     double *pos = p->pos;
 
     int i;
@@ -454,27 +622,40 @@ void particles_update_nearest_neighbors_spline(particles *p) {
 double particles_compute_forces_field(particles *p, grid *grid) {
     double res = compute_force_fd(
         p->n, p->n_p, p->h, p->num_neighbors,
-        grid->phi_n, p->neighbors, p->charges, p->pos, p->fcs_elec,
+        grid->phi_n, p->grid_neighbors, p->charges, p->pos, p->fcs_elec,
         p->charges_spread_func
     );
     if ( grid->smoothing != SMOOTHING_TYPE_NONE) {
         res += compute_force_short_range(
-            p->n_p, p->pos, p->charges, p->fcs_elec, grid->smoothing_rcut, grid->smoothing_sigma, p->L
+            p->n_p, p->pos, p->charges, p->fcs_elec, grid->smoothing_rcut, grid->smoothing_sigma, p->L,
+            p->particle_neighbors, p->particle_neighbor_distances
         );
     }
     return res;
 }
 
 double particles_compute_forces_tf(particles *p) {
-    return compute_tf_forces(p->n_p, p->L, p->pos, p->tf_params, p->r_cut, p->fcs_noel);
+    return compute_tf_forces(
+        p->n_p, p->L, p->pos, p->tf_params,
+        p->r_cut, p->particle_neighbors, p->particle_neighbor_distances,
+        p->fcs_noel
+    );
 }
 
 double particles_compute_forces_sc(particles *p) {
-    return compute_sc_forces(p->n_p, p->L, p->pos, p->sc_params, p->r_cut, p->fcs_noel);
+    return compute_sc_forces(
+        p->n_p, p->L, p->pos, p->sc_params,
+        p->r_cut, p->particle_neighbors, p->particle_neighbor_distances,
+        p->fcs_noel
+    );
 }
 
 double particles_compute_forces_lj(particles *p) { 
-    return compute_lj_forces(p->n_p, p->L, p->pos, p->lj_params, p->r_cut, p->fcs_noel, p->lj_force_shift);
+    return compute_lj_forces(
+        p->n_p, p->L, p->pos, p->lj_params,
+        p->r_cut, p->particle_neighbors, p->particle_neighbor_distances,
+        p->fcs_noel, p->lj_force_shift
+    );
 }
 
 /*
@@ -689,9 +870,9 @@ double particles_compute_forces_electrostatic_correction_spread(particles *p, gr
 
                 for (int j1 = 0; j1 < num_neighbors; j1++) {
                     long int i1 = na0 + j1 * 3;
-                    long int ni = p->neighbors[i1];
-                    long int nj = p->neighbors[i1 + 1];
-                    long int nk = p->neighbors[i1 + 2];
+                    long int ni = p->grid_neighbors[i1];
+                    long int nj = p->grid_neighbors[i1 + 1];
+                    long int nk = p->grid_neighbors[i1 + 2];
 
                     double wx1 = p->charges_spread_func(pxa - ni * h, L, h);
                     double wy1 = p->charges_spread_func(pya - nj * h, L, h);
@@ -703,9 +884,9 @@ double particles_compute_forces_electrostatic_correction_spread(particles *p, gr
 
                     for (int j2 = 0; j2 < num_neighbors; j2++) {
                         long int i2 = nb0 + j2 * 3;
-                        long int ni2 = p->neighbors[i2];
-                        long int nj2 = p->neighbors[i2 + 1];
-                        long int nk2 = p->neighbors[i2 + 2];
+                        long int ni2 = p->grid_neighbors[i2];
+                        long int nj2 = p->grid_neighbors[i2 + 1];
+                        long int nk2 = p->grid_neighbors[i2 + 2];
 
                         if (ni == ni2 && nj == nj2 && nk == nk2) {
                             continue;
@@ -781,9 +962,9 @@ double particles_compute_forces_electrostatic_correction_spread_self(particles *
 
         for (int j1 = 0; j1 < num_neighbors; j1++) {
             long int i1 = na0 + j1 * 3;
-            long int ni = p->neighbors[i1];
-            long int nj = p->neighbors[i1 + 1];
-            long int nk = p->neighbors[i1 + 2];
+            long int ni = p->grid_neighbors[i1];
+            long int nj = p->grid_neighbors[i1 + 1];
+            long int nk = p->grid_neighbors[i1 + 2];
 
             double wx1 = p->charges_spread_func(pxa - ni * h, L, h);
             double wy1 = p->charges_spread_func(pya - nj * h, L, h);
@@ -795,9 +976,9 @@ double particles_compute_forces_electrostatic_correction_spread_self(particles *
 
             for (int j2 = j1 + 1; j2 < num_neighbors; j2++) {
                 long int i2 = na0 + j2 * 3;
-                long int ni2 = p->neighbors[i2];
-                long int nj2 = p->neighbors[i2 + 1];
-                long int nk2 = p->neighbors[i2 + 2];
+                long int ni2 = p->grid_neighbors[i2];
+                long int nj2 = p->grid_neighbors[i2 + 1];
+                long int nk2 = p->grid_neighbors[i2 + 2];
 
                 double wx2 = p->charges_spread_func(pxa - ni2 * h, L, h);
                 double wy2 = p->charges_spread_func(pya - nj2 * h, L, h);
@@ -987,7 +1168,7 @@ double particles_compute_forces_electrostatic_correction_sr(particles *p, grid *
 //     }
 
 //     // Ensure neighbors are up to date before looping.
-//     p->update_nearest_neighbors(p);
+//     p->update_grid_nearest_neighbors(p);
 
 //     double *charges_orig = p->charges;
 //     for (long int m = 0; m < np / 3; m++) {

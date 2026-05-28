@@ -7,6 +7,7 @@ from typing import Dict
 
 import numpy as np
 import pandas as pd
+from scipy.ndimage import gaussian_filter
 
 from . import constants as cst
 from .c_api import capi
@@ -15,8 +16,6 @@ from .myio import OutputFiles, ProgressBar
 from .myio.input import GridSetting, MDVariables, OutputSettings
 from .myio.loggers import Logger
 from .myio.output import save_json
-
-from scipy.ndimage import gaussian_filter
 
 np.random.seed(42)
 
@@ -62,6 +61,11 @@ smoothing_map: Dict[str, int] = {
     # 'NONE': 0,
     # 'GAUSS': 1,
     # 'DIFFUSION': 2,
+}
+
+pneigh_method_map: Dict[str, int] = {
+    # 'SPHERE': 0,
+    # 'CELL_LIST': 1,
 }
 
 class SolverMD(Logger):
@@ -148,6 +152,7 @@ class SolverMD(Logger):
             (integrator_map, 'get_integrator_type_num', 'get_integrator_type_str'),
             (precond_map, 'get_precond_type_num', 'get_precond_type_str'),
             (smoothing_map, 'get_smoothing_type_num', 'get_smoothing_type_str'),
+            (pneigh_method_map, 'get_particle_neighbor_type_num', 'get_particle_neighbor_type_str'),
         ]:
             n = getattr(capi, fname_num)()
             for i in range(n):
@@ -367,6 +372,84 @@ class SolverMD(Logger):
                     break
         return df
     
+    def _initialize_particle_pneigh(self, r_cut: float):
+        """Initialize the particle neighbor list."""
+        method = self.mdv.particle_neighbor_method.upper()
+        if not method in pneigh_method_map:
+            raise ValueError(f"Particle neighbor method {method} not recognized.")
+        method_id = pneigh_method_map[method]
+        capi.solver_initialize_particle_pneigh(method_id, r_cut)
+
+    def _initialize_particle_potential(self, particles: pd.DataFrame) -> tuple[int, np.ndarray, float, int]:
+        """Initialize the particle potential."""
+        self.logger.info(f"Initializing particles with potential: {self.mdv.potential}")
+        potential = self.mdv.potential.upper()
+        if not potential in potential_map:
+            # print(potential_map, potential)
+            raise ValueError(f"Potential {potential} not recognized among {','.join(potential_map.keys())}.")
+        pot_id = potential_map[potential]
+
+        if potential == 'TF':
+            pot_params = self.get_tosi_fumi_params(particles)
+            r_cut = self.mdv.r_cut_tf
+            lj_force_shift = 1
+        elif potential == 'LJ':
+            pot_params = self.get_lennard_jones_params(particles)
+            r_cut = self.mdv.r_cut_lj
+            lj_force_shift = int(bool(self.mdv.lj_force_shift))
+            if lj_force_shift:
+                self.logger.info("Using force-shifted LJ potential.")
+            else:
+                self.logger.info("Using LAMMPS-like unshifted LJ potential with tail energy correction.")
+        elif potential == 'SC':
+            pot_params = self.get_sc_params()
+            r_cut = self.mdv.r_cut_sc
+            lj_force_shift = 1
+
+        return pot_id, pot_params, r_cut, lj_force_shift
+
+    def _initialize_particle_rcut(self, r_cut: float) -> float:
+        """Initialize the cutoff radius for non-electrostatic interactions."""
+        if r_cut is None:
+            r_cut = -1.0
+        else:
+            if r_cut <= 0.0:
+                raise ValueError("Optional non-electrostatic cutoff must be positive.")
+            max_cut = self.L / 2.0
+            if r_cut > max_cut:
+                raise ValueError(
+                    f"Requested cutoff {r_cut:.6f} a.u. exceeds the maximum allowed by minimum-image PBC, "
+                    f"L/2 = {max_cut:.6f} a.u."
+                )
+            self.logger.info(f"Using custom cutoff: {r_cut:.6f} a.u.")
+        return r_cut
+
+    def _initialize_particle_water(self):
+        """Initialize the particle settings for water if iswater flag is set."""
+        if not self.mdv.iswater:
+            return
+        estatic_corr = self.mdv.electrostatic_correction.upper()
+        if estatic_corr not in elec_corr_map:
+            raise ValueError(
+                f"Electrostatic correction '{self.mdv.electrostatic_correction}' not recognized. "
+                f"Use one of: {', '.join(elec_corr_map.keys())}."
+            )
+        estatic_corr_id = elec_corr_map[estatic_corr]
+        capi.solver_initialize_particles_water(self.mdv.iswater, estatic_corr_id)
+
+    def _initialize_particle_pb(self, particles: pd.DataFrame, df: pd.DataFrame):
+        """Initialize the particle settings for Poisson-Boltzmann if poisson_boltzmann flag is set."""
+        if not self.mdv.poisson_boltzmann:
+            return
+        if 'radius' not in particles.columns:
+            raise ValueError("Probe radius must be provided in the input file for Poisson-Boltzmann.")
+        radius = np.ascontiguousarray(particles.loc[df['type'], 'radius'].values, dtype=np.float64)
+        radius = radius / cst.a0 + self.mdv.probe_radius
+        self.logger.info("Initializing particles for Poisson-Boltzmann.")
+        capi.solver_initialize_particles_pois_boltz(
+            self.mdv.gamma_np_au, self.mdv.beta_np, radius
+        )
+
     def initialize_particles(self):
         """Initialize the particles."""
         start_file = self.gset.input_file
@@ -393,14 +476,6 @@ class SolverMD(Logger):
             self.types_num_to_str[idx] = part
         particles.set_index('type', inplace=True)
         particles['enum'] = range(len(particles))
-
-
-        self.logger.info(f"Initializing particles with potential: {self.mdv.potential}")
-        potential = self.mdv.potential.upper()
-        if not potential in potential_map:
-            # print(potential_map, potential)
-            raise ValueError(f"Potential {potential} not recognized among {','.join(potential_map.keys())}.")
-        pot_id = potential_map[potential]
 
         cas_str = self.gset.cas.upper()
         if not cas_str in ca_scheme_map:
@@ -432,35 +507,8 @@ class SolverMD(Logger):
                 size=(len(df), 3)
             )
 
-        if potential == 'TF':
-            pot_params = self.get_tosi_fumi_params(particles)
-            r_cut = self.mdv.r_cut_tf
-            lj_force_shift = 1
-        elif potential == 'LJ':
-            pot_params = self.get_lennard_jones_params(particles)
-            r_cut = self.mdv.r_cut_lj
-            lj_force_shift = int(bool(self.mdv.lj_force_shift))
-            if lj_force_shift:
-                self.logger.info("Using force-shifted LJ potential.")
-            else:
-                self.logger.info("Using LAMMPS-like unshifted LJ potential with tail energy correction.")
-        elif potential == 'SC':
-            pot_params = self.get_sc_params()
-            r_cut = self.mdv.r_cut_sc
-            lj_force_shift = 1
-
-        if r_cut is None:
-            r_cut = -1.0
-        else:
-            if r_cut <= 0.0:
-                raise ValueError("Optional non-electrostatic cutoff must be positive.")
-            max_cut = self.L / 2.0
-            if r_cut > max_cut:
-                raise ValueError(
-                    f"Requested cutoff {r_cut:.6f} a.u. exceeds the maximum allowed by minimum-image PBC, "
-                    f"L/2 = {max_cut:.6f} a.u."
-                )
-            self.logger.info(f"Using custom {potential} cutoff: {r_cut:.6f} a.u.")
+        pot_id, pot_params, r_cut, lj_force_shift = self._initialize_particle_potential(particles)
+        r_cut = self._initialize_particle_rcut(r_cut)
 
         capi.solver_initialize_particles(
             self.N, self.N_typs, self.L, self.h, self.N_p,
@@ -469,25 +517,10 @@ class SolverMD(Logger):
             pot_params, r_cut, lj_force_shift
         )
 
-        if self.mdv.iswater:
-            estatic_corr = self.mdv.electrostatic_correction.upper()
-            if estatic_corr not in elec_corr_map:
-                raise ValueError(
-                    f"Electrostatic correction '{self.mdv.electrostatic_correction}' not recognized. "
-                    f"Use one of: {', '.join(elec_corr_map.keys())}."
-                )
-            estatic_corr_id = elec_corr_map[estatic_corr]
-            capi.solver_initialize_particles_water(self.mdv.iswater, estatic_corr_id)
+        self._initialize_particle_pneigh(r_cut)
+        self._initialize_particle_water()
+        self._initialize_particle_pb(particles, df)
 
-        if self.mdv.poisson_boltzmann:
-            if 'radius' not in particles.columns:
-                raise ValueError("Probe radius must be provided in the input file for Poisson-Boltzmann.")
-            radius = np.ascontiguousarray(particles.loc[df['type'], 'radius'].values, dtype=np.float64)
-            radius = radius / cst.a0 + self.mdv.probe_radius
-            self.logger.info("Initializing particles for Poisson-Boltzmann.")
-            capi.solver_initialize_particles_pois_boltz(
-                self.mdv.gamma_np_au, self.mdv.beta_np, radius
-            )
 
     def initialize_integrator(self):
         """Initialize the MD integrator."""

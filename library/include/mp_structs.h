@@ -43,6 +43,10 @@
 #define SMOOTHING_TYPE_GAUSS 1
 #define SMOOTHING_TYPE_DIFFUSION 2
 
+#define PARTICLE_NEIGHBOR_TYPE_NUM 2
+#define PARTICLE_NEIGHBOR_TYPE_SPHERE 0
+#define PARTICLE_NEIGHBOR_TYPE_CELL_LIST 1
+
 // Struct typedefs
 typedef struct grid grid;
 typedef struct particles particles;
@@ -94,6 +98,9 @@ void fft_grid_init_field(grid *grid);
 int fft_grid_update_field(grid *grid);
 double fft_grid_update_charges(grid *grid, particles *p);
 
+void particle_pneigh_init(particles *p, int method, double r_cut);
+void particle_pneigh_free(particles *p);
+
 void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
 void particles_pb_free(particles *p);
 
@@ -104,8 +111,8 @@ void particles_init_potential(particles *p, int pot_type, double *pot_params);
 void particles_init_potential_tf(particles *p, double *pot_params);
 void particles_init_potential_lj(particles *p, double *pot_params);
 void particles_init_potential_sc(particles *p, double *pot_params);
-void particles_update_nearest_neighbors_cic(particles *p);
-void particles_update_nearest_neighbors_spline(particles *p);
+void particles_update_grid_nearest_neighbors_cic(particles *p);
+void particles_update_grid_nearest_neighbors_spline(particles *p);
 
 double particles_compute_forces_field(particles *p, grid *grid);
 double particles_compute_forces_tf(particles *p);
@@ -221,7 +228,7 @@ struct particles {
     double *fcs_tot;  // Particle total forces (n_p x 3)
     double *mass;  // Particle masses (n_p)
     double *charges;  // Particle charges (n_p)
-    long int *neighbors;  // Particle neighbors (n_p x 8 x 3)
+    long int *grid_neighbors;  // Particle neighbors (n_p x 8 x 3)
 
     int is_water;  // Flag to toggle water/SPC setup
     int corr_type; // Type of electrostatic correction for water
@@ -230,9 +237,15 @@ struct particles {
     double energy_intra; // Intramolecular energy total
     double energy_corr; // Intramolecular exclusion correction energy
 
+    long int particle_neighbor_method; // Method for finding particle neighbors
+    long int *particle_neighbors;  // Particle neighbors for particle-particle interactions (n_p x (n_p + 1))
+    double *particle_neighbor_distances;  // Distances to particle neighbors X/Y/Z/abs (n_p x (n_p + 1) * 4)
+    double cell_list_size;  // Cell size for cell list neighbor finding
+    long int *cell_list_head;  // Cell list head for cell list neighbor finding (n_cells)
+    long int *cell_list_next;  // Cell list next for cell list neighbor finding (n_p)
     double r_cut;
-    double sigma;
-    double epsilon;
+    // double sigma;
+    // double epsilon;
     int lj_force_shift;
     double *tf_params;  // Parameters for the TF potential (7 x n_p x n_p)
     double *lj_params;  // Parameters for the LJ potential (4 x n_p x n_p)
@@ -253,8 +266,10 @@ struct particles {
 
     void    (*init_potential)( particles *, int, double *);
 
-    void    (*update_nearest_neighbors)( particles *);
+    void    (*update_particle_neighbors)( particles *);
+    void    (*update_grid_nearest_neighbors)( particles *);
     double  (*charges_spread_func)( double, double, double);
+
 
     double  (*compute_forces_field)( particles *, grid *);
     double  (*compute_forces_noel)( particles *);
