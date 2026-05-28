@@ -59,7 +59,7 @@ void integrator_free(integrator *integrator);
 
 void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled);
 void grid_pb_free(grid *grid);
-void grid_smoothing_init(grid *grid, int method, int steps, double r_cut, double sigma, double D);
+void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma);
 void grid_smoothing_free(grid *grid);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
 double grid_get_energy_elec(grid *grid);
@@ -187,10 +187,8 @@ struct grid {
 
     // P3M specific
     int smoothing; 
-    int smoothing_steps;
     double smoothing_rcut;
     double smoothing_sigma;
-    double smoothing_D;
 
     double tol;  // Tolerance for the LCG
     long int n_iters;  // Number of iterations for convergence of the LCG

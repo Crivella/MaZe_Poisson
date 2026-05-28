@@ -56,9 +56,9 @@ void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enab
     grid_pb_init(g_grid, w, kbar2, nonpolar_enabled);
 }
 
-void solver_initialize_grid_smoothing(int method, int steps, double r_cut, double sigma, double D) {
+void solver_initialize_grid_smoothing(int method, double r_cut, double sigma) {
     // Initialize the charge smoothing to perform after charge assignment
-    grid_smoothing_init(g_grid, method, steps, r_cut, sigma, D);
+    grid_smoothing_init(g_grid, method, r_cut, sigma);
 }
 
 void solver_initialize_particles(

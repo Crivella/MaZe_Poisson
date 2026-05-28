@@ -90,11 +90,11 @@ class GridSetting(BaseFileInput):
     precond: str = 'NONE'
     smoother: str = 'LCG'
 
-    charge_smoothing: int = 0 #Decide wether perform smoohting of the charges or not
+    charge_smoothing: str = 'NONE' #Decide wether perform smoohting of the charges or not
     smoothing_rcut: float = 0 #Cutoff distance
     smoothing_sigma: float = 0 # Gaussian smoothing width
-    smoothing_steps: int = 0 # Number of steps for iterative smoothing methods
-    smoothing_diffusion_coeff: float = 0 # Diffusion coefficient for diffusion-based smoothing methods
+    # smoothing_steps: int = 0 # Number of steps for iterative smoothing methods
+    # smoothing_diffusion_coeff: float = 0 # Diffusion coefficient for diffusion-based smoothing methods
 
     # Poisson-Boltzmann specific
     I: float = None  # Ionic strength

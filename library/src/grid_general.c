@@ -142,6 +142,7 @@ void smooth_charges_diffusion(grid *grid, particles *p) {
     long int j0, j1, j2;
     long int k1, k2;
     long int n2 = n * n;
+    long int size = grid->size;
 
     // Precompute neighbor indices for periodic BCs in j and k
     int jprev[n];
@@ -155,16 +156,15 @@ void smooth_charges_diffusion(grid *grid, particles *p) {
         jnext[t] = knext[t] * n;
     }
 
-    // double D = grid->smoothing_sigma * grid->smoothing_sigma / (2.0 * grid->smoothing_steps);  // Diffusion coefficient based on the smoothing parameters
-    // D *= grid->smoothing_rcut / grid->L;
-    double D = grid->smoothing_D;
-    // mpi_fprintf(stderr, "Diffusion coefficient D = %f\n", D);
+    double D = 1 / 6.2;  // Diffusion coefficient for a simple 3D diffusion process on a grid
+    double sigma = grid->smoothing_sigma / grid->h;  // Convert sigma to grid units
+    int num_steps = ceil(sigma * sigma / (2.0 * D)) + 1;
 
     double *u = grid->q;  // Input charge distribution
-    double *u_new = (double *)malloc(n_loc * n * n * sizeof(double));  // Temporary array for the new charge distribution
-    vec_copy(u, u_new, n_loc * n * n);  // Initialize the new charge distribution with the current values
+    double *u_new = (double *)malloc(size * sizeof(double));  // Temporary array for the new charge distribution
+    vec_copy(u, u_new, size);  // Initialize the new charge distribution with the current values
 
-    for (int step = 0; step < grid->smoothing_steps; step++) {
+    for (int step = 0; step < num_steps; step++) {
         // Exchange the top and bottom slices
         mpi_grid_exchange_bot_top(grid->q, n_loc, n);
 
@@ -193,18 +193,16 @@ void smooth_charges_diffusion(grid *grid, particles *p) {
             }
         }
 
-        vec_copy(u_new, u, n_loc * n * n);  // Copy the new charge distribution back to the original array
+        vec_copy(u_new, u, size);  // Copy the new charge distribution back to the original array
     }
 
     free(u_new);
 }
 
-void grid_smoothing_init(grid *grid, int method, int steps, double r_cut, double sigma, double D) {
+void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma) {
     grid->smoothing = method;
     grid->smoothing_rcut = r_cut;
     grid->smoothing_sigma = sigma;
-    grid->smoothing_steps = steps;
-    grid->smoothing_D = D;
 
     switch (grid->smoothing) {
         case SMOOTHING_TYPE_NONE:
@@ -215,23 +213,17 @@ void grid_smoothing_init(grid *grid, int method, int steps, double r_cut, double
             grid->smooth_charges = smooth_charges_none;
             if (grid->smoothing_rcut <= 0.0 || grid->smoothing_sigma <= 0.0) {
                 mpi_fprintf(stderr, "Invalid parameters for Gaussian smoothing:\n");
-                mpi_fprintf(
-                    stderr, "r_cut: %f, sigma: %f\n", grid->smoothing_rcut, grid->smoothing_sigma
-                );
+                mpi_fprintf(stderr, "r_cut: %f, sigma: %f\n", grid->smoothing_rcut, grid->smoothing_sigma);
                 exit(1);
             }
             break;
         case SMOOTHING_TYPE_DIFFUSION:
             grid->smooth_charges = smooth_charges_diffusion;
             if (
-                grid->smoothing_rcut <= 0.0 || grid->smoothing_sigma <= 0.0 || grid->smoothing_steps <= 0 ||
-                grid->smoothing_D <= 0.0
+                grid->smoothing_rcut <= 0.0 || grid->smoothing_sigma <= 0.0
             ) {
                 mpi_fprintf(stderr, "Invalid parameters for diffusion-based smoothing:\n");
-                mpi_fprintf(
-                    stderr, "r_cut: %f, sigma: %f, steps: %d, D: %f\n",
-                    grid->smoothing_rcut, grid->smoothing_sigma, grid->smoothing_steps, grid->smoothing_D
-                );
+                mpi_fprintf(stderr, "r_cut: %f, sigma: %f\n", grid->smoothing_rcut, grid->smoothing_sigma);
                 exit(1);
             }
             break;

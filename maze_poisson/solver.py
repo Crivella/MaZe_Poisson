@@ -157,8 +157,6 @@ class SolverMD(Logger):
     def initialize_grid_smoothing(self):
         """Initialize the smoothing."""
         smoothing = self.smoothing_type = self.gset.charge_smoothing
-        steps = self.gset.smoothing_steps
-        diffusion_coeff = self.gset.smoothing_diffusion_coeff
 
         self.logger.info(f"Initializing smoothing with method: {smoothing}")
         method = smoothing.upper()
@@ -172,7 +170,7 @@ class SolverMD(Logger):
         else:
             self.smoothing_sigma = self.gset.smoothing_sigma / cst.a0
 
-        capi.solver_initialize_grid_smoothing(method_id, steps, self.smoothing_rcut, self.smoothing_sigma, diffusion_coeff)
+        capi.solver_initialize_grid_smoothing(method_id, self.smoothing_rcut, self.smoothing_sigma)
     
     def initialize_grid_pb(self):
         """Initialize the grid for Poisson-Boltzmann."""
