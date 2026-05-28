@@ -403,8 +403,24 @@ void prolong_trilinear(
     double wi0, wj0, wk0;
     double wi1, wj1, wk1;
 
+
     int d = target_n_start % 2;
     double should_exchange = d;
+
+    double wi0_lst[target_s1];
+    double wi1_lst[target_s1];
+    double wj0_lst[target_s2];
+    double wj1_lst[target_s2];
+    double wk0_lst[target_s2];
+    double wk1_lst[target_s2];
+    for (int i = 0; i < target_s1; i++) {
+        calc_w0_w1((i ^ d) % 2, &wi0_lst[i], &wi1_lst[i]);
+    }
+    for (int j = 0; j < target_s2; j++) {
+        calc_w0_w1(j % 2, &wj0_lst[j], &wj1_lst[j]);
+        calc_w0_w1(j % 2, &wk0_lst[j], &wk1_lst[j]);
+    }
+
 
     // Precompute neighbor indices for periodic BCs in j and k
     long int jnext[s2];
@@ -422,7 +438,8 @@ void prolong_trilinear(
         i0 = i0 * n2c;
         i1 = i0 + n2c;
 
-        calc_w0_w1((i ^ d) % 2, &wi0, &wi1);
+        wi0 = wi0_lst[i];
+        wi1 = wi1_lst[i];
         for (int j = 0; j < target_s2; j++) {
             j0 = ((j / 2    ) % s2);
             j1 = jnext[j0];
@@ -430,12 +447,14 @@ void prolong_trilinear(
 
             row_f = i * n2f + j * target_s2;
 
-            calc_w0_w1(j % 2, &wj0, &wj1); 
+            wj0 = wj0_lst[j];
+            wj1 = wj1_lst[j];
             for (int k = 0; k < target_s2; k++) {
                 k0 = (k / 2    ) % s2;
                 k1 = knext[k0];
 
-                calc_w0_w1(k % 2, &wk0, &wk1);
+                wk0 = wk0_lst[k];
+                wk1 = wk1_lst[k];
                 out[row_f + k] = (
                     in[i0 + j0 + k0] * wi0 * wj0 * wk0 +
                     in[i1 + j0 + k0] * wi1 * wj0 * wk0 +
