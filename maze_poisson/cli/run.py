@@ -1,5 +1,4 @@
-import click
-
+from .click_wrapper import click
 # from ..input import initialize_from_yaml
 from ..myio.input import load_file
 from ..solver import SolverMD

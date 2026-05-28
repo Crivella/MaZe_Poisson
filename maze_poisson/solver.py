@@ -527,7 +527,7 @@ class SolverMD(Logger):
         """Run the molecular dynamics loop."""
         if self.mdv.init_steps:
             self.logger.info("Running MD loop initialization steps...")
-            for i in ProgressBar(self.mdv.init_steps):
+            for i in ProgressBar(self.mdv.init_steps, description="MD init"):
                 self.md_loop_iter()
         
         temp = capi.get_temperature()
@@ -537,9 +537,9 @@ class SolverMD(Logger):
         if self.thermostat:
             self.logger.info("Thermostat ON in production run")
 
-        for i in ProgressBar(self.mdv.N_steps):
+        for i in ProgressBar(self.mdv.N_steps, description="MD steps"):
             self.md_loop_iter()
-            self.md_loop_output(i)
+            self.md_loop_output(i+1)  # Report step number as 1-indexed also to avoid double printing the final one
 
     def run(self):
         """Run the MD calculation."""

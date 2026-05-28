@@ -39,7 +39,8 @@ dependencies = [
 
 [project.optional-dependencies]
 fancy = [
-    "tqdm",
+    "rich",
+    "rich_click",
 ]
 plotting = [
     "matplotlib",

@@ -1,9 +1,9 @@
 import sys
 
-import click
 import numpy as np
 import pandas as pd
 
+from .click_wrapper import click
 from .maze import maze
 from ..constants import density, m_Cl_amu, m_Na_amu, m_Cl, m_Na
 from .utilities.bcc_generate import generate_bcc_positions as bcc_positions
