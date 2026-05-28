@@ -3,6 +3,12 @@ import time
 
 from . import MAIN_LOGGER_NAME
 
+try:
+    from rich.logging import RichHandler
+    HAVE_RICH = True
+except ImportError:
+    HAVE_RICH = False
+
 
 class UTCFormatter(logging.Formatter):
     def formatTime(self, record, datefmt=None):
@@ -16,7 +22,10 @@ logger = logging.getLogger(MAIN_LOGGER_NAME)
 logger.setLevel(logging.DEBUG)  # Set the logging level
 
 stream_formatter = logging.Formatter('{message}', style='{')
-stream_handler = logging.StreamHandler()
+if HAVE_RICH:
+    stream_handler = RichHandler(rich_tracebacks=True, tracebacks_show_locals=True)
+else:
+    stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(stream_formatter)
 stream_handler.setLevel(logging.INFO)
 logger.addHandler(stream_handler)

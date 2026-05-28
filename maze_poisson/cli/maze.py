@@ -1,5 +1,4 @@
-import click
-
+from .click_wrapper import click
 # from .run import run
 
 

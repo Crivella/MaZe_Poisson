@@ -1,5 +1,4 @@
-import click
-
+from .click_wrapper import click
 from .maze import maze
 from .plotters.plot_force import plot_force, plot_forcemod
 from .plotters.plot_scaling import *
