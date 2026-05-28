@@ -97,35 +97,27 @@ void multigrid_grid_init_field(grid *grid) {
     dscal(grid->phi_n, constant, grid->size);
 
     if (grid->pb_enabled) {
-        conj_grad_pb(
-            grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n,
+        multigrid_solve_pb(
+            grid->tol, grid->phi_n, grid->y, grid->n_local, grid->n, grid->n_start,
             grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
         );
     } else {
-        conj_grad(grid->phi_n, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n);
+        multigrid_solve(
+            grid->tol, grid->phi_n, grid->y, grid->n_local, grid->n, grid->n_start
+        );
     }
 }
 
 int multigrid_grid_update_field(grid *grid) {
     int res = -1;
-    int precond = 1;
     long int n2 = grid->n * grid->n;
     long int n3 = grid->n_local * n2;
     
     double tol = grid->tol;
-    double app;
-    int iter_conv = 0;
 
     double *tmp = mpi_grid_allocate(grid->n_local, grid->n);
-    double *tmp2 = mpi_grid_allocate(grid->n_local, grid->n);
 
-    long int i;
-    #pragma omp parallel for private(app)
-    for (i = 0; i < n3; i++) {
-        app = grid->phi_n[i];
-        grid->phi_n[i] = 2 * app - grid->phi_p[i];
-        grid->phi_p[i] = app;
-    }
+    verlet_update(grid->phi_n, grid->phi_p, n3);  // Update phi_n and phi_p with the Verlet algorithm
     // memset(grid->phi_n, 0, grid->size * sizeof(double));  // phi_n = 0 in case we need want multigrid to start without initial guess
 
     double constant = -4 * M_PI / grid->h;
@@ -137,75 +129,19 @@ int multigrid_grid_update_field(grid *grid) {
     vec_copy(grid->q, tmp, grid->size);
     dscal(tmp, constant, grid->size);
 
-    switch (grid->precond_type) {
-        case PRECOND_TYPE_NONE:
-            precond = 0;
-            break;
-        default:
-            break;
-    }
-
     // if poisson boltzmann is enabled use the pb multigrid solver, otherwise use the poisson one.
     // the RHS of the equation is always the same, what changes are the multigrid and the laplace_filter functions
     if (grid->pb_enabled) {
-        // uncomment below only to print the residual at iteration = 0
-        // laplace_filter_pb(grid->phi_n, tmp2, grid->n_local, grid->n, grid->eps_x, grid->eps_y, grid->eps_z, grid->k2);  // tmp2 = A_pb . phi
-        // daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
-        // app = norm_inf(tmp2, n3); 
-        // printf("\niter=%d \t res=%e\n", iter_conv,app);
-
-        while(iter_conv < MG_ITER_LIMIT_PB) {
-            // Here the b in A.x = b is always the same, what is updated in the loop is the starting guess for
-            // the field phi_n
-            multigrid_pb_apply(tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start, MG_SOLVE_SM_PB, grid->eps_x, grid->eps_y, grid->eps_z, grid->k2);
-
-            // Compute the residual
-            laplace_filter_pb(grid->phi_n, tmp2, grid->n_local, grid->n, grid->eps_x, grid->eps_y, grid->eps_z, grid->k2);  // tmp2 = A_pb . phi
-            daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
-
-            // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
-            app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
-            iter_conv++;
-
-            // printf("iter=%d \t res=%e\n", iter_conv,app);
-            if (app <= tol){
-                res = iter_conv;
-                break;
-            }
-        }
+        res = multigrid_solve_pb(
+            tol, tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start,
+            grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
+        );
     } 
     else{
-        // uncomment below only to print the residual at iteration = 0
-        // laplace_filter(grid->phi_n, tmp2, grid->n_local, grid->n);  // tmp2 = A_pb . phi
-        // daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
-        // app = norm_inf(tmp2, n3); 
-        // printf("\niter=%d \t res=%e\n", iter_conv,app);
-
-        while(iter_conv < MG_ITER_LIMIT) {
-            // Here the b in A.x = b is always the same, what is updated in the loop is the starting guess for
-            // the field phi_n
-            multigrid_apply(tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start, MG_SOLVE_SM);
-
-            // Compute the residual
-            laplace_filter(grid->phi_n, tmp2, grid->n_local, grid->n);  // tmp2 = A_pb . phi
-            daxpy(tmp, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
-            
-            // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
-            app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
-            iter_conv++;
-            // printf("iter=%d \t res=%e\n", iter_conv,app);
-            if (app <= tol){
-                res = iter_conv;
-                break;
-            }
-        }
-    }
-    if (iter_conv == MG_ITER_LIMIT || res == -1) {
-        res = -1;  // Not converged
+        res = multigrid_solve(tol, tmp, grid->phi_n, grid->n_local, grid->n, grid->n_start);
     }
 
     mpi_grid_free(tmp, grid->n);
-    mpi_grid_free(tmp2, grid->n);
 
     return res;
 }   

@@ -16,5 +16,9 @@ int multigrid_apply(
     double *in, double *out, int s1, int s2, int n_start1, int sm
 );
 
+int multigrid_solve(
+    double tol, double *in, double *out, int s1, int s2, int n_start
+);
+
 
 #endif // __MP_MULTIGRID_H

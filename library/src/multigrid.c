@@ -740,6 +740,16 @@ void smooth_rbgs(double *in, double *out, int s1, int s2, double tol) {
 //     }
 // }
 
+/*
+Solve the Poisson equation A.out = in using the multigrid method.
+`out` also serves as the initial guess for the solver, and is updated in-place with the solution.
+@param in: input array (right-hand side of the equation)
+@param out: in/out array (starting guess/solution)
+@param s1: size of the first dimension (number of slices)
+@param s2: size of the second dimension (number of grid points per slice)
+@param n_start1: starting index for the first dimension (used for restriction)
+@param sm: number of smoothing iterations to perform at each level of the multigrid V-cycle
+*/
 int multigrid_apply(double *in, double *out, int s1, int s2, int n_start1, int sm) {
     multigrid_apply_recursive(in, out, s1, s2, n_start1, sm);
     // multigrid_apply_3lvl(in, out, s1, s2, n_start1, sm);
@@ -762,4 +772,56 @@ void restriction(double *in, double *out, int s1, int s2, int n_start) {
 void prolong(double *in, double *out, int s1, int s2, int target_s1, int target_s2, int target_n_start) {
     // prolong_nearestneighbors(in, out, s1, s2, target_s1, target_s2, target_n_start);
     prolong_trilinear(in, out, s1, s2, target_s1, target_s2, target_n_start);
+}
+
+/*
+Solve the Poisson equation A.out = in using the multigrid method.
+`A` is the Laplace operator,
+`out` also serves as the initial guess for the solver, and is updated in-place with the solution.
+
+@param tol: convergence tolerance for the residual norm 
+@param in: input array (right-hand side of the equation)
+@param out: in/out array (starting guess/solution)
+@param s1: size of the first dimension (number of slices)
+@param s2: size of the second dimension (number of grid points per slice)
+@param n_start1: starting index for the first dimension (used for restriction)
+@return: number of iterations to converge within the specified tolerance, or -1 if convergence was not achieved
+*/
+int multigrid_solve(
+    double tol, double *in, double *out, int s1, int s2, int n_start
+) {
+    int res = -1;
+    int iter_conv = 0;
+    long int n3 = s1 * s2 * s2;
+
+    double app;
+    double *tmp2 = (double *)malloc(n3 * sizeof(double));
+
+    // uncomment below only to print the residual at iteration = 0
+    // laplace_filter(out, tmp2, s1, s2);  // tmp2 = A_pb . phi
+    // daxpy(in, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
+    // app = norm_inf(tmp2, n3); 
+    // printf("\niter=%d \t res=%e\n", iter_conv,app);
+
+    while(iter_conv < MG_ITER_LIMIT) {
+        // out = solve(A . out = in)
+        multigrid_apply(in, out, s1, s2, n_start, MG_SOLVE_SM);
+
+        // Compute the residual
+        laplace_filter(out, tmp2, s1, s2);  // tmp2 = A_pb . phi
+        daxpy(in, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
+        
+        // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
+        app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
+        iter_conv++;
+        // printf("iter=%d \t res=%e\n", iter_conv,app);
+        if (app <= tol){
+            res = iter_conv;
+            break;
+        }
+    }
+
+    free(tmp2);
+
+    return res;
 }

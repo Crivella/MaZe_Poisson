@@ -6,6 +6,8 @@
 #include "multigrid.h"
 #include "multigrid_pb.h"
 
+void verlet_update(double *phi, double *phi_prev, long int size);
+
 int verlet_poisson(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y, int size1, int size2,
     void (*precond)(double *, double *, int, int, int)

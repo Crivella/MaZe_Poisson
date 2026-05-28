@@ -711,11 +711,86 @@ void smooth_pb_rbgs(
     free(jprev); free(jnext); free(kprev); free(knext);
 }
 
-int multigrid_pb_apply(double *in, double *out, int s1, int s2, int n_start1, int sm, double *eps_x, double *eps_y, double *eps_z, double *k2_screen) {
+
+/*
+Solve the Poisson equation with a dielectric A.out = in using the multigrid method.
+`A` is the Laplace operator for a screened Poisson equation,
+`out` also serves as the initial guess for the solver, and is updated in-place with the solution.
+@param in: input array (right-hand side of the equation)
+@param out: in/out array (starting guess/solution)
+@param s1: size of the first dimension (number of slices)
+@param s2: size of the second dimension (number of grid points per slice)
+@param n_start1: starting index for the first dimension (used for restriction)
+@param sm: number of smoothing iterations to perform at each level of the multigrid V-cycle
+@param eps_x, eps_y, eps_z: face-centered dielectric arrays
+@param k2_screen: cell-centered screening coefficient array
+@return: number of V-cycle iterations performed (for convergence monitoring) or -1 if the solver did not converge
+*/
+int multigrid_pb_apply(
+    double *in, double *out, int s1, int s2, int n_start1, int sm,
+    double *eps_x, double *eps_y, double *eps_z, double *k2_screen
+) {
     multigrid_pb_apply_recursive(in, out, s1, s2, n_start1, sm, eps_x, eps_y, eps_z, k2_screen);
 }
 
 void smooth_pb(double *in, double *out, int s1, int s2, double tol, double *eps_x, double *eps_y, double *eps_z, double *k2_screen) {
     // smooth_pb_jacobi(in, out, s1, s2, tol);
     smooth_pb_rbgs(in, out, s1, s2, tol, eps_x, eps_y, eps_z, k2_screen);
+}
+
+/*
+Solve the screened Poisson equation A.out = in using the multigrid method.
+`A` is the Laplace operator for a screened Poisson equation,
+`out` also serves as the initial guess for the solver, and is updated in-place with the solution.
+
+@param tol: convergence tolerance for the residual norm 
+@param in: input array (right-hand side of the equation)
+@param out: in/out array (starting guess/solution)
+@param s1: size of the first dimension (number of slices)
+@param s2: size of the second dimension (number of grid points per slice)
+@param n_start1: starting index for the first dimension (used for restriction)
+@param eps_x, eps_y, eps_z: face-centered dielectric arrays
+@param k2_screen: cell-centered screening coefficient array
+@return: number of iterations to converge within the specified tolerance, or -1 if convergence was not achieved
+*/
+int multigrid_solve_pb(
+    double tol, double *in, double *out, int s1, int s2, int n_start,
+    double *eps_x, double *eps_y, double *eps_z, double *k2_screen
+) {
+    int res = -1;
+    int iter_conv = 0;
+    long int n3 = s1 * s2 * s2;
+
+    double app;
+
+    double *tmp2 = (double *)malloc(n3 * sizeof(double));
+
+    // uncomment below only to print the residual at iteration = 0
+    // laplace_filter_pb(out, tmp2, s1, s2, eps_x, eps_y, eps_z, k2);  // tmp2 = A_pb . phi
+    // daxpy(in, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
+    // app = norm_inf(tmp2, n3); 
+    // printf("\niter=%d \t res=%e\n", iter_conv,app);
+
+    while(iter_conv < MG_ITER_LIMIT_PB) {
+        // out = solve_pb(A . out = in)
+        multigrid_pb_apply(in, out, s1, s2, n_start, MG_SOLVE_SM_PB, eps_x, eps_y, eps_z, k2_screen);
+
+        // Compute the residual
+        laplace_filter_pb(out, tmp2, s1, s2, eps_x, eps_y, eps_z, k2_screen);  // tmp2 = A_pb . phi
+        daxpy(in, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
+
+        // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
+        app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
+        iter_conv++;
+
+        // printf("iter=%d \t res=%e\n", iter_conv,app);
+        if (app <= tol){
+            res = iter_conv;
+            break;
+        }
+    }
+
+    free(tmp2);
+
+    return res;
 }

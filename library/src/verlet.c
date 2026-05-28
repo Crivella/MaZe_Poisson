@@ -15,6 +15,23 @@
 #endif
 
 /*
+Compute the provisional update for the field phi using the Verlet algorithm.
+- phi(t) = 2 * phi(t-1) - phi(t-2)
+@param phi: the potential field at the current time step
+@param phi_prev: the potential field at the previous time step
+@param size: the total number of grid points
+*/
+void verlet_update(double *phi, double *phi_prev, long int size) {
+    double app;
+    #pragma omp parallel for private(app)
+    for (long int i = 0; i < size; i++) {
+        app = phi[i];
+        phi[i] = 2 * app - phi_prev[i];
+        phi_prev[i] = app;
+    }
+}
+
+/*
 Apply Verlet algorithm to compute the updated value of the field phi, with LCG + SHAKE.
 The previous and current fields and the y array are updated in place.
 @param tol: tolerance
@@ -34,21 +51,12 @@ EXTERN_C int verlet_poisson(
     void (*precond)(double *, double *, int, int, int)
 ) {
     int iter_conv;
+    long int n3 = size1 * size2 * size2;
 
-    long int i;
-    long int n2 = size2 * size2;
-    long int n3 = size1 * n2;
-
-    double app;
     double *tmp = (double*)malloc(n3 * sizeof(double));
     
     // Compute provisional update for the field phi
-    #pragma omp parallel for private(app)
-    for (i = 0; i < n3; i++) {
-        app = phi[i];
-        phi[i] = 2 * app - phi_prev[i];
-        phi_prev[i] = app;
-    }
+    verlet_update(phi, phi_prev, n3);
 
     // Compute the constraint with the provisional value of the field phi
     laplace_filter(phi, tmp, size1, size2);
@@ -88,58 +96,27 @@ EXTERN_C int verlet_poisson_multigrid(
     int size1, int size2
 ) {
     int res = -1;
-    int iter_conv = 0;
 
-    long int i;
     long int n3 = size1 * size2 * size2;
 
-    double app, constant;
+    double constant;
     double *tmp = (double*)malloc(n3 * sizeof(double));
-    double *tmp2 = (double*)malloc(n3 * sizeof(double));
 
     // Compute provisional update for the field phi
-    #pragma omp parallel for private(app)
-    for (i = 0; i < n3; i++) {
-        app = phi[i];
-        phi[i] = 2 * app - phi_prev[i];
-        phi_prev[i] = app;
-    }
+    verlet_update(phi, phi_prev, n3);
 
     constant = (4 * M_PI) / h;
-    laplace_filter(phi, tmp2, size1, size2);
-    daxpy(q, tmp2, constant, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
+    laplace_filter(phi, tmp, size1, size2);
+    daxpy(q, tmp, constant, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
     // memset(y, 0, n3 * sizeof(double));
     // printf("\nprima y = %e\n", norm_inf(y, n3));
     
-    // Questo pezzo non e' usato se vedi app e tmp2 vengono riscritti prima di essere letti
-    // Serve solo se abiliti il printf sotto
-    // laplace_filter(y, tmp, size1, size2);
-    // daxpy(tmp2, tmp, -1., n3);  // res = A . y - sigma_p
-    // app = norm_inf(tmp, n3);   // Compute norm_inf of residual
-    // printf("\ny = %e \t iter=%d \t res=%e\n", norm_inf(y, n3), iter_conv,app);
-    
-    while(iter_conv < MG_ITER_LIMIT) { 
-        // Compute the constraint with the provisional value of the field phi
-        multigrid_apply(tmp2, y, size1, size2, get_n_start(), MG_SOLVE_SM); //solve A . y = sigma_p
-
-        laplace_filter(y, tmp, size1, size2);
-        daxpy(tmp2, tmp, -1., n3);  // res = A . y - sigma_p
-        app = norm_inf(tmp, n3);   // Compute norm_inf of residual
-        iter_conv++;
-        
-        // printf("\ny = %e \t iter=%d \t res=%e\n", norm_inf(y, n3), iter_conv,app);
-        
-        if (app <= tol){
-            res = iter_conv;
-            break;
-        }
-    }
+    res = multigrid_solve(tol, tmp, y, size1, size2, get_n_start());
     // Scale the field with the constrained 'force' term
     daxpy(y, phi, -1.0, n3);  // phi = phi - y
 
     // Free temporary arrays
     free(tmp);
-    free(tmp2);
 
     if (res == -1) {
         fprintf(stderr, "Warning: Multigrid did not converge after 1000 iterations.\n");    
@@ -155,21 +132,12 @@ EXTERN_C int verlet_poisson_pb(
     double *eps_x, double *eps_y, double *eps_z, double *k2_screen
 ) {
     int iter_conv;
+    long int n3 = size1 * size2 * size2;
 
-    long int i;
-    long int n2 = size2 * size2;
-    long int n3 = size1 * n2;
-
-    double app;
     double *tmp = (double*)malloc(n3 * sizeof(double));
     
     // Compute provisional update for the field phi
-    #pragma omp parallel for private(app)
-    for (i = 0; i < n3; i++) {
-        app = phi[i];
-        phi[i] = 2 * app - phi_prev[i];
-        phi_prev[i] = app;
-    }
+    verlet_update(phi, phi_prev, n3);
 
     // Compute the constraint with the provisional value of the field phi
     laplace_filter_pb(
@@ -206,7 +174,7 @@ The previous and current fields and the y array are updated in place.
 @param n_grid: the number of grid points in each dimension
 @param eps_x, eps_y, eps_z: the spatially dependent dielectric constants in each direction
 @param k2_screen: the spatially dependent screening term for the linearized PB equation
-@return the number of iterations for convergence of the MG
+@return the number of iterations for convergence of the MG or -1 if MG did not converge
 */
 EXTERN_C int verlet_pb_multigrid(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y,
@@ -215,53 +183,27 @@ EXTERN_C int verlet_pb_multigrid(
     int res = -1;
     int iter_conv = 0;
 
-    long int i;
     long int n3 = size1 * size2 * size2;
 
     double app, constant;
     double *tmp = (double*)malloc(n3 * sizeof(double));
-    double *tmp2 = (double*)malloc(n3 * sizeof(double));
 
     // Compute provisional update for the field phi
-    #pragma omp parallel for private(app)
-    for (i = 0; i < n3; i++) {
-        app = phi[i];
-        phi[i] = 2 * app - phi_prev[i];
-        phi_prev[i] = app;
-    }
+    verlet_update(phi, phi_prev, n3);
 
     constant = (4 * M_PI) / h;
-    laplace_filter_pb(phi, tmp2, size1, size2, eps_x, eps_y, eps_z, k2_screen);
-    daxpy(q, tmp2, constant, n3);  // sigma_p = A_pb . phi + 4 * pi * q / h
-    
-    // uncomment below only to print the residual at iteration = 0
-    // laplace_filter_pb(y, tmp, size1, size2, eps_x, eps_y, eps_z, k2_screen);
-    // daxpy(tmp2, tmp, -1., n3);  // res = A_pb . y - sigma_p
-    // app = norm_inf(tmp, n3);   // Compute norm_inf of residual
-    // printf("\ny = %e \t iter=%d \t res=%e\n", norm_inf(y, n3), iter_conv,app);
-    
-    while(iter_conv < MG_ITER_LIMIT_PB) { 
-        // Compute the constraint with the provisional value of the field phi
-        multigrid_pb_apply(tmp2, y, size1, size2, get_n_start(), MG_SOLVE_SM_PB, eps_x, eps_y, eps_z, k2_screen); //solve A_pb . y = sigma_p
+    laplace_filter_pb(phi, tmp, size1, size2, eps_x, eps_y, eps_z, k2_screen);
+    daxpy(q, tmp, constant, n3);  // sigma_p = A_pb . phi + 4 * pi * q / h
 
-        laplace_filter_pb(y, tmp, size1, size2, eps_x, eps_y, eps_z, k2_screen);
-        daxpy(tmp2, tmp, -1., n3);  // res = A . y - sigma_p
-        app = norm_inf(tmp, n3);   // Compute norm_inf of residual
-        iter_conv++;
-        
-        // printf("\ny = %e \t iter=%d \t res=%e\n", norm_inf(y, n3), iter_conv,app);
-        
-        if (app <= tol){
-            res = iter_conv;
-            break;
-        }
-    }
+    multigrid_solve_pb(
+        tol, tmp, y, size1, size2, get_n_start(),
+        eps_x, eps_y, eps_z, k2_screen
+    );  // solve A_pb . y = sigma_p
     // Scale the field with the constrained 'force' term
     daxpy(y, phi, -1.0, n3);  // phi = phi - y
 
     // Free temporary arrays
     free(tmp);
-    free(tmp2);
 
     if (res == -1) {
         fprintf(stderr, "Warning: Multigrid did not converge after 1000 iterations.\n");    

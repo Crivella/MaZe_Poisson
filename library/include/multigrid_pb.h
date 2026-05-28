@@ -14,5 +14,10 @@ int multigrid_pb_apply(
     double *in, double *out, int s1, int s2, int n_start1, int sm, double *eps_x, double *eps_y, double *eps_z, double *k2_screen
 );
 
+int multigrid_solve_pb(
+    double tol, double *in, double *out, int s1, int s2, int n_start,
+    double *eps_x, double *eps_y, double *eps_z, double *k2_screen
+);
+
 
 #endif // __MP_MULTIGRID_PB_H

@@ -83,8 +83,6 @@ void maze_multigrid_grid_cleanup(grid * grid) {
 }
 
 void maze_multigrid_grid_init_field(grid *grid) {
-    long int i;
-
     double *tmp = mpi_grid_allocate(grid->n_local, grid->n);
 
     double constant = -4 * M_PI / grid->h;
@@ -99,28 +97,20 @@ void maze_multigrid_grid_init_field(grid *grid) {
     dscal(tmp, constant, grid->size);
 
     if (grid->pb_enabled) {
-        conj_grad_pb(
-            tmp, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n,
+        multigrid_solve_pb(
+            grid->tol, tmp, grid->y, grid->n_local, grid->n, grid->n_start,
             grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
         );
     } else {
-        conj_grad(tmp, grid->y, grid->phi_n, grid->tol, grid->n_local, grid->n);
+        multigrid_solve(
+            grid->tol, tmp, grid->y, grid->n_local, grid->n, grid->n_start
+        );
     }
 
     mpi_grid_free(tmp, grid->n);
 }
 
 int maze_multigrid_grid_update_field(grid *grid) {
-    int precond = 1;
-
-    switch (grid->precond_type) {
-        case PRECOND_TYPE_NONE:
-            precond = 0;
-            break;
-        default:
-            break;
-    }
-
     int res;
 
     if (grid->pb_enabled) {
@@ -134,7 +124,7 @@ int maze_multigrid_grid_update_field(grid *grid) {
             grid->n_local, grid->n
         );  // grid->h * grid->eps_s to account for the dielectric constant in the poisson equation
     }
-    if (precond) {
+    if (grid->precond_type != PRECOND_TYPE_NONE) {
         fprintf(stderr, "Maze Multigrid with preconditioner not implemented yet.\n");
         exit(1);
     }
