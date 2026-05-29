@@ -49,17 +49,23 @@
 
 // Struct typedefs
 typedef struct grid grid;
+typedef struct neighbor neighbor;
 typedef struct particles particles;
 typedef struct integrator integrator;
 
 // Struct function definitions
 grid * grid_init(int n, double L, double h, double tol, double eps, double eps_int, int type, int precond_type);
+neighbor * neighbor_init();
 particles * particles_init(int n, int n_p, int n_typ, double L, double h, int cas_type);
 integrator * integrator_init(int n_p, double dt, int type);
 
 void grid_free(grid *grid);
 void particles_free(particles *p);
 void integrator_free(integrator *integrator);
+
+// long int *neighbor_get_indices(neighbor *n);
+// double *neighbor_get_dx(neighbor *n);
+// double *neighbor_get_dx(neighbor *n);
 
 void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled);
 void grid_pb_free(grid *grid);
@@ -208,6 +214,19 @@ struct grid {
     void    (*smooth_charges)( grid *, particles *);
 };
 
+struct neighbor {
+    long int idx;  // Index of the neighbor particle
+    double dist;  // Distance to the neighbor particle
+    double dx;  // X distance to the neighbor particle
+    double dy;  // Y distance to the neighbor particle
+    double dz;  // Z distance to the neighbor particle
+
+    // Flag to indicate if the neighbor list should stop or continue (for Verlet lists)
+    // Needed to be able to re-use the same list while still allowing a proper free at the end
+    int valid;
+    neighbor *next;  // Pointer to the next neighbor in the list
+};
+
 struct particles {
     // int n;  // Number of grid points per dimension
     int n_p;  // Number of particles
@@ -237,17 +256,14 @@ struct particles {
     double energy_intra; // Intramolecular energy total
     double energy_corr; // Intramolecular exclusion correction energy
 
+    double r_cut;
     long int particle_neighbor_method; // Method for finding particle neighbors
-    // long int *num_neighbors;  // Number of neighbors for each particle (n_p)
-    long int *particle_neighbors;  // Particle neighbors for particle-particle interactions (n_p x (n_p + 1))
-    double *particle_neighbor_distances;  // Distances to particle neighbors X/Y/Z/abs (n_p x (n_p + 1) * 4)
+    neighbor **particle_neighbors;  // Linked list of neighbors for each particle (n_p)
     int cell_list_size;  // Cell size for cell list neighbor finding
     double cell_list_length;  // Cell size for cell list neighbor finding
     long int *cell_list_head;  // Cell list head for cell list neighbor finding (n_cells)
     long int *cell_list_next;  // Cell list next for cell list neighbor finding (n_p)
-    double r_cut;
-    // double sigma;
-    // double epsilon;
+
     int lj_force_shift;
     double *tf_params;  // Parameters for the TF potential (7 x n_p x n_p)
     double *lj_params;  // Parameters for the LJ potential (4 x n_p x n_p)

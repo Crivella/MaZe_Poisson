@@ -2,6 +2,8 @@
 #ifndef __FORCES_H
 #define __FORCES_H
 
+#include "mp_structs.h"
+
 static inline void pbc_displacement(
     const double *pos, long int ia, long int ib, double L, double *dx, double *dy, double *dz, double *dr2
 ) {
@@ -30,22 +32,21 @@ double compute_force_short_range(
     double R_c,
     double sigma_gauss,
     double L,
-    long int *neighbors,
-    double *distances
+    neighbor **neighbors
 );
 double compute_tf_forces(
     int n_p, int n_typ, double L, int *types, double *pos, double *params,
-    double r_cut, long int *neighbors, double *distances,
+    double r_cut, neighbor **neighbors,
     double *forces
 );
 double compute_sc_forces(
     int n_p, double L, double *pos, double *params,
-    double r_cut, long int *neighbors, double *distances,
+    double r_cut, neighbor **neighbors,
     double *forces
 );
 double compute_lj_forces(
     int n_p, double L, double *pos, double *params,
-    double r_cut, long int *neighbors, double *distances,
+    double r_cut, neighbor **neighbors,
     double *forces, int lj_force_shift
 );
 
