@@ -36,7 +36,7 @@ class BaseOutputFile(Logger, ABC):
         if not self.enabled:
             return
 
-        self.logger.info("Saving %s to '%s'", self.name, self.path)
+        self.logger.info("Saving %s to %s", self.name, self.path)
 
         if os.path.exists(path):
             if overwrite:

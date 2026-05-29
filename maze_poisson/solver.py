@@ -163,7 +163,7 @@ class SolverMD(Logger):
         """Initialize the smoothing."""
         smoothing = self.smoothing_type = self.gset.charge_smoothing
 
-        self.logger.info(f"Initializing smoothing with method: {smoothing}")
+        self.logger.info(f"Initializing smoothing with method: '{smoothing}'")
         method = smoothing.upper()
         if not method in smoothing_map:
             raise ValueError(f"Smoothing method {method} not recognized.")
@@ -201,7 +201,7 @@ class SolverMD(Logger):
 
     def initialize_grid(self):
         """Initialize the grid."""
-        self.logger.info(f"Initializing grid with method: {self.mdv.method}")
+        self.logger.info(f"Initializing grid with method: '{self.mdv.method}'")
         method = self.mdv.method.upper()
         if not method in method_grid_map:
             raise ValueError(f"Method {method} not recognized.")
@@ -291,38 +291,6 @@ class SolverMD(Logger):
 
         return sc_params_array
 
-    def validate_water_inputs(self, species_df: pd.DataFrame, coords_df: pd.DataFrame):
-        """Check that water-specific inputs are consistent when iswater flag is set."""
-        if not self.mdv.iswater:
-            return
-        required_col = 'type'
-        for name, df in [('species file', species_df), ('input file', coords_df)]:
-            if required_col not in df.columns:
-                raise ValueError(f"When iswater=True, the {name} must contain a '{required_col}' column.")
-
-        species_types = species_df['type'].astype(str).str.upper()
-        if not {'O', 'H'}.issubset(set(species_types)):
-            raise ValueError("When iswater=True, the species file must define both oxygen ('O') and hydrogen ('H').")
-
-        coord_types = coords_df['type'].astype(str).str.upper().to_numpy()
-        if len(coord_types) % 3 != 0:
-            raise ValueError("When iswater=True, the input file must list atoms in O-H-H triplets (row count must be a multiple of 3).")
-
-        unique_coord_types = set(coord_types)
-        if not unique_coord_types.issubset({'O', 'H'}):
-            extras = unique_coord_types.difference({'O', 'H'})
-            raise ValueError(f"When iswater=True, input file must contain only oxygen and hydrogen types; found extra types: {extras}.")
-
-        triplets = coord_types.reshape((-1, 3))
-        pattern = np.array(['O', 'H', 'H'])
-        mismatches = np.where((triplets != pattern).any(axis=1))[0]
-        if mismatches.size:
-            idx = mismatches[0]
-            raise ValueError(
-                f"When iswater=True, each molecule must be ordered as O-H-H in the 'type' column; "
-                f"molecule {idx} has types {triplets[idx].tolist()}."
-            )
-
     def get_lennard_jones_params(self, particles) -> np.ndarray:
         """Get the Lennard Jones parameters for the particles."""
         if self.mdv.potential_params_file is None:
@@ -362,6 +330,38 @@ class SolverMD(Logger):
 
         return lj_params_array
 
+    def validate_water_inputs(self, species_df: pd.DataFrame, coords_df: pd.DataFrame):
+        """Check that water-specific inputs are consistent when iswater flag is set."""
+        if not self.mdv.iswater:
+            return
+        required_col = 'type'
+        for name, df in [('species file', species_df), ('input file', coords_df)]:
+            if required_col not in df.columns:
+                raise ValueError(f"When iswater=True, the {name} must contain a '{required_col}' column.")
+
+        species_types = species_df['type'].astype(str).str.upper()
+        if not {'O', 'H'}.issubset(set(species_types)):
+            raise ValueError("When iswater=True, the species file must define both oxygen ('O') and hydrogen ('H').")
+
+        coord_types = coords_df['type'].astype(str).str.upper().to_numpy()
+        if len(coord_types) % 3 != 0:
+            raise ValueError("When iswater=True, the input file must list atoms in O-H-H triplets (row count must be a multiple of 3).")
+
+        unique_coord_types = set(coord_types)
+        if not unique_coord_types.issubset({'O', 'H'}):
+            extras = unique_coord_types.difference({'O', 'H'})
+            raise ValueError(f"When iswater=True, input file must contain only oxygen and hydrogen types; found extra types: {extras}.")
+
+        triplets = coord_types.reshape((-1, 3))
+        pattern = np.array(['O', 'H', 'H'])
+        mismatches = np.where((triplets != pattern).any(axis=1))[0]
+        if mismatches.size:
+            idx = mismatches[0]
+            raise ValueError(
+                f"When iswater=True, each molecule must be ordered as O-H-H in the 'type' column; "
+                f"molecule {idx} has types {triplets[idx].tolist()}."
+            )
+
     @staticmethod
     def pd_ensure_lowercase(df: pd.DataFrame, column: str) -> pd.DataFrame:
         """Ensure that a specified column in a DataFrame is lowercase."""
@@ -374,15 +374,15 @@ class SolverMD(Logger):
     
     def _initialize_particle_pneigh(self, r_cut: float):
         """Initialize the particle neighbor list."""
-        method = self.mdv.particle_neighbor_method.upper()
+        method = self.mdv.neighbor_method.upper()
         if not method in pneigh_method_map:
             raise ValueError(f"Particle neighbor method {method} not recognized.")
         method_id = pneigh_method_map[method]
         capi.solver_initialize_particle_pneigh(method_id, r_cut)
 
-    def _initialize_particle_potential(self, particles: pd.DataFrame) -> tuple[int, np.ndarray, float, int]:
+    def _initialize_particle_potential(self, particles: pd.DataFrame) -> tuple[int, np.ndarray, int]:
         """Initialize the particle potential."""
-        self.logger.info(f"Initializing particles with potential: {self.mdv.potential}")
+        self.logger.info(f"Initializing particles with potential: '{self.mdv.potential}'")
         potential = self.mdv.potential.upper()
         if not potential in potential_map:
             # print(potential_map, potential)
@@ -391,11 +391,9 @@ class SolverMD(Logger):
 
         if potential == 'TF':
             pot_params = self.get_tosi_fumi_params(particles)
-            r_cut = self.mdv.r_cut_tf
             lj_force_shift = 1
         elif potential == 'LJ':
             pot_params = self.get_lennard_jones_params(particles)
-            r_cut = self.mdv.r_cut_lj
             lj_force_shift = int(bool(self.mdv.lj_force_shift))
             if lj_force_shift:
                 self.logger.info("Using force-shifted LJ potential.")
@@ -403,25 +401,24 @@ class SolverMD(Logger):
                 self.logger.info("Using LAMMPS-like unshifted LJ potential with tail energy correction.")
         elif potential == 'SC':
             pot_params = self.get_sc_params()
-            r_cut = self.mdv.r_cut_sc
             lj_force_shift = 1
 
-        return pot_id, pot_params, r_cut, lj_force_shift
+        return pot_id, pot_params, lj_force_shift
 
-    def _initialize_particle_rcut(self, r_cut: float) -> float:
+    def _validate_rcut(self, r_cut: float) -> float:
         """Initialize the cutoff radius for non-electrostatic interactions."""
         if r_cut is None:
             r_cut = -1.0
         else:
             if r_cut <= 0.0:
                 raise ValueError("Optional non-electrostatic cutoff must be positive.")
+            self.logger.info(f"Using custom cutoff: {r_cut:.6f} a.u.")
             max_cut = self.L / 2.0
             if r_cut > max_cut:
                 raise ValueError(
                     f"Requested cutoff {r_cut:.6f} a.u. exceeds the maximum allowed by minimum-image PBC, "
                     f"L/2 = {max_cut:.6f} a.u."
                 )
-            self.logger.info(f"Using custom cutoff: {r_cut:.6f} a.u.")
         return r_cut
 
     def _initialize_particle_water(self):
@@ -507,8 +504,8 @@ class SolverMD(Logger):
                 size=(len(df), 3)
             )
 
-        pot_id, pot_params, r_cut, lj_force_shift = self._initialize_particle_potential(particles)
-        r_cut = self._initialize_particle_rcut(r_cut)
+        pot_id, pot_params, lj_force_shift = self._initialize_particle_potential(particles)
+        r_cut = self._validate_rcut(self.mdv.neighbor_r_cut)
 
         capi.solver_initialize_particles(
             self.N, self.N_typs, self.L, self.h, self.N_p,
@@ -524,7 +521,7 @@ class SolverMD(Logger):
 
     def initialize_integrator(self):
         """Initialize the MD integrator."""
-        self.logger.info(f"Initializing integrator: {self.mdv.integrator}")
+        self.logger.info(f"Initializing integrator: '{self.mdv.integrator}'")
         name = self.mdv.integrator.upper()
         if not name in integrator_map:
             raise ValueError(f"Integrator {name} not recognized.")
@@ -761,12 +758,12 @@ class SolverMD(Logger):
         self.logger.info(f'  N = {self.N}, L [A] = {self.L * cst.a0}, h [A] = {self.h * cst.a0}')
         self.logger.info(f'  density = {density} g/cm^3')
         self.logger.info(f'  Solvent dielectric constant: {self.gset.eps_s}')
-        self.logger.info(f'  Solver: {self.mdv.method},  Preconditioner: {self.gset.precond}')
-        self.logger.info(f'  Charge assignment scheme: {self.gset.cas}')
+        self.logger.info(f'  Solver: "{self.mdv.method}",  Preconditioner: "{self.gset.precond}"')
+        self.logger.info(f'  Charge assignment scheme: "{self.gset.cas}"')
         # self.logger.info(f'  Preconditioning: {self.mdv.preconditioning}')
-        self.logger.info(f'  Integrator: {self.mdv.integrator}, dt = {self.mdv.dt} au = {self.mdv.dt * cst.t_au} fs')
-        self.logger.info(f'  Potential: {self.mdv.potential}')
-        self.logger.info(f'  Electrostatic correction: {self.mdv.electrostatic_correction}')
+        self.logger.info(f'  Integrator: "{self.mdv.integrator}", dt = {self.mdv.dt} au = {self.mdv.dt * cst.t_au} fs')
+        self.logger.info(f'  Potential: "{self.mdv.potential}"')
+        self.logger.info(f'  Electrostatic correction: "{self.mdv.electrostatic_correction}"')
         self.logger.info(f'  Elec: {self.mdv.elec}    NotElec: {self.mdv.not_elec}')
         self.logger.info(f'  Temperature: {self.mdv.T} K,  Thermostat: {self.mdv.thermostat},  Gamma: {self.mdv.gamma}')
         self.logger.info(f'  Velocity rescaling: {self.mdv.rescale}')
