@@ -113,12 +113,15 @@ void solver_initialize_integrator(int n_p, double dt, double T, double gamma, in
     }
 }
 
+void solver_update_particle_neighbors() {
+    g_particles->update_particle_neighbors(g_particles);
+}
+
 int solver_update_charges() {
     int res = 0;
     double q_tot_loc;
     double q_ref;
     
-    g_particles->update_particle_neighbors(g_particles);
     g_particles->update_grid_nearest_neighbors(g_particles);
     q_tot_loc = g_grid->update_charges(g_grid, g_particles);
 

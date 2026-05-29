@@ -540,9 +540,7 @@ class SolverMD(Logger):
             # STEP 0 Verlet
             # self.logger.debug("Running first step of MD loop (Verlet)...")
             # self.logger.debug("Updating charges...")
-            self.update_charges()
-            # self.logger.debug("Smoothing charges...")
-            self.smoothing(); 
+            self.update_particles()
             # self.logger.debug("Updating k^2 grid for Poisson-Boltzmann...")
             self.update_eps_k2()
             # self.logger.debug("Initializing field...")
@@ -554,8 +552,7 @@ class SolverMD(Logger):
             # self.logger.debug("Running second step of MD loop (Verlet)...")
             self.integrator_part1()
             # self.logger.debug("Updating charges...")
-            self.update_charges()
-            self.smoothing(); 
+            self.update_particles()
             # self.logger.debug("Updating k^2 grid for Poisson-Boltzmann...")
             self.update_eps_k2()
             # self.logger.debug("Updating field...")
@@ -651,15 +648,30 @@ class SolverMD(Logger):
         """Output the data for the MD loop."""
         self.ofiles.output(i, self, force)
 
+
+    @Clock('particle_neighbor')
+    def _update_particle_neighbor(self):
+        """Update the particle neighbor list."""
+        capi.solver_update_particle_neighbors()
+
     @Clock('charges')
-    def update_charges(self):
+    def _update_charges(self):
         """Update the charge grid based on the particles position with function g to spread them on the grid."""
         if capi.solver_update_charges() != 0:
             self.logger.error('Error: change initial position, charge is not preserved.')
             sys.exit(1)
 
+    def update_particles(self):
+        """Run particle updates to beb performed after the positions and velocities have been updated."""
+        self._update_particle_neighbor()
+        self._update_charges()
+        self._smoothing()
+
+        self.t_charges = Clock.get_clock('charges').last_call
+        self.t_smoothing = Clock.get_clock('smoothing').last_call
+
     @Clock('smoothing')
-    def smoothing(self):
+    def _smoothing(self):
         if self.smoothing_type.upper() == 'GAUSS':
             self._smoothing_gauss()
         else:
@@ -701,10 +713,7 @@ class SolverMD(Logger):
         """Run one iteration of the molecular dynamics loop."""
         self.integrator_part1()
         if self.mdv.elec:
-            self.update_charges()
-            self.t_charges = Clock.get_clock('charges').last_call
-            self.smoothing()
-            self.t_smoothing = Clock.get_clock('smoothing').last_call
+            self.update_particles()
             self.update_eps_k2()
             self.n_iters = self.update_field()
             self.t_field = Clock.get_clock('field').last_call

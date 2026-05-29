@@ -106,6 +106,11 @@ capi.register_function(
     ],
 )
 
+# void solver_update_particle_neighbors() {
+capi.register_function(
+    'solver_update_particle_neighbors', None, [],
+)
+
 # int solver_update_charges() {
 capi.register_function(
     'solver_update_charges', ctypes.c_int, [],
