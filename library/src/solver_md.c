@@ -122,7 +122,7 @@ int solver_update_charges() {
     double q_tot_loc;
     double q_ref;
     
-    g_particles->update_grid_nearest_neighbors(g_particles);
+    g_particles->update_grid_nearest_neighbors(g_particles, g_grid);
     q_tot_loc = g_grid->update_charges(g_grid, g_particles);
 
     q_ref = solver_total_charge_from_particles();

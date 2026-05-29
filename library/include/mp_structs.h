@@ -111,8 +111,8 @@ void particles_init_potential(particles *p, int pot_type, double *pot_params);
 void particles_init_potential_tf(particles *p, double *pot_params);
 void particles_init_potential_lj(particles *p, double *pot_params);
 void particles_init_potential_sc(particles *p, double *pot_params);
-void particles_update_grid_nearest_neighbors_cic(particles *p);
-void particles_update_grid_nearest_neighbors_spline(particles *p);
+void particles_update_grid_nearest_neighbors_cic(particles *p, grid *g);
+void particles_update_grid_nearest_neighbors_spline(particles *p, grid *g);
 
 double particles_compute_forces_field(particles *p, grid *grid);
 double particles_compute_forces_tf(particles *p);
@@ -209,7 +209,7 @@ struct grid {
 };
 
 struct particles {
-    int n;  // Number of grid points per dimension
+    // int n;  // Number of grid points per dimension
     int n_p;  // Number of particles
     int n_typ;  // Number of particle types (charge, masses, ... definitions)
     double L;  // Length of the grid
@@ -269,7 +269,7 @@ struct particles {
     void    (*init_potential)( particles *, int, double *);
 
     void    (*update_particle_neighbors)( particles *);
-    void    (*update_grid_nearest_neighbors)( particles *);
+    void    (*update_grid_nearest_neighbors)( particles *, grid *);
     double  (*charges_spread_func)( double, double, double);
 
 

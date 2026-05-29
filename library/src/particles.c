@@ -183,7 +183,8 @@ void particle_pneigh_cell_list(particles *p) {
     // exit(0);
 
     // Find neighbors using cell list
-    #pragma omp parallel private(idx, cx, cy, cz, ncx, ncy, ncz, cell_idx, dx, dy, dz, dr2)
+    long int tot_neighbors = 0;
+    #pragma omp parallel private(idx, cx, cy, cz, ncx, ncy, ncz, cell_idx, dx, dy, dz, dr2) reduction(+:tot_neighbors)
     for (int i = 0; i < np; i++) {
         idx = 0;
 
@@ -233,12 +234,15 @@ void particle_pneigh_cell_list(particles *p) {
         }
 
         free(done);
+        tot_neighbors += idx;
         // if (idx >= np1) {
         //     mpi_fprintf(stderr, "Error: too many neighbors for particle %d (idx = %ld / np1 = %ld)\n", i, idx, np1);
         //     exit(1);
         // }
         neigh[i * np1 + idx] = -1;  // Sentinel value to indicate end of neighbors for particle i
     }
+
+    mpi_printf("Average number of neighbors per particle: %f\n", (double)tot_neighbors / np);
 
     // free(done);
 }
@@ -304,7 +308,7 @@ solver_md.c
 */
 particles * particles_init(int n, int n_p, int n_typ, double L, double h, int cas_type) {
     particles *p = (particles *)malloc(sizeof(particles));
-    p->n = n;
+    // p->n = n;
     p->n_p = n_p;
     p->n_typ = n_typ;
     p->L = L;
@@ -587,9 +591,9 @@ void particles_init_potential_sc(particles *p, double *pot_params) {
     p->compute_forces_noel = particles_compute_forces_sc;
 }
 
-void particles_update_grid_nearest_neighbors_cic(particles *p) {
+void particles_update_grid_nearest_neighbors_cic(particles *p, grid *g) {
+    int n = g->n;
     int np = p->n_p;
-    int n = p->n;
     double h = p->h;
     double L = p->L;
 
@@ -638,9 +642,9 @@ void particles_update_grid_nearest_neighbors_cic(particles *p) {
     }
 }
 
-void particles_update_grid_nearest_neighbors_spline(particles *p) {    
+void particles_update_grid_nearest_neighbors_spline(particles *p, grid *g) {    
+    int n = g->n;
     int np = p->n_p;
-    int n = p->n;
     double h = p->h;
     double L = p->L;
 
@@ -679,7 +683,7 @@ void particles_update_grid_nearest_neighbors_spline(particles *p) {
 
 double particles_compute_forces_field(particles *p, grid *grid) {
     double res = compute_force_fd(
-        p->n, p->n_p, p->h, p->num_neighbors,
+        grid->n, p->n_p, p->h, p->num_neighbors,
         grid->phi_n, p->grid_neighbors, p->charges, p->pos, p->fcs_elec,
         p->charges_spread_func
     );

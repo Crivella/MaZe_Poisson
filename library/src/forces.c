@@ -356,7 +356,7 @@ double compute_tf_forces(
     int n_p2 = 2 * n_p;
     int typ1, typ2;
     int n_typ2 = n_typ * n_typ;
-    long int jp;
+    long int j;
     // long int n_p_pow2 = n_p * n_p;
     long int idx1, idx2, idx3;
 
@@ -377,7 +377,7 @@ double compute_tf_forces(
     memset(forces, 0, n_p * 3 * sizeof(double));
 
     #pragma omp parallel for private( \
-        app, ip, jp, typ1, typ2, r_mag, f_mag, V_mag, a, b, c, d, sigma, al, be, idx1, idx2, idx3 \
+        app, ip, j, typ1, typ2, r_mag, f_mag, V_mag, a, b, c, d, sigma, al, be, idx1, idx2, idx3 \
     ) reduction(+:potential_energy)
     for (int i = 0; i < n_p; i++) {
         typ1 = types[i];
@@ -385,10 +385,10 @@ double compute_tf_forces(
         idx1 = typ1 * n_typ;
 
         idx3 = 0;
-        jp = neighbors[i * np1 + idx3];
-        while (jp != -1) {
-            typ2 = types[jp];
-            r_mag = distances[i * np1 * 4 + idx3 * 4 + 3]; // distance to neighbor jp squared
+        j = neighbors[i * np1 + idx3];
+        while (j != -1) {
+            typ2 = types[j];
+            r_mag = distances[i * np1 * 4 + idx3 * 4 + 3];
                 
             idx2 = idx1 + typ2;
             a = A[idx2];
@@ -409,7 +409,7 @@ double compute_tf_forces(
             potential_energy += V_mag;            
 
             idx3++;
-            jp = neighbors[i * np1 + idx3];
+            j = neighbors[i * np1 + idx3];
         }
     }
 
