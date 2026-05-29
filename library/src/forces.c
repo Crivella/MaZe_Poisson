@@ -336,31 +336,37 @@ double compute_force_fd(
 Compute the particle-particle forces using the tabulated Tosi-Fumi potential
 
 @param n_p: the number of particles
+@param n_typ: the number of particle types
 @param L: the size of the box
+@param types: the types of the particles (n_p)
 @param pos: the positions of the particles (n_p, 3)
-@param params: the parameters of the potential [A, B, C, D, sigma, alpha, beta] (7, n_p, n_p)
+@param params: the parameters of the potential [A, B, C, D, sigma, alpha, beta] (7, n_typ, n_typ)
 @param r_cut: the cutoff radius
-@param forces: the output forces on each particle (n_p, 3)
+@param neighbors: array of neighbor indexes for each particle (n_p, n_p)
+@param distances: array of distances to neighbors for each particle (n_p, n_p, 4) where the last dimension contains [dx, dy, dz, r]
+@param forces: array where to store output forces on each particle (n_p, 3)
 */
 double compute_tf_forces(
-    int n_p, double L, double *pos, double *params,
+    int n_p, int n_typ, double L, int *types, double *pos, double *params,
     double r_cut, long int *neighbors, double *distances,
     double *forces
 ) {
     int ip;
     int np1 = n_p + 1;
     int n_p2 = 2 * n_p;
+    int typ1, typ2;
+    int n_typ2 = n_typ * n_typ;
     long int jp;
-    long int n_p_pow2 = n_p * n_p;
+    // long int n_p_pow2 = n_p * n_p;
     long int idx1, idx2, idx3;
 
     double *A = params;
-    double *B = A + n_p_pow2;
-    double *C = B + n_p_pow2;
-    double *D = C + n_p_pow2;
-    double *sigma_TF = D + n_p_pow2;
-    double *alpha = sigma_TF + n_p_pow2;
-    double *beta = alpha + n_p_pow2;
+    double *B = A + n_typ2;
+    double *C = B + n_typ2;
+    double *D = C + n_typ2;
+    double *sigma_TF = D + n_typ2;
+    double *alpha = sigma_TF + n_typ2;
+    double *beta = alpha + n_typ2;
 
     double app;
     double r_diff[3];
@@ -371,18 +377,20 @@ double compute_tf_forces(
     memset(forces, 0, n_p * 3 * sizeof(double));
 
     #pragma omp parallel for private( \
-        app, ip, jp, r_mag, f_mag, V_mag, a, b, c, d, sigma, al, be, idx1, idx2, idx3 \
+        app, ip, jp, typ1, typ2, r_mag, f_mag, V_mag, a, b, c, d, sigma, al, be, idx1, idx2, idx3 \
     ) reduction(+:potential_energy)
     for (int i = 0; i < n_p; i++) {
+        typ1 = types[i];
         ip = i * 3;
-        idx1 = i * n_p;
+        idx1 = typ1 * n_typ;
 
         idx3 = 0;
         jp = neighbors[i * np1 + idx3];
         while (jp != -1) {
+            typ2 = types[jp];
             r_mag = distances[i * np1 * 4 + idx3 * 4 + 3]; // distance to neighbor jp squared
                 
-            idx2 = idx1 + jp;
+            idx2 = idx1 + typ2;
             a = A[idx2];
             b = B[idx2];
             c = C[idx2];

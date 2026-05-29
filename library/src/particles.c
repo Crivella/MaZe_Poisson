@@ -469,49 +469,48 @@ void particles_init_potential_tf(particles *p, double *pot_params) {
     int typ1, typ2;
     int n_p = p->n_p;
     int n_typ = p->n_typ;
+    int n_typ2 = n_typ * n_typ;
     long int np2 = n_p * n_p;
 
-    p->tf_params = (double *)malloc(7 * np2 * sizeof(double));
+    p->tf_params = (double *)malloc(7 * n_typ2 * sizeof(double));
 
-    double r_cut = (p->r_cut > 0.0) ? p->r_cut : p->L / 2.0;
-    p->r_cut = r_cut;
+    double r_cut = p->r_cut;
     double r_cut_6 = pow(r_cut, 6);
     double r_cut_7 = r_cut_6 * r_cut;
     double r_cut_8 = r_cut_7 * r_cut;
     double r_cut_9 = r_cut_8 * r_cut;
 
-    long int in, inj, idx;
+    long int in, inj, idx0, idx1, idx2;
     double A, B, C, D, sigma, v_shift, alpha, beta;
-    for (int i = 0; i < n_p; i++) {
-        in = i * n_p;
-        typ1 = p->types[i];
-        for (int j = 0; j < n_p; j++) {
-            inj = in + j;
-            typ2 = p->types[j];
+    for (typ1 = 0; typ1 < n_typ; typ1++) {
+        in = typ1 * n_typ;
+        for (typ2 = 0; typ2 < n_typ; typ2++) {
+            inj = in + typ2;
 
-            idx = (typ1 * n_typ + typ2) * 5;  // Assuming pot_params is structured as [A, B, C, D, sigma] for each type pair
+            // Assuming pot_params is structured as [A, B, C, D, sigma] for each type pair
+            idx0 = typ1 * n_typ + typ2;
+            idx1 = idx0 * 5;
+            idx2 = idx0 * 7;  // Index for tf_params [A, B, C, D, sigma, alpha, beta]
 
-            A = pot_params[idx + 0];
-            B = pot_params[idx + 1];
-            C = pot_params[idx + 2];
-            D = pot_params[idx + 3];
-            sigma = pot_params[idx + 4];
+            A = pot_params[idx1 + 0];
+            B = pot_params[idx1 + 1];
+            C = pot_params[idx1 + 2];
+            D = pot_params[idx1 + 3];
+            sigma = pot_params[idx1 + 4];
 
             v_shift = A * exp(B * (sigma - r_cut)) - C / r_cut_6 - D / r_cut_8;
             alpha = A * B * exp(B * (sigma - r_cut)) - 6 * C / r_cut_7 - 8 * D / r_cut_9;
             beta = - v_shift - alpha * r_cut;
 
-            p->tf_params[0*np2 + inj] = A;
-            p->tf_params[1*np2 + inj] = B;
-            p->tf_params[2*np2 + inj] = C;
-            p->tf_params[3*np2 + inj] = D;
-            p->tf_params[4*np2 + inj] = sigma;
-            p->tf_params[5*np2 + inj] = alpha;
-            p->tf_params[6*np2 + inj] = beta;
+            p->tf_params[0*n_typ2 + inj] = A;
+            p->tf_params[1*n_typ2 + inj] = B;
+            p->tf_params[2*n_typ2 + inj] = C;
+            p->tf_params[3*n_typ2 + inj] = D;
+            p->tf_params[4*n_typ2 + inj] = sigma;
+            p->tf_params[5*n_typ2 + inj] = alpha;
+            p->tf_params[6*n_typ2 + inj] = beta;
         }
     }
-
-    
 
     p->compute_forces_noel = particles_compute_forces_tf;
 }
@@ -695,7 +694,7 @@ double particles_compute_forces_field(particles *p, grid *grid) {
 
 double particles_compute_forces_tf(particles *p) {
     return compute_tf_forces(
-        p->n_p, p->L, p->pos, p->tf_params,
+        p->n_p, p->n_typ, p->L, p->types, p->pos, p->tf_params,
         p->r_cut, p->particle_neighbors, p->particle_neighbor_distances,
         p->fcs_noel
     );

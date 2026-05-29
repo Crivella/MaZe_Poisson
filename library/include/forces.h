@@ -34,7 +34,7 @@ double compute_force_short_range(
     double *distances
 );
 double compute_tf_forces(
-    int n_p, double L, double *pos, double *params,
+    int n_p, int n_typ, double L, int *types, double *pos, double *params,
     double r_cut, long int *neighbors, double *distances,
     double *forces
 );
