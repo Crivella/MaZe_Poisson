@@ -363,36 +363,26 @@ double compute_tf_forces(
     double *beta = alpha + n_p_pow2;
 
     double app;
-    double dx, dy, dz, dr2;
+    double r_diff[3];
     double r_mag, f_mag, V_mag;
     double potential_energy = 0.0;
     double a, b, c, d, sigma, al, be;
 
-    // #pragma omp parallel for private( \
-    //     app, ip, jp, r_diff, r_mag, f_mag, V_mag, a, b, c, d, sigma, al, be, idx1, idx2, \
-    //     idx3, dx, dy, dz, dr2 \
-    // ) reduction(+:potential_energy)
+    memset(forces, 0, n_p * 3 * sizeof(double));
+
+    #pragma omp parallel for private( \
+        app, ip, jp, r_mag, f_mag, V_mag, a, b, c, d, sigma, al, be, idx1, idx2, idx3 \
+    ) reduction(+:potential_energy)
     for (int i = 0; i < n_p; i++) {
-        r_mag = 0.0;
         ip = i * 3;
         idx1 = i * n_p;
-        forces[ip] = 0.0;
-        forces[ip + 1] = 0.0;
-        forces[ip + 2] = 0.0;
 
         idx3 = 0;
         jp = neighbors[i * np1 + idx3];
         while (jp != -1) {
-            dx    = distances[i * np1 * 4 + idx3 * 4 + 0]; // x distance to neighbor jp
-            dy    = distances[i * np1 * 4 + idx3 * 4 + 1]; // y distance to neighbor jp
-            dz    = distances[i * np1 * 4 + idx3 * 4 + 2]; // z distance to neighbor jp
             r_mag = distances[i * np1 * 4 + idx3 * 4 + 3]; // distance to neighbor jp squared
-            dx /= r_mag;
-            dy /= r_mag;
-            dz /= r_mag;
                 
             idx2 = idx1 + jp;
-            // mpi_fprintf(stderr, "Computing TF forces between particles %d and %d with r_mag = %e / %e\n", i, jp, r_mag, r_cut);
             a = A[idx2];
             b = B[idx2];
             c = C[idx2];
@@ -404,9 +394,9 @@ double compute_tf_forces(
             f_mag = b * a * exp(b * (sigma - r_mag)) - 6 * c / pow(r_mag, 7) - 8 * d / pow(r_mag, 9) - al;
             V_mag = a * exp(b * (sigma - r_mag)) - c / pow(r_mag, 6) - d / pow(r_mag, 8) + al * r_mag + be;
 
-            forces[ip + 0] += f_mag * dx;
-            forces[ip + 1] += f_mag * dy;
-            forces[ip + 2] += f_mag * dz;
+            for (int d = 0; d < 3; d++) {
+                forces[ip + d] += f_mag * distances[i * np1 * 4 + idx3 * 4 + d] / r_mag;
+            }
 
             potential_energy += V_mag;            
 
@@ -439,6 +429,7 @@ static double compute_lj_tail_correction(int n_p, double L, double *params, doub
         return 0.0;
     }
 
+    // TODO: Does this need to go over all the particle pairs or should this also beb affected by the cutoff?
     for (int i = 0; i < n_p; i++) {
         long int idx1 = i * n_p;
         for (int j = 0; j < n_p; j++) {
@@ -467,10 +458,12 @@ double compute_lj_forces(
     double r_cut, long int *neighbors, double *distances,
     double *forces, int lj_force_shift
 ) {
-    int ip, jp;
+    int ip;
+    int np1 = n_p + 1;
     int n_p2 = 2 * n_p;
+    long int jp;
     long int n_p_pow2 = n_p * n_p;
-    long int idx1, idx2;
+    long int idx1, idx2, idx3;
 
     double *sigma_lj = params;
     double *epsilon_lj = sigma_lj + n_p_pow2;
@@ -483,54 +476,35 @@ double compute_lj_forces(
     double potential_energy = 0.0;
     double epsilon, sigma, al, be;
 
-    #pragma omp parallel for private(app, ip, jp, r_diff, r_mag, f_mag, V_mag, epsilon, sigma, al, be, idx1, idx2) reduction(+:potential_energy)
+    memset(forces, 0, n_p * 3 * sizeof(double));
+
+    #pragma omp parallel for private( \
+        app, ip, jp, r_diff, r_mag, f_mag, V_mag, epsilon, sigma, al, be, idx1, idx2, idx3 \
+    ) reduction(+:potential_energy)
     for (int i = 0; i < n_p; i++) {
-        r_mag = 0.0;
         ip = i * 3;
         idx1 = i * n_p;
         forces[ip] = 0.0;
         forces[ip + 1] = 0.0;
         forces[ip + 2] = 0.0;
-        for (int j = 0; j < n_p; j++) {
-            if (i == j) {
-                continue;
-            }
-            jp = 3 * j;
-            app = pos[ip] - pos[jp];
-            app -= L * round(app / L);
-            r_mag = app * app;
-            r_diff[0] = app;
-            app = pos[ip + 1] - pos[jp + 1];
-            app -= L * round(app / L);
-            r_diff[1] = app;
-            r_mag += app * app;
-            app = pos[ip + 2] - pos[jp + 2];
-            app -= L * round(app / L);
-            r_diff[2] = app;
-            r_mag += app * app;
-            r_mag = sqrt(r_mag);
-            if (!isfinite(r_mag) || r_mag <= 1e-12) {
-                // TODO: The first one is redundnat with the next check
-                //  The second one should never happen?
-                continue;
-            }
-            if (r_mag > r_cut) {
-                continue;
-            }
-            r_diff[0] /= r_mag;
-            r_diff[1] /= r_mag;
-            r_diff[2] /= r_mag;
-                
-            idx2 = idx1 + j;
+
+        idx3 = 0;
+        jp = neighbors[i * np1 + idx3];
+
+        while (jp != -1) {
+            r_mag = distances[i * np1 * 4 + idx3 * 4 + 3]; // distance to neighbor jp squared
+
+            idx2 = idx1 + jp;
             sigma = sigma_lj[idx2];
             epsilon = epsilon_lj[idx2];
             al = alpha[idx2];
             be = beta[idx2];
+            // TODO: this check should be done once when the parameters are generated, not every time the forces are computed
             if (!isfinite(sigma) || !isfinite(epsilon) || !isfinite(al) || !isfinite(be)) {
                 mpi_fprintf(
                     stderr,
                     "Error: LJ params non-finite (i=%d j=%d sigma=%e epsilon=%e alpha=%e beta=%e)\n",
-                    i, j, sigma, epsilon, al, be
+                    i, jp, sigma, epsilon, al, be
                 );
                 exit(1);
             }
@@ -539,11 +513,12 @@ double compute_lj_forces(
             f_mag = 4 * epsilon * (12 * pow(sigma / r_mag, 12) - 6 * pow(sigma / r_mag, 6)) / r_mag - al;
             V_mag = 4 * epsilon * (pow(sigma / r_mag, 12) - pow(sigma / r_mag, 6)) + al * r_mag + be;
 
-            forces[ip] += f_mag * r_diff[0];
-            forces[ip + 1] += f_mag * r_diff[1];
-            forces[ip + 2] += f_mag * r_diff[2];
+            for (int d = 0; d < 3; d++) {
+                forces[ip + d] += f_mag * distances[i * np1 * 4 + idx3 * 4 + d] / r_mag;
+            }
 
-            potential_energy += V_mag;
+            idx3++;
+            jp = neighbors[i * np1 + idx3];
         }
     }
 
@@ -570,7 +545,9 @@ double compute_sc_forces(
     double r_cut, long int *neighbors, double *distances,
     double *forces
 ) {
-    int i, j, k, ip, jp;
+    int i, k, ip, jp;
+    int np1 = n_p + 1;
+    long int j, idx3;
     double nu, d, B_nu, alpha, beta;
     double potential_energy = 0.0;
 
@@ -595,38 +572,28 @@ double compute_sc_forces(
         reduction(+:potential_energy, forces[:size])
     for (i = 0; i < n_p; i++) {
         ip = 3 * i;
-        for (j = i + 1; j < n_p; j++) {
-            jp = 3 * j;
 
-            r_mag = 0.0;
-            for (k = 0; k < 3; k++) {
-                app = pos[ip + k] - pos[jp + k];
-                app -= L * round(app / L);
-                r_mag += app * app;
-                r_diff[k] = app;
-            }
-
-            r_mag = sqrt(r_mag);
-            if (!isfinite(r_mag) || r_mag <= 1e-12) {
-                // TODO: The first one is redundnat with the next check
-                //  The second one should never happen?
-                continue;
-            }
-            if (r_mag > r_cut) {
-                continue;
-            }
+        idx3 = 0;
+        j = neighbors[i * np1 + idx3];
+        while (j != -1) {
+            r_diff[0] = distances[i * np1 * 4 + idx3 * 4 + 0]; // x distance to neighbor jp
+            r_diff[1] = distances[i * np1 * 4 + idx3 * 4 + 1]; // y distance to neighbor jp
+            r_diff[2] = distances[i * np1 * 4 + idx3 * 4 + 2]; // z distance to neighbor jp
+            r_mag = distances[i * np1 * 4 + idx3 * 4 + 3]; // distance to neighbor jp squared
 
             d_over_r_pow = pow(d / r_mag, nu);
             V_mag = B_nu * d_over_r_pow + alpha * r_mag + beta;
             f_mag = B_nu * nu * d_over_r_pow / r_mag - alpha;
 
             for (k = 0; k < 3; k++) {
-                f_k = f_mag * r_diff[k] / r_mag;
-                forces[ip + k] += f_k;
-                forces[jp + k] -= f_k;
+                forces[ip + k] += f_mag * r_diff[k] / r_mag;
+                // forces[jp + k] -= f_k;
             }
 
             potential_energy += V_mag;
+
+            idx3++;
+            j = neighbors[i * np1 + idx3];
         }
     }
     return potential_energy;

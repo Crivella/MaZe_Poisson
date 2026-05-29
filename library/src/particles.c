@@ -134,45 +134,90 @@ void particle_pneigh_cell_list(particles *p) {
     double rc2 = p->r_cut * p->r_cut;
 
     int s1 = p->cell_list_size;
+    long int s1_2 = s1 * s1;
+    long int s1_3 = s1 * s1 * s1;
     int cell_idx;
     int cx, cy, cz;
+    double cell_length = p->cell_list_length;
+
+    int ncx, ncy, ncz;
+    // int *done = (int *)malloc(np * sizeof(int)); // Array to track which particles have been processed
 
     // Build cell list
-    memset(p->cell_list_head, -1, s1 * s1 * s1 * sizeof(long int));  // Initialize cell list heads to -1
+    memset(p->cell_list_head, -1, s1_3 * sizeof(long int));  // Initialize cell list heads to -1
     for (int i = 0; i < np; i++) {
-        cx = (int)(pos[3*i + 0] / p->cell_list_size);
-        cy = (int)(pos[3*i + 1] / p->cell_list_size);
-        cz = (int)(pos[3*i + 2] / p->cell_list_size);
-        cell_idx = cx * s1 * s1 + cy * s1 + cz;
+        cx = (int)(pos[3*i + 0] / cell_length);
+        cy = (int)(pos[3*i + 1] / cell_length);
+        cz = (int)(pos[3*i + 2] / cell_length);
+        cell_idx = cx * s1_2 + cy * s1 + cz;
         p->cell_list_next[i] = p->cell_list_head[cell_idx];
         p->cell_list_head[cell_idx] = i;
     }
 
+    // // Debug print cell list info
+    // mpi_printf("Cell list size: %d, number of cells: %d\n", p->cell_list_size, s1_3);
+    // mpi_printf("Cell list length: %f\n", cell_length);
+    // mpi_printf("next:\n  ");
+    // for (int i = 0; i < np; i++) {
+    //     mpi_printf("%ld ", p->cell_list_next[i]);
+    // }
+    // mpi_printf("\nhead:\n  ");
+    // for (int i = 0; i < s1_3; i++) {
+    //     mpi_printf("%ld ", p->cell_list_head[i]);
+    // }
+    // mpi_printf("\n");
+
+    // // loop over all particle to check that the linked list is valid
+    // long int count_total = 0;
+    // for (int cell_idx = 0; cell_idx < s1_3; cell_idx++) {
+    //     long int count = 0;
+    //     long int j = p->cell_list_head[cell_idx];
+    //     while (j != -1) {
+    //         count++;
+    //         j = p->cell_list_next[j];
+    //     }
+    //     count_total += count;
+    //     // mpi_printf("Cell %d: %ld particles\n", cell_idx, count);
+    // }
+    // mpi_printf("Total particles in cell list: %ld\n", count_total);
+    // exit(0);
+
     // Find neighbors using cell list
+    #pragma omp parallel private(idx, cx, cy, cz, ncx, ncy, ncz, cell_idx, dx, dy, dz, dr2)
     for (int i = 0; i < np; i++) {
         idx = 0;
 
-        cx = (int)(pos[3*i + 0] / p->cell_list_size);
-        cy = (int)(pos[3*i + 1] / p->cell_list_size);
-        cz = (int)(pos[3*i + 2] / p->cell_list_size);
+        cx = (int)(pos[3*i + 0] / cell_length);
+        cy = (int)(pos[3*i + 1] / cell_length);
+        cz = (int)(pos[3*i + 2] / cell_length);
 
-        mpi_fprintf(stderr, "Finding neighbors for particle %d in cell (%d, %d, %d)\n", i, cx, cy, cz);
-        mpi_fprintf(stderr, "x = %f, y = %f, z = %f, cell size = %f\n", pos[3*i + 0], pos[3*i + 1], pos[3*i + 2], p->cell_list_size);
+        // This has to be local if OpenMP has to be enabled
+        // Ideally r_cut should be such that each cells contains on average multiple particles so it is easier
+        // to check for the cell_idx
+        int *done = (int *)calloc(s1_3, sizeof(int));
+        // int *done = (int *)calloc(np, sizeof(int));
+        // memset(done, 0, np * sizeof(int)); // Reset done array for each particle
+        // done[i] = 1; // Mark the current particle as done to avoid self-interaction
 
         for (int dx_cell = -1; dx_cell <= 1; dx_cell++) {
+            ncx = (cx + dx_cell + s1) % s1;
             for (int dy_cell = -1; dy_cell <= 1; dy_cell++) {
+                ncy = (cy + dy_cell + s1) % s1;
                 for (int dz_cell = -1; dz_cell <= 1; dz_cell++) {
-                    int ncx = (cx + dx_cell + s1) % s1;
-                    int ncy = (cy + dy_cell + s1) % s1;
-                    int ncz = (cz + dz_cell + s1) % s1;
-                    cell_idx = ncx * s1 * s1 + ncy * s1 + ncz;
+                    ncz = (cz + dz_cell + s1) % s1;
+                    cell_idx = ncx * s1_2 + ncy * s1 + ncz;
+
+                    if (done[cell_idx]) {
+                        continue; // Skip this cell if it's already done
+                    }
+                    done[cell_idx] = 1; // Mark this cell as done
 
                     long int j = p->cell_list_head[cell_idx];
                     while (j != -1) {
-                        if (i != j) {
-                            mpi_fprintf(stderr, "Checking particles %d and %d in cell (%d, %d, %d)\n", i, j, ncx, ncy, ncz);
+                        if (i != j) { // Only process if not done
                             pbc_displacement(p->pos, j, i, p->L, &dx, &dy, &dz, &dr2);
                             if (dr2 < rc2) {
+                                // done[j] = 1; // Mark this neighbor as done
                                 neigh[i * np1 + idx] = j;
                                 dist[i * np1 * 4 + idx * 4 + 0] = dx;
                                 dist[i * np1 * 4 + idx * 4 + 1] = dy;
@@ -186,15 +231,23 @@ void particle_pneigh_cell_list(particles *p) {
                 }
             }
         }
+
+        free(done);
+        // if (idx >= np1) {
+        //     mpi_fprintf(stderr, "Error: too many neighbors for particle %d (idx = %ld / np1 = %ld)\n", i, idx, np1);
+        //     exit(1);
+        // }
         neigh[i * np1 + idx] = -1;  // Sentinel value to indicate end of neighbors for particle i
     }
+
+    // free(done);
 }
 
 void particle_pneigh_init(particles *p, int method, double r_cut) {
     int np = p->n_p;
     int np1 = np + 1;
 
-    mpi_printf("Initializing particle neighbor method: %s\n", get_particle_neighbor_type_str(method));
+    // mpi_printf("Initializing particle neighbor method: %s\n", get_particle_neighbor_type_str(method));
 
     p->particle_neighbor_method = method;
     p->particle_neighbors = (long int *)malloc(np * np1 * sizeof(long int));
@@ -206,10 +259,16 @@ void particle_pneigh_init(particles *p, int method, double r_cut) {
         p->update_particle_neighbors = particle_pneigh_sphere;
         break;
     case PARTICLE_NEIGHBOR_TYPE_CELL_LIST:
-        p->cell_list_size = p->L / r_cut;
-        // int s1 = p->cell_list_size + 2;  // Add ghost cells for periodic boundaries
-        int s1 = p->cell_list_size;
-        mpi_printf("Cell list size: %d\n", p->cell_list_size);
+        if (r_cut <= 0.0) {
+            mpi_fprintf(stderr, "Invalid cutoff radius %f for cell list neighbor method\n", r_cut);
+            exit(1);
+        }
+        // mpi_fprintf(stderr, "Initializing cell list with cutoff radius %f and box size %f\n", r_cut, p->L);
+        int s1 = floor(p->L / r_cut);
+        // mpi_fprintf(stderr, "Number of cells per dimension: %d\n", s1);
+        p->cell_list_size = s1;  // Number of cells per dimension
+        p->cell_list_length = p->L / s1;  // Adjust cell size to fit an integer number of cells in the box
+        // mpi_printf("Cell side length: %f\n", p->cell_list_size);
         p->cell_list_head = (long int *)malloc(s1 * s1 * s1 * sizeof(long int));
         p->cell_list_next = (long int *)malloc(np * sizeof(long int));
         p->update_particle_neighbors = particle_pneigh_cell_list;

@@ -238,9 +238,11 @@ struct particles {
     double energy_corr; // Intramolecular exclusion correction energy
 
     long int particle_neighbor_method; // Method for finding particle neighbors
+    // long int *num_neighbors;  // Number of neighbors for each particle (n_p)
     long int *particle_neighbors;  // Particle neighbors for particle-particle interactions (n_p x (n_p + 1))
     double *particle_neighbor_distances;  // Distances to particle neighbors X/Y/Z/abs (n_p x (n_p + 1) * 4)
-    double cell_list_size;  // Cell size for cell list neighbor finding
+    int cell_list_size;  // Cell size for cell list neighbor finding
+    double cell_list_length;  // Cell size for cell list neighbor finding
     long int *cell_list_head;  // Cell list head for cell list neighbor finding (n_cells)
     long int *cell_list_next;  // Cell list next for cell list neighbor finding (n_p)
     double r_cut;
