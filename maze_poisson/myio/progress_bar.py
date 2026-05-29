@@ -10,28 +10,25 @@ except ImportError:
     HAVE_TQDM = False
 
 try:
-    from rich.progress import Progress
+    from rich.progress import (BarColumn, MofNCompleteColumn, Progress,
+                               ProgressColumn, SpinnerColumn, TextColumn,
+                               TimeElapsedColumn)
     from rich.text import Text
-    from rich.progress import (
-        BarColumn,
-        Progress,
-        SpinnerColumn,
-        TextColumn,
-        TimeElapsedColumn,
-        MofNCompleteColumn,
-        ProgressColumn,
-    )
     HAVE_RICH = True
 
     class IterationSpeedColumn(ProgressColumn):
         """Renders iteration speed."""
 
         def render(self, task):
-            if task.finished:
-                return Text(f"{self.last_seppd:>6.2f} it/s", style="green")
-            self.last_seppd = speed = task.speed or 0.0
+            unit = "it/s"
+            speed = task.speed or 0.0
+            color = "green" if task.finished else "cyan"
             
-            return Text(f"{speed:>6.2f} it/s", style="cyan")
+            # if 0 < speed < 5e-3:
+            #     unit = "s/it"
+            #     speed = 1.0 / speed
+            
+            return Text(f"{speed:>6.3f} {unit}", style=color)
 
 except ImportError:
     HAVE_RICH = False
