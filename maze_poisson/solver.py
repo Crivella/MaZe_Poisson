@@ -769,6 +769,7 @@ class SolverMD(Logger):
         self.logger.info(f'  Solvent dielectric constant: {self.gset.eps_s}')
         self.logger.info(f'  Solver: "{self.mdv.method}",  Preconditioner: "{self.gset.precond}"')
         self.logger.info(f'  Charge assignment scheme: "{self.gset.cas}"')
+        self.logger.info(f'  Particle neighbor method: "{self.mdv.neighbor_method}"')
         # self.logger.info(f'  Preconditioning: {self.mdv.preconditioning}')
         self.logger.info(f'  Integrator: "{self.mdv.integrator}", dt = {self.mdv.dt} au = {self.mdv.dt * cst.t_au} fs')
         self.logger.info(f'  Potential: "{self.mdv.potential}"')

@@ -66,6 +66,16 @@ neighbor *neighbor_init() {
     return res;
 }
 
+void neighbor_free(neighbor *curr) {
+    neighbor *next;
+
+    while (curr != NULL) {
+        next = curr->next;
+        free(curr);
+        curr = next;
+    }
+}
+
 void particle_charges_init(particles *p, int cas_type) {
     int n_p = p->n_p;
 
@@ -97,22 +107,19 @@ void particle_charges_init(particles *p, int cas_type) {
 }
 
 void particle_pneigh_sphere(particles *p) {
-    long int np = p->n_p;
-    long int np1 = np + 1;
-
-    double *pos = p->pos;
-    // double *dist = p->particle_neighbor_distances;
-    // long int *neigh = p->particle_neighbors;
-
+    int i;
     double dx, dy, dz, dr2;
     double rc2 = p->r_cut * p->r_cut;
 
     neighbor *curr = NULL;
 
-    for (int i = 0; i < np; i++) {
-        curr = p->particle_neighbors[i];
+    #pragma omp parallel private(i, curr, dx, dy, dz, dr2)
+    for (int i_loc = 0; i_loc < p->np_local; i_loc++) {
+        i = p->np_start + i_loc;
 
-        for (int j = 0; j < np; j++) {
+        curr = p->particle_neighbors[i_loc];
+
+        for (int j = 0; j < p->n_p; j++) {
             if (i == j) {
                 continue;
             }
@@ -137,14 +144,8 @@ void particle_pneigh_sphere(particles *p) {
 }
 
 void particle_pneigh_cell_list(particles *p) {
-    long int np = p->n_p;
-    long int np1 = np + 1;
-    long int idx;
-
+    long int i, j;
     double *pos = p->pos;
-    // double *dist = p->particle_neighbor_distances;
-    // long int *neigh = p->particle_neighbors;
-
     double dx, dy, dz, dr2;
     double rc2 = p->r_cut * p->r_cut;
 
@@ -157,64 +158,49 @@ void particle_pneigh_cell_list(particles *p) {
 
     int ncx, ncy, ncz;
 
+    neighbor *curr = NULL;
+
+    int *particle_cell_x = (int *)malloc(p->n_p * sizeof(int));
+    int *particle_cell_y = (int *)malloc(p->n_p * sizeof(int));
+    int *particle_cell_z = (int *)malloc(p->n_p * sizeof(int));
+    // long int *particle_cell_index = (long int *)malloc(p->n_p * sizeof(long int));
+
     // Build cell list
-    memset(p->cell_list_head, -1, s1_3 * sizeof(long int));  // Initialize cell list heads to -1
-    for (int i = 0; i < np; i++) {
+    for (i = 0; i < s1_3; i++) {
+        p->cell_list_head[i] = -1;
+    }
+    for (i = 0; i < p->n_p; i++) {
         cx = (int)(pos[3*i + 0] / cell_length);
         cy = (int)(pos[3*i + 1] / cell_length);
         cz = (int)(pos[3*i + 2] / cell_length);
         cell_idx = cx * s1_2 + cy * s1 + cz;
         p->cell_list_next[i] = p->cell_list_head[cell_idx];
         p->cell_list_head[cell_idx] = i;
+
+        particle_cell_x[i] = cx;
+        particle_cell_y[i] = cy;
+        particle_cell_z[i] = cz;
+        // particle_cell_index[i] = cell_idx; 
     }
 
-    // // Debug print cell list info
-    // mpi_printf("Cell list size: %d, number of cells: %d\n", p->cell_list_size, s1_3);
-    // mpi_printf("Cell list length: %f\n", cell_length);
-    // mpi_printf("next:\n  ");
-    // for (int i = 0; i < np; i++) {
-    //     mpi_printf("%ld ", p->cell_list_next[i]);
-    // }
-    // mpi_printf("\nhead:\n  ");
-    // for (int i = 0; i < s1_3; i++) {
-    //     mpi_printf("%ld ", p->cell_list_head[i]);
-    // }
-    // mpi_printf("\n");
-
-    // // loop over all particle to check that the linked list is valid
-    // long int count_total = 0;
-    // for (int cell_idx = 0; cell_idx < s1_3; cell_idx++) {
-    //     long int count = 0;
-    //     long int j = p->cell_list_head[cell_idx];
-    //     while (j != -1) {
-    //         count++;
-    //         j = p->cell_list_next[j];
-    //     }
-    //     count_total += count;
-    //     // mpi_printf("Cell %d: %ld particles\n", cell_idx, count);
-    // }
-    // mpi_printf("Total particles in cell list: %ld\n", count_total);
-    // exit(0);
-
     // Find neighbors using cell list
-    long int tot_neighbors = 0;
-    #pragma omp parallel private(idx, cx, cy, cz, ncx, ncy, ncz, cell_idx, dx, dy, dz, dr2) reduction(+:tot_neighbors)
-    for (int i = 0; i < np; i++) {
-        idx = 0;
+    // fprintf(stdout, "Rank %d: Finding neighbors using cell list %d -> %d (%d)...\n", rank, p->np_start, p->np_start + p->np_local, p->n_p);
+    #pragma omp parallel private( \
+        i, j, curr, cx, cy, cz, ncx, ncy, ncz, cell_idx, \
+        dx, dy, dz, dr2 \
+    )
+    for (int i_loc = 0; i_loc < p->np_local; i_loc++) {
+        i = p->np_start + i_loc;
+        cx = particle_cell_x[i];
+        cy = particle_cell_y[i];
+        cz = particle_cell_z[i];
 
-        cx = (int)(pos[3*i + 0] / cell_length);
-        cy = (int)(pos[3*i + 1] / cell_length);
-        cz = (int)(pos[3*i + 2] / cell_length);
-
-        neighbor *curr = p->particle_neighbors[i];
+        curr = p->particle_neighbors[i_loc];
 
         // This has to be local if OpenMP has to be enabled
         // Ideally r_cut should be such that each cells contains on average multiple particles so it is easier
         // to check for the cell_idx
         int *done = (int *)calloc(s1_3, sizeof(int));
-        // int *done = (int *)calloc(np, sizeof(int));
-        // memset(done, 0, np * sizeof(int)); // Reset done array for each particle
-        // done[i] = 1; // Mark the current particle as done to avoid self-interaction
 
         for (int dx_cell = -1; dx_cell <= 1; dx_cell++) {
             ncx = (cx + dx_cell + s1) % s1;
@@ -229,10 +215,10 @@ void particle_pneigh_cell_list(particles *p) {
                     }
                     done[cell_idx] = 1; // Mark this cell as done
 
-                    long int j = p->cell_list_head[cell_idx];
+                    j = p->cell_list_head[cell_idx];
                     while (j != -1) {
                         if (i != j) { // Only process if not done
-                            pbc_displacement(p->pos, j, i, p->L, &dx, &dy, &dz, &dr2);
+                            pbc_displacement(pos, j, i, p->L, &dx, &dy, &dz, &dr2);
                             if (dr2 < rc2) {
                                 curr->valid = 1;
                                 curr->idx = j;
@@ -255,22 +241,18 @@ void particle_pneigh_cell_list(particles *p) {
 
         curr->valid = 0; // Truncate the neighbor list after processing this cell
         free(done);
-        tot_neighbors += idx;
-        // if (idx >= np1) {
-        //     mpi_fprintf(stderr, "Error: too many neighbors for particle %d (idx = %ld / np1 = %ld)\n", i, idx, np1);
-        //     exit(1);
-        // }
     }
-    // mpi_printf("Average number of neighbors per particle: %f\n", (double)tot_neighbors / np);
+
+    free(particle_cell_x);
+    free(particle_cell_y);
+    free(particle_cell_z);
 }
 
 void particle_pneigh_init(particles *p, int method, double r_cut) {
-    int np = p->n_p;
-    int np1 = np + 1;
-
+    // Use local number of particles for MPI compatibility
     p->particle_neighbor_method = method;
-    p->particle_neighbors = (neighbor **)malloc(np * sizeof(neighbor *));
-    for (int i = 0; i < np; i++) {
+    p->particle_neighbors = (neighbor **)malloc(p->np_local * sizeof(neighbor *));
+    for (int i = 0; i < p->np_local; i++) {
         p->particle_neighbors[i] = neighbor_init();
     }
 
@@ -291,7 +273,7 @@ void particle_pneigh_init(particles *p, int method, double r_cut) {
         p->cell_list_length = p->L / s1;  // Adjust cell size to fit an integer number of cells in the box
         // mpi_printf("Cell side length: %f\n", p->cell_list_size);
         p->cell_list_head = (long int *)malloc(s1 * s1 * s1 * sizeof(long int));
-        p->cell_list_next = (long int *)malloc(np * sizeof(long int));
+        p->cell_list_next = (long int *)malloc(p->n_p * sizeof(long int));
         p->update_particle_neighbors = particle_pneigh_cell_list;
         break;
     
@@ -302,23 +284,12 @@ void particle_pneigh_init(particles *p, int method, double r_cut) {
 
 void particle_pneigh_free(particles *p) {
     if (p->particle_neighbors != NULL) {
-        neighbor *curr, *next;
-        long int size = p->cell_list_size * p->cell_list_size * p->cell_list_size;
-        for (int i = 0; i < size; i++) {
-            curr = p->particle_neighbors[i];
-            while (curr != NULL) {
-                next = curr->next;
-                free(curr);
-                curr = next;
-            }
+        for (int i = 0; i < p->np_local; i++) {
+            neighbor_free(p->particle_neighbors[i]);
         }
         free(p->particle_neighbors);
         p->particle_neighbors = NULL;
     }
-    // if (p->particle_neighbor_distances != NULL) {
-    //     free(p->particle_neighbor_distances);
-    //     p->particle_neighbor_distances = NULL;
-    // }
     if (p->cell_list_head != NULL) {
         free(p->cell_list_head);
         p->cell_list_head = NULL;
@@ -329,6 +300,53 @@ void particle_pneigh_free(particles *p) {
     }
 
 }
+
+
+#ifdef __MPI
+void particle_init_mpi(particles *p) {
+    mpi_data *mpid = get_mpi_data();
+
+    int np = p->n_p;
+    int rank = mpid->rank;
+    int size = mpid->size;
+
+    int div, mod;
+    int np_loc, np_start;
+
+    div = np / size;
+    mod = np % size;
+    for (int i=0; i<size; i++) {
+        if (i < mod) {
+            np_loc = div + 1;
+            np_start = i * np_loc;
+        } else {
+            np_loc = div;
+            np_start = i * np_loc + mod;
+        }
+        mpid->np_loc_list[i] = np_loc;
+        mpid->np_start_list[i] = np_start;
+    }
+
+    p->np_local = mpid->np_loc_list[rank];
+    p->np_start = mpid->np_start_list[rank];
+    mpid->np_loc = p->np_local;
+    mpid->np_start = p->np_start;
+
+    printf(
+        "Particle MPI(%d): np_local = %d, np_start = %d\n",
+        rank, p->np_local, p->np_start
+    );
+}
+
+#else  // __MPI
+
+void particle_init_mpi(particles *p) {
+    mpi_data *mpid = get_mpi_data();
+    mpid->np_loc = p->n_p;
+    mpid->np_start = 0;
+}  // Do nothing
+
+#endif  // __MPI
 
 /*
 TODO: Need to implement a specific init function for water like we do for the PB instead of doing it manually in 
@@ -354,6 +372,7 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
     p->particle_neighbor_method = PARTICLE_NEIGHBOR_TYPE_SPHERE;
     p->particle_neighbors = NULL;
     p->cell_list_head = NULL;
+    p->cell_list_next = NULL;
 
     p->is_water = 0;
     p->fcs_intra = NULL; // Intramolecular forces total
@@ -369,6 +388,8 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
     p->fcs_ib = NULL;
     p->fcs_np = NULL;
     p->solv_radii = NULL;
+
+    particle_init_mpi(p);
 
     // p->neighbors = (long int *)malloc(n_p * 24 * sizeof(long int));
     particle_charges_init(p, cas_type);
@@ -710,15 +731,18 @@ void particles_update_grid_nearest_neighbors_spline(particles *p, grid *g) {
 
 double particles_compute_forces_field(particles *p, grid *grid) {
     double res = compute_force_fd(
-        grid->n, p->n_p, p->h, p->num_neighbors,
+        grid->n, p->n_p, grid->n_local, grid->n_start, p->h, p->num_neighbors,
         grid->phi_n, p->grid_neighbors, p->charges, p->pos, p->fcs_elec,
         p->charges_spread_func
     );
     if ( grid->smoothing != SMOOTHING_TYPE_NONE) {
+        double *fcs_tmp = (double *)malloc(p->n_p * 3 * sizeof(double));
         res += compute_force_short_range(
-            p->n_p, p->pos, p->charges, p->fcs_elec, grid->smoothing_rcut, grid->smoothing_sigma, p->L,
-            p->particle_neighbors
+            p->n_p, p->pos, p->charges, fcs_tmp, grid->smoothing_rcut, grid->smoothing_sigma, p->L,
+            p->particle_neighbors, p->np_local, p->np_start
         );
+        daxpy(fcs_tmp, p->fcs_elec, 1.0, p->n_p * 3);
+        free(fcs_tmp);
     }
     return res;
 }
@@ -726,7 +750,7 @@ double particles_compute_forces_field(particles *p, grid *grid) {
 double particles_compute_forces_tf(particles *p) {
     return compute_tf_forces(
         p->n_p, p->n_typ, p->L, p->types, p->pos, p->tf_params,
-        p->r_cut, p->particle_neighbors,
+        p->r_cut, p->particle_neighbors, p->np_local, p->np_start,
         p->fcs_noel
     );
 }
@@ -734,7 +758,7 @@ double particles_compute_forces_tf(particles *p) {
 double particles_compute_forces_sc(particles *p) {
     return compute_sc_forces(
         p->n_p, p->L, p->pos, p->sc_params,
-        p->r_cut, p->particle_neighbors,
+        p->r_cut, p->particle_neighbors, p->np_local, p->np_start,
         p->fcs_noel
     );
 }
@@ -742,7 +766,7 @@ double particles_compute_forces_sc(particles *p) {
 double particles_compute_forces_lj(particles *p) { 
     return compute_lj_forces(
         p->n_p, p->L, p->pos, p->lj_params,
-        p->r_cut, p->particle_neighbors,
+        p->r_cut, p->particle_neighbors, p->np_local, p->np_start,
         p->fcs_noel, p->lj_force_shift
     );
 }

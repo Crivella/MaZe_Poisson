@@ -73,6 +73,9 @@ int init_mpi() {
     global_mpi_data->n_loc_list = (int *)malloc(size * sizeof(int));
     global_mpi_data->n_start_list = (int *)malloc(size * sizeof(int));
 
+    global_mpi_data->np_loc_list = (int *)malloc(size * sizeof(int));
+    global_mpi_data->np_start_list = (int *)malloc(size * sizeof(int));
+
     return global_mpi_data->size;
 }
 
@@ -83,6 +86,12 @@ void cleanup_mpi() {
         }
         if (global_mpi_data->n_start_list != NULL) {
             free(global_mpi_data->n_start_list);
+        }
+        if (global_mpi_data->np_loc_list != NULL) {
+            free(global_mpi_data->np_loc_list);
+        }
+        if (global_mpi_data->np_start_list != NULL) {
+            free(global_mpi_data->np_start_list);
         }
         free(global_mpi_data);
         global_mpi_data = NULL;

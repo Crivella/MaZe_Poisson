@@ -60,6 +60,7 @@ particles * particles_init(int n, int n_p, int n_typ, double L, double h, int ca
 integrator * integrator_init(int n_p, double dt, int type);
 
 void grid_free(grid *grid);
+void neighbor_free(neighbor *n);
 void particles_free(particles *p);
 void integrator_free(integrator *integrator);
 
@@ -233,6 +234,9 @@ struct particles {
     int n_typ;  // Number of particle types (charge, masses, ... definitions)
     double L;  // Length of the grid
     double h;  // Grid spacing
+
+    int np_local; // Number of particles local to the MPI process
+    int np_start; // Start index of the particles in the global array (MPI aware)
 
     int num_neighbors;  // Number of neighbors per particle
 

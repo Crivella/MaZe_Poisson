@@ -20,7 +20,7 @@ static inline void pbc_displacement(
 }
 
 double compute_force_fd(
-    int n_grid, int n_p, double h, int num_neigh,
+    int n_grid, int n_p, int n_loc, int n_start, double h, int num_neigh,
     double *phi, long int *neighbors, double *charges, double *pos, double *forces,
     double (*g)(double, double, double)
 );
@@ -32,21 +32,22 @@ double compute_force_short_range(
     double R_c,
     double sigma_gauss,
     double L,
-    neighbor **neighbors
+    neighbor **neighbors,
+    int np_local, int np_start
 );
 double compute_tf_forces(
     int n_p, int n_typ, double L, int *types, double *pos, double *params,
-    double r_cut, neighbor **neighbors,
+    double r_cut, neighbor **neighbors, int np_local, int np_start,
     double *forces
 );
 double compute_sc_forces(
     int n_p, double L, double *pos, double *params,
-    double r_cut, neighbor **neighbors,
+    double r_cut, neighbor **neighbors, int np_local, int np_start,
     double *forces
 );
 double compute_lj_forces(
     int n_p, double L, double *pos, double *params,
-    double r_cut, neighbor **neighbors,
+    double r_cut, neighbor **neighbors, int np_local, int np_start,
     double *forces, int lj_force_shift
 );
 

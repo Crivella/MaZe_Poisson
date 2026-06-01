@@ -14,11 +14,17 @@ typedef struct mpi_data {
     int rank;
     int size;
 
+    // Grid distribution info for 1D decomposition along the first dimension
     int n_start;
-    int n_loc;
-
-    int *n_loc_list;
     int *n_start_list;
+    int n_loc;
+    int *n_loc_list;
+
+    // Particle distribution among processors
+    int np_start;
+    int *np_start_list;
+    int np_loc;
+    int *np_loc_list;
 
     int next_rank;
     int prev_rank;
