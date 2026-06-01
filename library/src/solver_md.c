@@ -6,7 +6,6 @@
 #include "mp_structs.h"
 #include "mpi_base.h"
 #include "omp_base.h"
-#include <stdbool.h>
 
 #define MAX_ITG_PARAMS 10
 

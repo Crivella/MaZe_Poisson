@@ -1,5 +1,3 @@
-#include <stdbool.h>
-
 #ifndef __MP_STRUCTS_H
 #define __MP_STRUCTS_H
 
