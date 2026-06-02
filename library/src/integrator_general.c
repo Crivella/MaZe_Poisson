@@ -6,7 +6,7 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 // General integrator functions
-integrator * integrator_init(int n_p, double dt, int type) {
+integrator * integrator_init(int n_p, double dt, integrator_type type) {
     integrator *new = (integrator *)malloc(sizeof(integrator));
     new->type = type;
     new->n_p = n_p;

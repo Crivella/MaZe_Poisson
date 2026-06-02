@@ -45,13 +45,12 @@ capi.register_function(
 )
 
 # void solver_initialize_particles(
-#     int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
+#     int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
 #     int *types, double *pos, double *vel, double *mass, double *charges,
 #     double *pot_params, double r_cut, int lj_force_shift
 # ) {
 capi.register_function(
     'solver_initialize_particles', None, [
-        ctypes.c_int,
         ctypes.c_int,
         ctypes.c_double,
         ctypes.c_double,

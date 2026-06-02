@@ -10,10 +10,13 @@ typedef struct particles particles;
 typedef struct integrator integrator;
 
 // Struct function definitions
-grid * grid_init(int n, double L, double h, double tol, double eps, double eps_int, int type, int precond_type);
+grid * grid_init(
+    int n, double L, double h, double tol, double eps, double eps_int,
+    grid_type type, precond_type precond_type
+);
 neighbor * neighbor_init();
-particles * particles_init(int n, int n_p, int n_typ, double L, double h, int cas_type);
-integrator * integrator_init(int n_p, double dt, int type);
+particles * particles_init(int n_p, int n_typ, double L, double h, ca_scheme_type cas_type);
+integrator * integrator_init(int n_p, double dt, integrator_type type);
 
 void grid_free(grid *grid);
 void neighbor_free(neighbor *n);
@@ -67,7 +70,7 @@ void particle_pneigh_free(particles *p);
 void particles_pb_init(particles *p, double gamma_np, double beta_np, double *solv_radii);
 void particles_pb_free(particles *p);
 
-void particles_water_init(particles *p, int is_water, int corr_type);
+void particles_water_init(particles *p, int is_water, water_electrostatic_type corr_type);
 void particles_water_free(particles *p);
 
 void particles_init_potential(particles *p, int pot_type, double *pot_params);
@@ -124,7 +127,7 @@ char *get_water_electrostatic_type_str(int n);
 
 // Struct definitions
 struct grid {
-    int type;  // Type of the grid
+    grid_type type;  // Type of the grid
     int n;  // Number of grid points per dimension
     double L;  // Length of the grid
     double h;  // Grid spacing
@@ -141,7 +144,7 @@ struct grid {
     double *phi_n;  // Last potential
     double *ig2;  // Inverse of the laplacian
 
-    int precond_type;  // Type of the preconditioner
+    precond_type precond_type;  // Type of the preconditioner
 
     // Poisson-Boltzmann specific
     int pb_enabled;  // Poisson-Boltzmann enabled
@@ -154,7 +157,7 @@ struct grid {
     double *eps_z;  // Dielectric constant
 
     // P3M specific
-    int smoothing; 
+    smoothing_type smoothing; 
     double smoothing_rcut;
     double smoothing_sigma;
 
@@ -194,8 +197,7 @@ struct particles {
 
     int num_neighbors;  // Number of neighbors per particle
 
-    int pot_type;  // Type of the potential
-    int cas_type;  // Type of the charge assignment scheme
+    ca_scheme_type cas_type;  // Type of the charge assignment scheme
 
     int *types;  // Particle types (n_p)
     double *pos;  // Particle positions (n_p x 3)
@@ -208,20 +210,21 @@ struct particles {
     long int *grid_neighbors;  // Particle neighbors (n_p x 8 x 3)
 
     int is_water;  // Flag to toggle water/SPC setup
-    int corr_type; // Type of electrostatic correction for water
+    water_electrostatic_type corr_type; // Type of electrostatic correction for water
     double *fcs_intra; // Intramolecular forces total (n_p x 3)
     double *fcs_corr; // Electrostatic correction forces (n_p x 3)
     double energy_intra; // Intramolecular energy total
     double energy_corr; // Intramolecular exclusion correction energy
 
+    particle_neighbor_type particle_neighbor_method; // Method for finding particle neighbors
     double r_cut;
-    long int particle_neighbor_method; // Method for finding particle neighbors
     neighbor **particle_neighbors;  // Linked list of neighbors for each particle (n_p)
     int cell_list_size;  // Cell size for cell list neighbor finding
     double cell_list_length;  // Cell size for cell list neighbor finding
     long int *cell_list_head;  // Cell list head for cell list neighbor finding (n_cells)
     long int *cell_list_next;  // Cell list next for cell list neighbor finding (n_p)
 
+    potential_type pot_type;  // Type of the potential
     int lj_force_shift;
     double *tf_params;  // Parameters for the TF potential (7 x n_p x n_p)
     double *lj_params;  // Parameters for the LJ potential (4 x n_p x n_p)
@@ -251,8 +254,8 @@ struct particles {
     double  (*compute_forces_noel)( particles *);
     void    (*compute_forces_tot)( particles *);
     double  (*compute_forces_pb)( particles *, grid *);
-    double (*compute_intramolecular_forces)( particles *);
-    double (*compute_forces_electrostatic_correction)( particles *, grid *);
+    double  (*compute_intramolecular_forces)( particles *);
+    double  (*compute_forces_electrostatic_correction)( particles *, grid *);
 
     double  (*get_temperature)( particles *);
     double  (*get_kinetic_energy)( particles *);
@@ -263,7 +266,7 @@ struct particles {
 };
 
 struct integrator {
-    int type;  // Type of the integrator
+    integrator_type type;  // Type of the integrator
     int n_p;  // Number of particles
     double dt;  // Time step
     double T;  // Temperature

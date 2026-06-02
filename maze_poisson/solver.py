@@ -142,6 +142,16 @@ class SolverMD(Logger):
         capi.solver_finalize()
         Clock.report_all()
 
+    @staticmethod
+    def pd_ensure_lowercase(df: pd.DataFrame, column: str) -> pd.DataFrame:
+        """Ensure that a specified column in a DataFrame is lowercase."""
+        if column not in df.columns:
+            for col in df.columns:
+                if col.lower() == column.lower():
+                    df.rename(columns={col: column}, inplace=True)
+                    break
+        return df
+
     def initialize_str_maps(self):
         """Initialize the string maps."""
         for _map, fname_num, fname_data in [
@@ -159,7 +169,7 @@ class SolverMD(Logger):
                 ptr = getattr(capi, fname_data)(i)
                 _map[ptr.decode('utf-8').upper()] = i
 
-    def initialize_grid_smoothing(self):
+    def _initialize_grid_smoothing(self):
         """Initialize the smoothing."""
         smoothing = self.smoothing_type = self.gset.charge_smoothing
 
@@ -177,7 +187,7 @@ class SolverMD(Logger):
 
         capi.solver_initialize_grid_smoothing(method_id, self.smoothing_rcut, self.smoothing_sigma)
     
-    def initialize_grid_pb(self):
+    def _initialize_grid_pb(self):
         """Initialize the grid for Poisson-Boltzmann."""
         if not self.mdv.poisson_boltzmann:
             return
@@ -216,10 +226,10 @@ class SolverMD(Logger):
             grid_id, precond_id
         )
 
-        self.initialize_grid_pb()
-        self.initialize_grid_smoothing()
+        self._initialize_grid_pb()
+        self._initialize_grid_smoothing()
 
-    def get_tosi_fumi_params(self, particles) -> np.ndarray:
+    def _get_tosi_fumi_params(self, particles) -> np.ndarray:
         """Get the Tosi-Fumi parameters for the particles."""
         if self.mdv.potential_params_file is None:
             raise ValueError("Potential parameters file must be provided for TF potential.")
@@ -261,7 +271,7 @@ class SolverMD(Logger):
 
         return tf_params_array
 
-    def get_sc_params(self) -> np.ndarray:
+    def _get_sc_params(self) -> np.ndarray:
         """Get the shared parameters for the SC potential."""
         self.logger.info("Using SC potential with shared parameters (nu, d, B).")
         if self.mdv.potential_params_file is None:
@@ -291,7 +301,7 @@ class SolverMD(Logger):
 
         return sc_params_array
 
-    def get_lennard_jones_params(self, particles) -> np.ndarray:
+    def _get_lennard_jones_params(self, particles) -> np.ndarray:
         """Get the Lennard Jones parameters for the particles."""
         if self.mdv.potential_params_file is None:
             raise ValueError("Potential parameters file must be provided for LJ potential.")
@@ -330,7 +340,7 @@ class SolverMD(Logger):
 
         return lj_params_array
 
-    def validate_water_inputs(self, species_df: pd.DataFrame, coords_df: pd.DataFrame):
+    def _validate_water_inputs(self, species_df: pd.DataFrame, coords_df: pd.DataFrame):
         """Check that water-specific inputs are consistent when iswater flag is set."""
         if not self.mdv.iswater:
             return
@@ -361,16 +371,6 @@ class SolverMD(Logger):
                 f"When iswater=True, each molecule must be ordered as O-H-H in the 'type' column; "
                 f"molecule {idx} has types {triplets[idx].tolist()}."
             )
-
-    @staticmethod
-    def pd_ensure_lowercase(df: pd.DataFrame, column: str) -> pd.DataFrame:
-        """Ensure that a specified column in a DataFrame is lowercase."""
-        if column not in df.columns:
-            for col in df.columns:
-                if col.lower() == column.lower():
-                    df.rename(columns={col: column}, inplace=True)
-                    break
-        return df
     
     def _initialize_particle_pneigh(self, r_cut: float):
         """Initialize the particle neighbor list."""
@@ -390,17 +390,17 @@ class SolverMD(Logger):
         pot_id = potential_map[potential]
 
         if potential == 'TF':
-            pot_params = self.get_tosi_fumi_params(particles)
+            pot_params = self._get_tosi_fumi_params(particles)
             lj_force_shift = 1
         elif potential == 'LJ':
-            pot_params = self.get_lennard_jones_params(particles)
+            pot_params = self._get_lennard_jones_params(particles)
             lj_force_shift = int(bool(self.mdv.lj_force_shift))
             if lj_force_shift:
                 self.logger.info("Using force-shifted LJ potential.")
             else:
                 self.logger.info("Using LAMMPS-like unshifted LJ potential with tail energy correction.")
         elif potential == 'SC':
-            pot_params = self.get_sc_params()
+            pot_params = self._get_sc_params()
             lj_force_shift = 1
 
         return pot_id, pot_params, lj_force_shift
@@ -461,7 +461,7 @@ class SolverMD(Logger):
 
         if self.mdv.iswater:
             self.logger.info("Water mode enabled (SPC): expecting O-H-H triplets (types O,H,H) in input coordinates.")
-            self.validate_water_inputs(particles, df)
+            self._validate_water_inputs(particles, df)
         if len(particles) != self.gset.N_typs:
             raise ValueError(
                 f"Number of particle types in file ({len(particles)}) does not match N_typs ({self.gset.N_typs})."
@@ -508,7 +508,7 @@ class SolverMD(Logger):
         r_cut = self._validate_rcut(self.mdv.neighbor_r_cut)
 
         capi.solver_initialize_particles(
-            self.N, self.N_typs, self.L, self.h, self.N_p,
+            self.N_typs, self.L, self.h, self.N_p,
             pot_id, ca_scheme_id,
             types, pos, vel, mass, charges,
             pot_params, r_cut, lj_force_shift

@@ -300,9 +300,8 @@ void particle_init_mpi(particles *p) {
 #endif  // __MPI
 
 
-particles * particles_init(int n, int n_p, int n_typ, double L, double h, int cas_type) {
+particles * particles_init(int n_p, int n_typ, double L, double h, ca_scheme_type cas_type) {
     particles *p = (particles *)malloc(sizeof(particles));
-    // p->n = n;
     p->n_p = n_p;
     p->n_typ = n_typ;
     p->L = L;
@@ -390,7 +389,7 @@ void particles_pb_free(particles *p) {
     }
 }
 
-void particles_water_init(particles *p, int is_water, int corr_type) {
+void particles_water_init(particles *p, int is_water, water_electrostatic_type corr_type) {
     if (!is_water) {
         return;
     }

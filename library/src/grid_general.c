@@ -6,7 +6,10 @@
 #include "linalg.h"
 #include "mp_structs.h"
 
-grid * grid_init(int n, double L, double h, double tol, double eps, double eps_int, int grid_type, int precond_type) {
+grid * grid_init(
+    int n, double L, double h, double tol, double eps, double eps_int,
+    grid_type grid_type, precond_type precond_type
+) {
     void   (*init_func)(grid *);
     switch (grid_type) {
         case GRID_TYPE_LCG:

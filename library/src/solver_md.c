@@ -45,7 +45,8 @@ void solver_initialize() {
 }
 
 void solver_initialize_grid(
-    int n_grid, double L, double h, double tol, double eps, double eps_int, int grid_type, int precond_type
+    int n_grid, double L, double h, double tol, double eps, double eps_int,
+    grid_type grid_type, precond_type precond_type
 ) {
     g_grid = grid_init(n_grid, L, h, tol, eps, eps_int, grid_type, precond_type);
 }
@@ -55,17 +56,17 @@ void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enab
     grid_pb_init(g_grid, w, kbar2, nonpolar_enabled);
 }
 
-void solver_initialize_grid_smoothing(int method, double r_cut, double sigma) {
+void solver_initialize_grid_smoothing(particle_neighbor_type method, double r_cut, double sigma) {
     // Initialize the charge smoothing to perform after charge assignment
     grid_smoothing_init(g_grid, method, r_cut, sigma);
 }
 
 void solver_initialize_particles(
-    int n, int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
+    int n_typ, double L, double h, int n_p, potential_type pot_type, ca_scheme_type cas_type,
     int *types, double *pos, double *vel, double *mass, double *charges,
     double *pot_params, double r_cut, int lj_force_shift
 ) {
-    g_particles = particles_init(n, n_p, n_typ, L, h, cas_type);
+    g_particles = particles_init(n_p, n_typ, L, h, cas_type);
 
     g_particles->r_cut = r_cut;
     g_particles->lj_force_shift = lj_force_shift;
@@ -87,11 +88,11 @@ void solver_initialize_particles_pois_boltz(double gamma_np, double beta_np, dou
     particles_pb_init(g_particles, gamma_np, beta_np, solv_radii);
 }
 
-void solver_initialize_particles_water(int is_water, int corr_type) {
+void solver_initialize_particles_water(int is_water, water_electrostatic_type corr_type) {
     particles_water_init(g_particles, is_water, corr_type);
 }
 
-void solver_initialize_integrator(int n_p, double dt, double T, double gamma, int itg_type, int itg_enabled) {
+void solver_initialize_integrator(int n_p, double dt, double T, double gamma, integrator_type itg_type, int itg_enabled) {
     g_integrator = integrator_init(n_p, dt, itg_type);
 
     double itg_params[MAX_ITG_PARAMS];
@@ -106,7 +107,7 @@ void solver_initialize_integrator(int n_p, double dt, double T, double gamma, in
             break;
     }
 
-    if (itg_enabled == 1) {
+    if (itg_enabled) {
         g_integrator->init_thermostat(g_integrator, itg_params);
     }
 }
