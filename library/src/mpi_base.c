@@ -153,45 +153,31 @@ void barrier() {
 }
 
 void mpi_grid_collect_buffer(double *data, double *recv, int n) {
-    int n_loc = global_mpi_data->n_loc;
-    int n_loc_start;
     int size = global_mpi_data->size;
-    int rank = global_mpi_data->rank;
-
     long int n2 = n * n;
-    long int n3_loc = n_loc * n2;
+    long int n3_loc = global_mpi_data->n_loc * n2;
 
-    if (rank == 0) {
-        memcpy(recv, data, n3_loc * sizeof(double));
-        for (int i=1; i<size; i++) {
-            n_loc = global_mpi_data->n_loc_list[i];
-            n_loc_start = global_mpi_data->n_start_list[i];
-            MPI_Recv(recv + n_loc_start * n2, n_loc * n2, MPI_DOUBLE, i, 0, global_mpi_data->comm, MPI_STATUS_IGNORE);
-        }
-    } else {
-        MPI_Send(data, n3_loc, MPI_DOUBLE, 0, 0, global_mpi_data->comm);
+    int recvcounts[size], displs[size];
+    for (int i=0; i<size; i++) {
+        recvcounts[i] = global_mpi_data->n_loc_list[i] * n2;
+        displs[i] = global_mpi_data->n_start_list[i] * n2;
     }
+
+   MPI_Gatherv(data, n3_loc, MPI_DOUBLE, recv, recvcounts, displs, MPI_DOUBLE, 0, global_mpi_data->comm);
 }
 
-void mpi_grid_distribute_buffer(double *data, double *send, int n) {
-    int n_loc = global_mpi_data->n_loc;
-    int n_loc_start;
+void mpi_grid_distribute_buffer(double *send, double *data, int n) {
     int size = global_mpi_data->size;
-    int rank = global_mpi_data->rank;
-
     long int n2 = n * n;
-    long int n3_loc = n_loc * n2;
+    long int n3_loc = global_mpi_data->n_loc * n2;
 
-    if (rank == 0) {
-        memcpy(data, send, n3_loc * sizeof(double));
-        for (int i=1; i<size; i++) {
-            n_loc = global_mpi_data->n_loc_list[i];
-            n_loc_start = global_mpi_data->n_start_list[i];
-            MPI_Send(send + n_loc_start * n2, n_loc * n2, MPI_DOUBLE, i, 0, global_mpi_data->comm);
-        }
-    } else {
-        MPI_Recv(data, n3_loc, MPI_DOUBLE, 0, 0, global_mpi_data->comm, MPI_STATUS_IGNORE);
+    int sendcounts[size], displs[size];
+    for (int i=0; i<size; i++) {
+        sendcounts[i] = global_mpi_data->n_loc_list[i] * n2;
+        displs[i] = global_mpi_data->n_start_list[i] * n2;
     }
+
+    MPI_Scatterv(data, sendcounts, displs, MPI_DOUBLE, send, n3_loc, MPI_DOUBLE, 0, global_mpi_data->comm);
 }
 
 #else
