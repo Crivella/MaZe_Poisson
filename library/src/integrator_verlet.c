@@ -23,7 +23,7 @@ void verlet_integrator_part1(integrator *integrator, particles *p) {
     double *forces = p->fcs_tot;
     double *masses = p->mass;
     
-    if (integrator->enabled == INTEGRATOR_ENABLED) {
+    if (integrator->enabled) {
         current_T = particles_get_temperature(p);
         double scale = sqrt(target_T / current_T);
         for (int i = 0; i < p->n_p; i++) {
@@ -72,9 +72,9 @@ void verlet_integrator_part2(integrator *integrator, particles *p) {
 
 void verlet_integrator_init_thermostat(integrator *integrator, double *params) {
     integrator->T = params[0];
-    integrator->enabled = INTEGRATOR_ENABLED;
+    integrator->enabled = 1;
 }
 
 void verlet_integrator_stop_thermostat(integrator *integrator) {
-    integrator->enabled = INTEGRATOR_DISABLED;
+    integrator->enabled = 0;
 }

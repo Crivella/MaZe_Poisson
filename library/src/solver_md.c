@@ -65,7 +65,6 @@ void solver_initialize_particles(
     int *types, double *pos, double *vel, double *mass, double *charges,
     double *pot_params, double r_cut, int lj_force_shift
 ) {
-    // TODO: Should R_c and r_cut be the same? If not the variable name should be more clearer/descriptive
     g_particles = particles_init(n, n_p, n_typ, L, h, cas_type);
 
     g_particles->r_cut = r_cut;
@@ -199,12 +198,6 @@ double get_energy_corr() {
     return g_particles->energy_corr;
 }
 
-// void solver_compute_forces() {
-//     solver_compute_forces_elec();
-//     solver_compute_forces_noel();
-//     solver_compute_forces_tot();
-// }
-
 void integrator_part_1() {
     g_integrator->part1(g_integrator, g_particles);
 }
@@ -218,46 +211,10 @@ void solver_rescale_velocities() {
     // g_particles->rescale_momenta(g_particles);
 }
 
-// int solver_initialize_md(int preconditioning, int vel_rescale) {
-//     int res = 0;
-
-//     #pragma omp parallel for reduction(+:q_tot)
-//     for (int i = 0; i < g_particles->n_p; i++) {
-//         q_tot += g_particles->charges[i];
-//     }
-
-//     // Step 0 Verlet
-//     res |= solver_update_charges();
-//     if (preconditioning == 1)
-//         solver_init_field();
-//     solver_compute_forces();
-
-//     // Step 1 Verlet
-//     integrator_part_1();
-//     res |= solver_update_charges();
-//     if (preconditioning == 1) 
-//         solver_init_field();
-//     solver_compute_forces();
-//     integrator_part_2();
-
-//     if (vel_rescale == 1) 
-//         solver_rescale_velocities();
-
-//     return res;
-// }
-
-// void solver_md_loop_iter() {
-//     integrator_part_1();
-//     solver_update_charges();
-//     solver_update_field();
-//     solver_compute_forces();
-//     integrator_part_2();
-// }
-
 int solver_check_thermostat() {
     int res = 0;
     double temp;
-    if (g_integrator->enabled == INTEGRATOR_ENABLED) {
+    if (g_integrator->enabled) {
         temp = g_particles->get_temperature(g_particles);
         if (fabs(temp - g_integrator->T) < 100) {
             res = 1;
@@ -267,12 +224,6 @@ int solver_check_thermostat() {
 
     return res;
 }
-
-// void solver_run_n_steps(int n_steps) {
-//     for (int i = 0; i < n_steps; i++) {
-//         solver_md_loop_iter();
-//     }
-// }
 
 void solver_finalize() {
     if (g_particles != NULL) {

@@ -1,49 +1,7 @@
 #ifndef __MP_STRUCTS_H
 #define __MP_STRUCTS_H
 
-#define GRID_TYPE_NUM 5
-#define GRID_TYPE_LCG 0
-#define GRID_TYPE_FFT 1
-#define GRID_TYPE_MGRID 2
-#define GRID_TYPE_MAZE_LCG 3
-#define GRID_TYPE_MAZE_MGRID 4
-
-#define PARTICLE_POTENTIAL_TYPE_NUM 3
-#define PARTICLE_POTENTIAL_TYPE_TF 0
-#define PARTICLE_POTENTIAL_TYPE_LJ 1
-#define PARTICLE_POTENTIAL_TYPE_SC 2
-
-#define CHARGE_ASS_SCHEME_TYPE_NUM 3
-#define CHARGE_ASS_SCHEME_TYPE_CIC 0
-#define CHARGE_ASS_SCHEME_TYPE_SPLQUAD 1
-#define CHARGE_ASS_SCHEME_TYPE_SPLCUB 2
-
-#define INTEGRATOR_TYPE_NUM 2
-#define INTEGRATOR_TYPE_OVRVO 0
-#define INTEGRATOR_TYPE_VERLET 1
-
-#define INTEGRATOR_ENABLED 1
-#define INTEGRATOR_DISABLED 0
-
-#define PRECOND_TYPE_NUM 5
-#define PRECOND_TYPE_NONE 0
-#define PRECOND_TYPE_JACOBI 1
-#define PRECOND_TYPE_MG 2
-#define PRECOND_TYPE_SSOR 3
-#define PRECOND_TYPE_BLOCKJACOBI 4
-
-#define WATER_ELECTROSTATIC_CORR_TYPE_NUM 2
-#define WATER_ELECTROSTATIC_CORR_TYPE_SPREAD 0
-#define WATER_ELECTROSTATIC_CORR_TYPE_SR 1
-
-#define SMOOTHING_TYPE_NUM 3
-#define SMOOTHING_TYPE_NONE 0
-#define SMOOTHING_TYPE_GAUSS 1
-#define SMOOTHING_TYPE_DIFFUSION 2
-
-#define PARTICLE_NEIGHBOR_TYPE_NUM 2
-#define PARTICLE_NEIGHBOR_TYPE_SPHERE 0
-#define PARTICLE_NEIGHBOR_TYPE_CELL_LIST 1
+#include "enums.h"
 
 // Struct typedefs
 typedef struct grid grid;
@@ -163,8 +121,6 @@ void precond_blockjacobi_init();
 void precond_blockjacobi_cleanup();
 
 char *get_water_electrostatic_type_str(int n);
-
-#define H_ARR_SIZE 4
 
 // Struct definitions
 struct grid {

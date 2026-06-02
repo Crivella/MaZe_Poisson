@@ -6,101 +6,19 @@ import numpy.ctypeslib as npct
 
 from . import capi
 
-# int get_grid_type_num() {
-capi.register_function(
-    'get_grid_type_num', ctypes.c_int, [],
-)
-
-# char *get_grid_type_str(int n) {
-capi.register_function(
-    'get_grid_type_str', ctypes.c_char_p, [
-        ctypes.c_int,
-    ],
-)
-
-# int get_potential_type_num() {
-capi.register_function(
-    'get_potential_type_num', ctypes.c_int, [],
-)
-
-# char *get_potential_type_str(int n) {
-capi.register_function(
-    'get_potential_type_str', ctypes.c_char_p, [
-        ctypes.c_int,
-    ],
-)
-
-# int get_ca_scheme_type_num() {
-capi.register_function(
-    'get_ca_scheme_type_num', ctypes.c_int, [],
-)
-
-# char *get_ca_scheme_type_str(int n) {
-capi.register_function(
-    'get_ca_scheme_type_str', ctypes.c_char_p, [
-        ctypes.c_int,
-    ],
-)
-
-# int get_water_electrostatic_type_num() {
-capi.register_function(
-    'get_water_electrostatic_type_num', ctypes.c_int, [],
-)
-
-# char *get_water_electrostatic_type_str(int n) {
-capi.register_function(
-    'get_water_electrostatic_type_str', ctypes.c_char_p, [
-        ctypes.c_int,
-    ],
-)
-
-# int get_integrator_type_num() {
-capi.register_function(
-    'get_integrator_type_num', ctypes.c_int, [],
-)
-
-# char *get_integrator_type_str(int n) {
-capi.register_function(
-    'get_integrator_type_str', ctypes.c_char_p, [
-        ctypes.c_int,
-    ],
-)
-
-# int get_precond_type_num() {
-capi.register_function(
-    'get_precond_type_num', ctypes.c_int, [],
-)
-
-# char *get_precond_type_str(int n) {
-capi.register_function(
-    'get_precond_type_str', ctypes.c_char_p, [
-        ctypes.c_int,
-    ],
-)
-
-# int get_smoothing_type_num() {
-capi.register_function(
-    'get_smoothing_type_num', ctypes.c_int, [],
-)
-
-# char *get_smoothing_type_str(int n) {
-capi.register_function(
-    'get_smoothing_type_str', ctypes.c_char_p, [
-        ctypes.c_int,
-    ],
-)
-
-# int get_particle_neighbor_type_num() {
-capi.register_function(
-    'get_particle_neighbor_type_num', ctypes.c_int, [],
-)
-
-# char *get_particle_neighbor_type_str(int n) {
-capi.register_function(
-    'get_particle_neighbor_type_str', ctypes.c_char_p, [
-        ctypes.c_int,
-    ],
-)
+# Generic input_map functions
+for imap in [
+    'grid',
+    'potential',
+    'ca_scheme',
+    'water_electrostatic',
+    'integrator',
+    'precond',
+    'smoothing',
+    'particle_neighbor',
+]:
+    capi.register_function(f'get_{imap}_type_num', ctypes.c_int, [],)
+    capi.register_function(f'get_{imap}_type_str', ctypes.c_char_p, [ctypes.c_int,],)
 
 # void get_pos(double *recv) {
 capi.register_function(

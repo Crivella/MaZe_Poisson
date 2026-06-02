@@ -46,6 +46,7 @@ set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g")
 add_library(maze_poisson MODULE
     src/linalg.c
     
+    src/enums.c
     src/omp_base.c
     src/mpi_base.c
 

@@ -4,16 +4,6 @@
 #include "mp_structs.h"
 #include "constants.h"
 
-char integrator_type_str[2][16] = {"OVRVO", "VERLET"};
-
-int get_integrator_type_num() {
-    return INTEGRATOR_TYPE_NUM;
-}
-
-char *get_integrator_type_str(int n) {
-    return integrator_type_str[n];
-}
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 // General integrator functions
 integrator * integrator_init(int n_p, double dt, int type) {
@@ -22,7 +12,7 @@ integrator * integrator_init(int n_p, double dt, int type) {
     new->n_p = n_p;
     new->dt = dt;
 
-    new->enabled = INTEGRATOR_DISABLED;
+    new->enabled = 0;
     new->c1 = 1.0;
     new->c2 = 1.0;
 

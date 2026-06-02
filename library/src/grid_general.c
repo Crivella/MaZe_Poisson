@@ -6,31 +6,6 @@
 #include "linalg.h"
 #include "mp_structs.h"
 
-char grid_type_str[GRID_TYPE_NUM][16] = {"LCG", "FFT", "MULTIGRID", "MAZE-LCG", "MAZE-MULTIGRID"}; 
-int get_grid_type_num() {
-    return GRID_TYPE_NUM;
-}
-char *get_grid_type_str(int n) {
-    return grid_type_str[n];
-}
-
-char precond_type_str[PRECOND_TYPE_NUM][16] = {"NONE", "JACOBI", "MG", "SSOR", "BLOCKJACOBI"};
-int get_precond_type_num() {
-    return PRECOND_TYPE_NUM;
-}
-char *get_precond_type_str(int n) {
-    return precond_type_str[n];
-}
-
-char smoothing_type_str[SMOOTHING_TYPE_NUM][16] = {"NONE", "GAUSS", "DIFFUSION"};
-int get_smoothing_type_num() {
-    return SMOOTHING_TYPE_NUM;
-}
-
-char *get_smoothing_type_str(int n) {
-    return smoothing_type_str[n];
-}
-
 grid * grid_init(int n, double L, double h, double tol, double eps, double eps_int, int grid_type, int precond_type) {
     void   (*init_func)(grid *);
     switch (grid_type) {
@@ -124,15 +99,6 @@ void smooth_charges_none(grid *grid, particles *p) {
 }
 
 void smooth_charges_diffusion(grid *grid, particles *p) {
-    // Placeholder for diffusion-based smoothing implementation
-    // This function would perform a diffusion process on the charge distribution
-    // to smooth it out, and return the energy contribution from the smoothing
-    // mpi_fprintf(stderr, "Diffusion-based smoothing is not yet implemented.\n");
-    // exit(1);
-
-    // mpi_fprintf(stderr, "Starting diffusion-based smoothing");
-    // mpi_printf("Performing diffusion-based smoothing with sigma = %f and r_cut = %f\n", grid->smoothing_sigma, grid->smoothing_rcut);
-
     int n = grid->n;
     int n_loc = grid->n_local;
     int n_start = grid->n_start;

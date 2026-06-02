@@ -14,50 +14,6 @@
 #define NUM_NEIGH_CIC 8
 #define NUM_NEIGH_SPLINE 64
 
-// Potential types
-char potential_type_str[PARTICLE_POTENTIAL_TYPE_NUM][16] = {"TF", "LJ", "SC"};
-
-int get_potential_type_num() {
-    return PARTICLE_POTENTIAL_TYPE_NUM;
-}
-
-char *get_potential_type_str(int n) {
-    return potential_type_str[n];
-}
-
-// Charge assignment scheme types
-char ca_scheme_type_str[CHARGE_ASS_SCHEME_TYPE_NUM][16] = {"CIC", "SPL_QUADR", "SPL_CUBIC"};
-
-int get_ca_scheme_type_num() {
-    return CHARGE_ASS_SCHEME_TYPE_NUM;
-}
-
-char *get_ca_scheme_type_str(int n) {
-    return ca_scheme_type_str[n];
-}
-
-// Water electrostatic types
-char water_electrostatic_type_str[WATER_ELECTROSTATIC_CORR_TYPE_NUM][16] = {"SPREAD", "SR"};
-
-int get_water_electrostatic_type_num() {
-    return WATER_ELECTROSTATIC_CORR_TYPE_NUM;
-}
-
-char *get_water_electrostatic_type_str(int n) {
-    return water_electrostatic_type_str[n];
-}
-
-// Particle neighbor method
-char particle_neighbor_type_str[PARTICLE_NEIGHBOR_TYPE_NUM][16] = {"SPHERE", "CELL_LIST"};
-
-int get_particle_neighbor_type_num() {
-    return PARTICLE_NEIGHBOR_TYPE_NUM;
-}
-
-char *get_particle_neighbor_type_str(int n) {
-    return particle_neighbor_type_str[n];
-}
-
 neighbor *neighbor_init() {
     neighbor *res = (neighbor *)malloc(sizeof(neighbor));
     res->valid=0;
@@ -331,11 +287,6 @@ void particle_init_mpi(particles *p) {
     p->np_start = mpid->np_start_list[rank];
     mpid->np_loc = p->np_local;
     mpid->np_start = p->np_start;
-
-    printf(
-        "Particle MPI(%d): np_local = %d, np_start = %d\n",
-        rank, p->np_local, p->np_start
-    );
 }
 
 #else  // __MPI
@@ -348,10 +299,7 @@ void particle_init_mpi(particles *p) {
 
 #endif  // __MPI
 
-/*
-TODO: Need to implement a specific init function for water like we do for the PB instead of doing it manually in 
-solver_md.c
-*/
+
 particles * particles_init(int n, int n_p, int n_typ, double L, double h, int cas_type) {
     particles *p = (particles *)malloc(sizeof(particles));
     // p->n = n;
@@ -599,6 +547,15 @@ void particles_init_potential_lj(particles *p, double *pot_params) {
             } else {
                 alpha = 0.0;
                 beta = 0.0;
+            }
+
+            if (!isfinite(sigma) || !isfinite(epsilon) || !isfinite(alpha) || !isfinite(beta)) {
+                mpi_fprintf(
+                    stderr,
+                    "Error: LJ params non-finite (i=%d j=%d sigma=%e epsilon=%e alpha=%e beta=%e)\n",
+                    i, j, sigma, epsilon, alpha, beta
+                );
+                exit(1);
             }
 
             p->lj_params[0*np2 + inj] = sigma;

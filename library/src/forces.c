@@ -439,7 +439,7 @@ static double compute_lj_tail_correction(int n_p, double L, double *params, doub
         return 0.0;
     }
 
-    // TODO: Does this need to go over all the particle pairs or should this also beb affected by the cutoff?
+    // TODO: Does this need to go over all the particle pairs or should this also be affected by the cutoff?
     for (int i = 0; i < n_p; i++) {
         long int idx1 = i * n_p;
         for (int j = 0; j < n_p; j++) {
@@ -505,15 +505,6 @@ double compute_lj_forces(
             epsilon = epsilon_lj[idx2];
             al = alpha[idx2];
             be = beta[idx2];
-            // TODO: this check should be done once when the parameters are generated, not every time the forces are computed
-            if (!isfinite(sigma) || !isfinite(epsilon) || !isfinite(al) || !isfinite(be)) {
-                mpi_fprintf(
-                    stderr,
-                    "Error: LJ params non-finite (i=%d j=%d sigma=%e epsilon=%e alpha=%e beta=%e)\n",
-                    i, curr->idx, sigma, epsilon, al, be
-                );
-                exit(1);
-            }
 
             //write f_mag and V_mag for lennard-jones potential
             f_mag = 4 * epsilon * (12 * pow(sigma / r_mag, 12) - 6 * pow(sigma / r_mag, 6)) / r_mag - al;

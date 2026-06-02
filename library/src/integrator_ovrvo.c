@@ -123,7 +123,7 @@ void r_block(integrator *integrator, particles *p) {
 }
 
 void ovrvo_integrator_part1(integrator *integrator, particles *p) {
-    if (integrator->enabled == INTEGRATOR_ENABLED) {
+    if (integrator->enabled) {
         o_block(integrator, p);
     }
     v_block(integrator, p);
@@ -132,7 +132,7 @@ void ovrvo_integrator_part1(integrator *integrator, particles *p) {
 
 void ovrvo_integrator_part2(integrator *integrator, particles *p) {
     v_block(integrator, p);
-    if (integrator->enabled == INTEGRATOR_ENABLED) {
+    if (integrator->enabled) {
         o_block(integrator, p);
     }
 }
@@ -141,14 +141,14 @@ void ovrvo_integrator_init_thermostat(integrator *integrator, double *params) {
     integrator->T = params[0];
     double gamma = params[1];
 
-    integrator->enabled = INTEGRATOR_ENABLED;
+    integrator->enabled = 1;
 
     integrator->c1 = exp(-gamma * integrator->dt);
     integrator->c2 = sqrt(2 / (gamma * integrator->dt) * tanh(0.5 * gamma * integrator->dt));
 }
 
 void ovrvo_integrator_stop_thermostat(integrator *integrator) {
-    integrator->enabled = INTEGRATOR_DISABLED;
+    integrator->enabled = 0;
     integrator->c1 = 1.0;
     integrator->c2 = 1.0;
 }
