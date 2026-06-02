@@ -5,6 +5,7 @@
 #include "mpi_base.h"
 #include "linalg.h"
 #include "mp_structs.h"
+#include "fftw_wrap.h"
 
 grid * grid_init(
     int n, double L, double h, double tol, double eps, double eps_int,
@@ -69,6 +70,92 @@ grid * grid_init(
 
     return new;
 }
+
+#ifdef __MPI
+
+void grid_init_mpi(grid *grid) {
+    mpi_data *mpid = get_mpi_data();
+
+    int n = grid->n;
+    int rank = mpid->rank;
+    int size = mpid->size;
+
+    int div, mod;
+    int n_loc, n_start;
+
+    div = n / size;
+    mod = n % size;
+    for (int i=0; i<size; i++) {
+        if (i < mod) {
+            n_loc = div + 1;
+            n_start = i * n_loc;
+        } else {
+            n_loc = div;
+            n_start = i * n_loc + mod;
+        }
+        mpid->n_loc_list[i] = n_loc;
+        mpid->n_start_list[i] = n_start;
+    }
+
+    grid->n_local = mpid->n_loc_list[rank];
+    grid->n_start = mpid->n_start_list[rank];
+    mpid->n_loc = grid->n_local;
+    mpid->n_start = grid->n_start;
+}
+
+void grid_init_mpi_fft(grid *grid) {
+    mpi_data *mpid = get_mpi_data();
+    
+    init_rfft(grid->n, &grid->n_local, &grid->n_start);
+
+    int rank = mpid->rank;
+    int size = mpid->size;
+    int n_loc, n_start;
+
+    mpid->n_loc = grid->n_local;
+    mpid->n_start = grid->n_start;
+    for (int i=0; i<size; i++) {
+        n_loc = mpid->n_loc;
+        n_start = mpid->n_start;
+        MPI_Bcast(&n_loc, 1, MPI_INT, i, MPI_COMM_WORLD);
+        MPI_Bcast(&n_start, 1, MPI_INT, i, MPI_COMM_WORLD);
+        mpid->n_loc_list[i] = n_loc;
+        mpid->n_start_list[i] = n_start;
+        // printf("FFT MPI(%d %d): n_local = %d, n_start = %d\n", rank, i, n_loc, n_start);
+    }
+    // Check that if some processors have no local grid points they should be skipped
+    // from the loop communication
+    if (rank < size-1) {
+        if (mpid->n_loc_list[rank+1] == 0) {
+            mpid->next_rank = 0;
+        } 
+    }
+    if (rank == 0) {
+        if (mpid->n_loc_list[size-1] == 0) {
+            for (int i=size-1; i>=0; i--) {
+                if (mpid->n_loc_list[i] > 0) {
+                    mpid->prev_rank = i;
+                    break;
+                }
+            }
+        }
+    }
+}
+#else  // __MPI
+
+void grid_init_mpi(grid *grid) {
+    mpi_data *mpid = get_mpi_data();
+    mpid->n_loc = grid->n;
+    mpid->n_start = 0;
+}
+
+void grid_init_mpi_fft(grid *grid) {
+    mpi_data *mpid = get_mpi_data();
+    mpid->n_loc = grid->n;
+    mpid->n_start = 0;
+}
+
+#endif  // __MPI
 
 void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled) {
     // Initialize the grid for Poisson-Boltzmann simulations

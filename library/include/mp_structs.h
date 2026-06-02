@@ -23,6 +23,9 @@ void neighbor_free(neighbor *n);
 void particles_free(particles *p);
 void integrator_free(integrator *integrator);
 
+void grid_init_mpi(grid *grid);
+void grid_init_mpi_fft(grid *grid);
+
 // long int *neighbor_get_indices(neighbor *n);
 // double *neighbor_get_dx(neighbor *n);
 // double *neighbor_get_dx(neighbor *n);

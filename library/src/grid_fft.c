@@ -9,59 +9,6 @@
 #include "fftw_wrap.h"
 
 
-#ifdef __MPI
-void fft_grid_init_mpi(grid *grid) {
-    mpi_data *mpid = get_mpi_data();
-
-    int n = grid->n;
-    int rank = mpid->rank;
-    int size = mpid->size;
-    int n_loc, n_start;
-
-    mpid->n_loc = grid->n_local;
-    mpid->n_start = grid->n_start;
-    for (int i=0; i<size; i++) {
-        n_loc = mpid->n_loc;
-        n_start = mpid->n_start;
-        MPI_Bcast(&n_loc, 1, MPI_INT, i, MPI_COMM_WORLD);
-        MPI_Bcast(&n_start, 1, MPI_INT, i, MPI_COMM_WORLD);
-        mpid->n_loc_list[i] = n_loc;
-        mpid->n_start_list[i] = n_start;
-        // printf("FFT MPI(%d %d): n_local = %d, n_start = %d\n", rank, i, n_loc, n_start);
-    }
-    // Check that if some processors have no local grid points they should be skipped
-    // from the loop communication
-    if (rank < size-1) {
-        if (mpid->n_loc_list[rank+1] == 0) {
-            mpid->next_rank = 0;
-        } 
-    }
-    if (rank == 0) {
-        if (mpid->n_loc_list[size-1] == 0) {
-            for (int i=size-1; i>=0; i--) {
-                if (mpid->n_loc_list[i] > 0) {
-                    mpid->prev_rank = i;
-                    break;
-                }
-            }
-        }
-    }
-    // printf(
-    //     "FFT MPI(%d): n_local = %d, n_start = %d, prev_rank=%d, nxt_rank=%d\n",
-    //     rank, grid->n_local, grid->n_start, mpid->prev_rank, mpid->next_rank
-    // );
-}
-
-#else  // __MPI
-
-void fft_grid_init_mpi(grid *grid) {
-    mpi_data *mpid = get_mpi_data();
-    mpid->n_loc = grid->n;
-    mpid->n_start = 0;
-}  // Do nothing
-
-#endif  // __MPI
-
 void fft_grid_init(grid * grid) {
     long int i1, j1;
 
@@ -72,10 +19,9 @@ void fft_grid_init(grid * grid) {
     long int n2 = n * n;
 
     int n_loc, n_start;
-    init_rfft(n, &n_loc, &n_start);
-    grid->n_local = n_loc;
-    grid->n_start = n_start;
-    fft_grid_init_mpi(grid);
+    grid_init_mpi_fft(grid);
+    n_loc = grid->n_local;
+    n_start = grid->n_start;
 
     int nh = n / 2 + 1;
     long int size1 = n_loc * n2;

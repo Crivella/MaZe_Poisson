@@ -11,54 +11,13 @@
 #include "mpi_base.h"
 #include "multigrid.h"
 
-#ifdef __MPI
-void maze_lcg_grid_init_mpi(grid *grid) {
-    mpi_data *mpid = get_mpi_data();
-
-    int n = grid->n;
-    int rank = mpid->rank;
-    int size = mpid->size;
-
-    int div, mod;
-    int n_loc, n_start;
-
-    div = n / size;
-    mod = n % size;
-    for (int i=0; i<size; i++) {
-        if (i < mod) {
-            n_loc = div + 1;
-            n_start = i * n_loc;
-        } else {
-            n_loc = div;
-            n_start = i * n_loc + mod;
-        }
-        mpid->n_loc_list[i] = n_loc;
-        mpid->n_start_list[i] = n_start;
-    }
-
-    grid->n_local = mpid->n_loc_list[rank];
-    grid->n_start = mpid->n_start_list[rank];
-    mpid->n_loc = grid->n_local;
-    mpid->n_start = grid->n_start;
-}
-
-#else  // __MPI
-
-void maze_lcg_grid_init_mpi(grid *grid) {
-    mpi_data *mpid = get_mpi_data();
-    mpid->n_loc = grid->n;
-    mpid->n_start = 0;
-}  // Do nothing
-
-#endif  // __MPI
 
 void maze_lcg_grid_init(grid * grid) {
     int n_loc = grid->n_local;
     int n = grid->n;
-
     long int n2 = n * n;
 
-    maze_lcg_grid_init_mpi(grid);
+    grid_init_mpi(grid);
 
     long int size = grid->n_local * n2;
     grid->size = size;
