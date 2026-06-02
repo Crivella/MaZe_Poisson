@@ -199,31 +199,29 @@ The resulting Fourier-space kernel is stored in the grid structure for later use
 */
 void smooth_charges_gauss_init(grid *grid) {
     int n = grid->n;
-    int n_loc = grid->n_local;
-    int n_start = grid->n_start;
     int nh = n / 2 + 1;
     long int n2 = n * n;
-    long int c_size = n_loc * nh * n;  // Size of the complex-space grid for the local portion
-    long int r_size = n_loc * n2;  // Size of the real-space grid for the local portion
+    long int c_size = grid->n_local * nh * n;  // Size of the complex-space grid for the local portion
+    long int r_size = grid->n_local * n2;  // Size of the real-space grid for the local portion
 
     double sigma = grid->smoothing_sigma / grid->h;  // Convert sigma to grid units
     double sigma2 = sigma * sigma;
 
-    double *gaussian_kernel = (double *)malloc(r_size * sizeof(double));
+    double *gaussian_kernel = (double *)calloc(r_size, sizeof(double));
 
     // Generate the Gaussian kernel in Real space
     int i, j, k;
     int di, dj, dk;
     double ri, rj, r2;
-    for (int i_loc = 0; i_loc < n_loc; i_loc++) {
-        i = n_start + i_loc;
+    for (int i_loc = 0; i_loc < grid->n_local; i_loc++) {
+        i = grid->n_start + i_loc;
         di = i > n / 2 ? i - n : i;  // Wrap around for periodicity
         ri = di * di;
         for (j = 0; j < n; j++) {
             dj = j > n / 2 ? j - n : j;  // Wrap around for periodicity
             rj = ri + dj * dj;
             for (k = 0; k < n; k++) {
-                dk = k > nh / 2 ? k - n : k;  // Wrap around for periodicity
+                dk = k > n / 2 ? k - n : k;  // Wrap around for periodicity
                 r2 = rj + dk * dk;
                 gaussian_kernel[i_loc * n2 + j * n + k] = exp(-(double)r2 / (2 * sigma2));
             }
@@ -241,7 +239,7 @@ void smooth_charges_gauss_init(grid *grid) {
 
     // Convert the kernel in Fourier space
     grid->smoothing_kernel = malloc(c_size * sizeof(fftw_complex));
-    rfft_3d(n, n_loc, gaussian_kernel, (fftw_complex *)grid->smoothing_kernel);
+    rfft_3d(n, grid->n_local, gaussian_kernel, (fftw_complex *)grid->smoothing_kernel);
 
     free(gaussian_kernel);
 }
