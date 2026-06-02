@@ -79,11 +79,11 @@ void fft_grid_cleanup(grid * grid) {
 }   
 
 void fft_grid_init_field(grid *grid) {
-    rfft_solve(grid->n, grid->q, grid->ig2, grid->phi_n);
+    rfft_solve(grid->n, grid->n_local, grid->q, grid->ig2, grid->phi_n);
 }
 
 int fft_grid_update_field(grid *grid) {
-    rfft_solve(grid->n, grid->q, grid->ig2, grid->phi_n);
+    rfft_solve(grid->n, grid->n_local, grid->q, grid->ig2, grid->phi_n);
 
     return 0;
 }

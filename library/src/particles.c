@@ -140,7 +140,6 @@ void particle_pneigh_cell_list(particles *p) {
     }
 
     // Find neighbors using cell list
-    // fprintf(stdout, "Rank %d: Finding neighbors using cell list %d -> %d (%d)...\n", rank, p->np_start, p->np_start + p->np_local, p->n_p);
     #pragma omp parallel private( \
         i, j, curr, cx, cy, cz, ncx, ncy, ncz, cell_idx, \
         dx, dy, dz, dr2 \
@@ -293,6 +292,8 @@ void particle_init_mpi(particles *p) {
 
 void particle_init_mpi(particles *p) {
     mpi_data *mpid = get_mpi_data();
+    p->np_local = p->n_p;
+    p->np_start = 0;
     mpid->np_loc = p->n_p;
     mpid->np_start = 0;
 }  // Do nothing
@@ -316,7 +317,7 @@ particles * particles_init(int n_p, int n_typ, double L, double h, ca_scheme_typ
     p->mass = (double *)malloc(n_p * sizeof(double));
     p->charges = (double *)malloc(n_p * sizeof(double));
 
-    p->particle_neighbor_method = PARTICLE_NEIGHBOR_TYPE_SPHERE;
+    p->particle_neighbor_method = PARTICLE_NEIGHBOR_TYPE_CELL_LIST;
     p->particle_neighbors = NULL;
     p->cell_list_head = NULL;
     p->cell_list_next = NULL;

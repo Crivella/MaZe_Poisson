@@ -7,7 +7,6 @@ from typing import Dict
 
 import numpy as np
 import pandas as pd
-from scipy.ndimage import gaussian_filter
 
 from . import constants as cst
 from .c_api import capi
@@ -179,11 +178,11 @@ class SolverMD(Logger):
             raise ValueError(f"Smoothing method {method} not recognized.")
 
         method_id = smoothing_map[method]
-        self.smoothing_rcut = self.gset.smoothing_rcut / cst.a0
+        self.smoothing_rcut = self.gset.smoothing_rcut
         if self.gset.smoothing_sigma is None:
             self.smoothing_sigma = self.smoothing_rcut / 3.0
         else:
-            self.smoothing_sigma = self.gset.smoothing_sigma / cst.a0
+            self.smoothing_sigma = self.gset.smoothing_sigma
 
         capi.solver_initialize_grid_smoothing(method_id, self.smoothing_rcut, self.smoothing_sigma)
     
@@ -672,32 +671,7 @@ class SolverMD(Logger):
 
     @Clock('smoothing')
     def _smoothing(self):
-        if self.smoothing_type.upper() == 'GAUSS':
-            self._smoothing_gauss()
-        else:
-            capi.solver_smoothing()
-
-    def _smoothing_gauss(self):
-        if self.mpi_rank == 0:
-            rho = np.zeros((self.N, self.N, self.N), dtype=np.float64)
-        else:
-            rho = np.empty((0, 0, 0), dtype=np.float64)  # Dummy array for non-root ranks
-
-        # Only rank 0 performs the smoothing and then broadcasts the smoothed charge density to all ranks.
-        # The get/set functions have to be called by all ranks to collect/distribute the data
-        # - For collection, only rank 0 gets the full buffer
-        # - For broadcasting only rank 0 needs the actual data
-        capi.get_q(rho)
-        if self.mpi_rank == 0:
-            # gaussian_filter expects sigma in grid-cell units, while sigma_gauss is in length units.
-            sigma_grid = self.smoothing_sigma / self.h
-            rho_smooth = gaussian_filter(rho, sigma=sigma_grid, mode='wrap')
-            rho_smooth = np.ascontiguousarray(rho_smooth)    
-        else:
-            rho_smooth = np.empty((0, 0, 0), dtype=np.float64)
-
-        # Injection in C
-        capi.set_q(rho_smooth)
+        capi.solver_smoothing()
     
     @Clock('integrator')
     def integrator_part1(self):

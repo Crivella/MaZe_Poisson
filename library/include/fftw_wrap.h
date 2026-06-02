@@ -1,15 +1,20 @@
 #ifndef __MP_FFTW_H
 #define __MP_FFTW_H
 
-#ifdef __FFTW
 // Order matters here, including complex.h before fftw3.h makes fftw_complex be a complex instead of a double[2]
 #include <complex.h>
+
+#ifdef __FFTW
 
 #ifdef __FFTW_MPI
 #include <fftw3-mpi.h>
 #else  // __FFTW_MPI
 #include <fftw3.h>
 #endif  // __FFTW_MPI
+
+#else  // __FFTW
+
+typedef complex double fftw_complex;
 
 #endif  // __FFTW
 
@@ -19,6 +24,8 @@
 
 void init_rfft(int n, int *n_loc, int *n_start);
 void cleanup_fftw();
-void rfft_solve(int n, double *b, double *ig2, double *x);
+void rfft_3d(int n, int n_loc, double *in, fftw_complex *out);
+void irfft_3d(int n, int n_loc, fftw_complex *in, double *out);
+void rfft_solve(int n, int n_loc, double *b, double *ig2, double *x);
 
 #endif  // __MP_FFTW_H

@@ -8,10 +8,10 @@
 
 #ifdef __FFTW
 int initialized_r = FFTW_BLANK;
-double *r_real;
-fftw_complex *r_cmpx;
-fftw_plan r_fwd_plan;
-fftw_plan r_bwd_plan;
+double *r_real = NULL;
+fftw_complex *r_cmpx = NULL;
+fftw_plan r_fwd_plan = NULL;
+fftw_plan r_bwd_plan = NULL;
 
 // int initialized_c = FFTW_BLANK;
 // fftw_complex *c_in;
@@ -51,10 +51,13 @@ int FLAG = FFTW_MEASURE;
 #ifdef __FFTW_MPI
 
 void init_rfft(int n, int *n_loc, int *n_start) {
+    mpi_data *mpid = get_mpi_data();
+
     if (initialized_r != FFTW_BLANK) {
+        *n_loc = mpid->n_loc;
+        *n_start = mpid->n_start;
         return;
     }
-    mpi_data *mpid = get_mpi_data();
     initialized_r = FFTW_DOCLEANUP;
 
     int nh = n / 2 + 1;
@@ -91,9 +94,68 @@ void init_rfft(int n, int *n_loc, int *n_start) {
     mpi_printf("FFTW: ...DONE\n");
 }
 
-void rfft_solve(int n, double *b, double *ig2, double *x) {
-    int n_loc = get_n_loc();
+void rfft_3d(int n, int n_loc, double *in, fftw_complex *out) {
+    int nh = n / 2 + 1;
+    int npad = 2 * nh;
 
+    long int size = n_loc * n * nh;
+    long int i0, j0, j1;
+
+    // Copy input data to the FFTW real array (aware of the padding for the real arrays and FFTW-MPI)
+    #pragma omp parallel for private(i0, j0, j1)
+    for (int i=0; i < n_loc; i++) {
+        i0 = i * n;
+        for (int j=0; j < n; j++) {
+            j0 = i0 + j;
+            j1 = j0 * n;
+            j0 *= npad;
+            for (int k=0; k < n; k++) {
+                r_real[j0 + k] = in[j1 + k];
+            }
+        }
+    }
+
+    fftw_execute(r_fwd_plan);
+
+    // Copy output data from the FFTW complex array to the output array
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        out[i] = r_cmpx[i];
+    }
+}
+
+void irfft_3d(int n, int n_loc, fftw_complex *in, double *out) {
+    int nh = n / 2 + 1;
+    int npad = 2 * nh;
+
+    long int size = n_loc * n * nh;
+    long int i0, j0, j1;
+
+    // Copy input data to the FFTW complex array
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        r_cmpx[i] = in[i];
+    }
+
+    fftw_execute(r_bwd_plan);
+
+    // Copy output data from the FFTW real array to the output array (aware of the padding for the real arrays and FFTW-MPI)
+    #pragma omp parallel for private(i0, j0, j1)
+    for (int i=0; i < n_loc; i++) {
+        i0 = i * n;
+        for (int j=0; j < n; j++) {
+            j0 = i0 + j;
+            j1 = j0 * n;
+            j0 *= npad;
+            for (int k=0; k < n; k++) {
+                out[j1 + k] = r_real[j0 + k];
+            }
+        }
+    }
+    
+}
+
+void rfft_solve(int n, int n_loc, double *b, double *ig2, double *x) {
     int nh = n / 2 + 1;
     int npad = 2 * nh;
 
@@ -144,11 +206,11 @@ void init_rfft(int n, int *n_loc, int *n_start) {
         mpi_fprintf(stderr, "TERMINATING: Linked FFTW compiled without MPI support\n");
         exit(1);
     }
+    *n_loc = n;
+    *n_start = 0;
     if (initialized_r != FFTW_BLANK) {
         return;
     }
-    *n_loc = n;
-    *n_start = 0;
 
     int nh = n / 2 + 1;
     initialized_r = FFTW_DOCLEANUP;
@@ -162,11 +224,47 @@ void init_rfft(int n, int *n_loc, int *n_start) {
     mpi_printf("FFTW: ...DONE\n");
 }
 
-/*Solve Ax=b where A is the laplacian using real grid FFTS*/
-void rfft_solve(int n, double *b, double *ig2, double *x) {
+void rfft_3d(int n, int n_loc, double *in, complex *out) {
     int nh = n / 2 + 1;
-    long int size = n * n * nh;
-    long int n3r = n * n * n;
+    long int size = n_loc * n * nh;
+    long int n3r = n_loc * n * n;
+
+    #pragma omp parallel for
+    for (long int i = 0; i < n3r; i++) {
+        r_real[i] = in[i];
+    }
+
+    fftw_execute(r_fwd_plan);
+
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        out[i] = r_cmpx[i];
+    }
+}
+
+void irfft_3d(int n, int n_loc, complex *in, double *out) {
+    int nh = n / 2 + 1;
+    long int size = n_loc * n * nh;
+    long int n3r = n_loc * n * n;
+
+    #pragma omp parallel for
+    for (long int i = 0; i < size; i++) {
+        r_cmpx[i] = in[i];
+    }
+
+    fftw_execute(r_bwd_plan);
+
+    #pragma omp parallel for
+    for (long int i = 0; i < n3r; i++) {
+        out[i] = r_real[i];
+    }
+}
+
+/*Solve Ax=b where A is the laplacian using real grid FFTS*/
+void rfft_solve(int n, int n_loc, double *b, double *ig2, double *x) {
+    int nh = n / 2 + 1;
+    long int size = n_loc * n * nh;
+    long int n3r = n_loc * n * n;
 
     #pragma omp parallel for
     for (long int i = 0; i < n3r; i++) {

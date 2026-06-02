@@ -24,7 +24,7 @@ static double solver_total_charge_from_particles(void) {
 }
 
 void solver_initialize() {
-    int size = init_mpi();
+    int size = get_size();
     int rank = get_rank();
 
     int n_threads = get_omp_max_threads();
@@ -141,7 +141,7 @@ int solver_update_charges() {
 }
 
 void solver_smoothing() {
-    g_grid->smooth_charges(g_grid, g_particles);
+    g_grid->smooth_charges(g_grid);
 }
 
 void solver_init_field() {

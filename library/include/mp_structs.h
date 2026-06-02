@@ -119,9 +119,9 @@ void precond_ssor_apply(double *in, double *out, int s1, int s2, int n_start);
 void precond_blockjacobi_apply(double *in, double *out, int s1, int s2, int n_start);
 
 // Smoothing function definitions
-void smooth_charges_none(grid *grid, particles *p);
+void smooth_charges_none(grid *grid);
 // void smooth_charges_gauss(grid *grid, particles *p);
-void smooth_charges_diffusion(grid *grid, particles *p);
+void smooth_charges_diffusion(grid *grid);
 
 void precond_blockjacobi_init();
 void precond_blockjacobi_cleanup();
@@ -161,6 +161,7 @@ struct grid {
 
     // P3M specific
     smoothing_type smoothing; 
+    void *smoothing_kernel;  // Smoothing kernel in Fourier space
     double smoothing_rcut;
     double smoothing_sigma;
 
@@ -172,7 +173,7 @@ struct grid {
     void    (*apply_precond)( double *, double *, int, int, int);
     int     (*update_field)( grid *);
     double  (*update_charges)( grid *, particles *);
-    void    (*smooth_charges)( grid *, particles *);
+    void    (*smooth_charges)( grid *);
 };
 
 struct neighbor {

@@ -151,6 +151,9 @@ void grid_init_mpi(grid *grid) {
 
 void grid_init_mpi_fft(grid *grid) {
     mpi_data *mpid = get_mpi_data();
+
+    init_rfft(grid->n, &grid->n_local, &grid->n_start);
+
     mpid->n_loc = grid->n;
     mpid->n_start = 0;
 }
@@ -184,11 +187,94 @@ void grid_pb_free(grid *grid) {
     }
 }
 
-void smooth_charges_none(grid *grid, particles *p) {
+void smooth_charges_none(grid *grid) {
     // No smoothing, return the original charges
 }
 
-void smooth_charges_diffusion(grid *grid, particles *p) {
+/*
+Allocate and initialize the Gaussian smoothing kernel in Fourier space.
+The kernel is generated in real space as a 3D Gaussian function, normalized, and then transformed
+to Fourier space using the forward FFT.
+The resulting Fourier-space kernel is stored in the grid structure for later use in smoothing the charge distribution.
+*/
+void smooth_charges_gauss_init(grid *grid) {
+    int n = grid->n;
+    int n_loc = grid->n_local;
+    int n_start = grid->n_start;
+    int nh = n / 2 + 1;
+    long int n2 = n * n;
+    long int c_size = n_loc * nh * n;  // Size of the complex-space grid for the local portion
+    long int r_size = n_loc * n2;  // Size of the real-space grid for the local portion
+
+    double sigma = grid->smoothing_sigma / grid->h;  // Convert sigma to grid units
+    double sigma2 = sigma * sigma;
+
+    double *gaussian_kernel = (double *)malloc(r_size * sizeof(double));
+
+    // Generate the Gaussian kernel in Real space
+    int i, j, k;
+    int di, dj, dk;
+    double ri, rj, r2;
+    for (int i_loc = 0; i_loc < n_loc; i_loc++) {
+        i = n_start + i_loc;
+        di = i > n / 2 ? i - n : i;  // Wrap around for periodicity
+        ri = di * di;
+        for (j = 0; j < n; j++) {
+            dj = j > n / 2 ? j - n : j;  // Wrap around for periodicity
+            rj = ri + dj * dj;
+            for (k = 0; k < n; k++) {
+                dk = k > nh / 2 ? k - n : k;  // Wrap around for periodicity
+                r2 = rj + dk * dk;
+                gaussian_kernel[i_loc * n2 + j * n + k] = exp(-(double)r2 / (2 * sigma2));
+            }
+        }
+    }
+
+    // Normalize the kernel
+    double sum = 0.0;
+    for (i = 0; i < r_size; i++) {
+        sum += gaussian_kernel[i];
+    }
+    allreduce_sum(&sum, 1);
+    dscal(gaussian_kernel, 1.0 / sum, r_size);  // Normalize so that the sum of the kernel is 1
+    dscal(gaussian_kernel, 1.0 / pow(n, 3), r_size);  // FFT normalization factor
+
+    // Convert the kernel in Fourier space
+    grid->smoothing_kernel = malloc(c_size * sizeof(fftw_complex));
+    rfft_3d(n, n_loc, gaussian_kernel, (fftw_complex *)grid->smoothing_kernel);
+
+    free(gaussian_kernel);
+}
+
+void smooth_charges_gauss(grid *grid) {
+    // Apply Gaussian smoothing to the charge distribution using convolution in Fourier space
+    int n = grid->n;
+    int nh = n / 2 + 1;
+    int n_loc = grid->n_local;
+    int n_start = grid->n_start;
+    long int n2 = n * n;
+    long int c_size = n_loc * n * nh;  // Size of the complex-space grid for the local portion
+
+    double *q = grid->q;  // Original charge distribution
+
+    // Perform forward FFT on the original charge distribution
+    fftw_complex *q_fft = (fftw_complex *)malloc(c_size * sizeof(fftw_complex));
+    rfft_3d(n, n_loc, q, q_fft);
+
+    // Convolve in Fourier space (element-wise multiplication)
+    fftw_complex *kernel_fft = (fftw_complex *)grid->smoothing_kernel;
+    #pragma omp parallel for
+    for (long int i = 0; i < c_size; i++) {
+        q_fft[i] *= kernel_fft[i];
+    }
+
+    // Perform inverse FFT to get the smoothed charge distribution
+    irfft_3d(n, n_loc, q_fft, q);
+
+    free(q_fft);
+}
+
+void smooth_charges_diffusion(grid *grid) {
     int n = grid->n;
     int n_loc = grid->n_local;
     int n_start = grid->n_start;
@@ -259,6 +345,7 @@ void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma) {
     grid->smoothing = method;
     grid->smoothing_rcut = r_cut;
     grid->smoothing_sigma = sigma;
+    grid->smoothing_kernel = NULL;  // Initialize the smoothing kernel to NULL
 
     switch (grid->smoothing) {
         case SMOOTHING_TYPE_NONE:
@@ -266,7 +353,8 @@ void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma) {
             break;
         case SMOOTHING_TYPE_GAUSS:
             // For now performed outside in theh python code
-            grid->smooth_charges = smooth_charges_none;
+            smooth_charges_gauss_init(grid);  // Initialize the Gaussian smoothing kernel if needed
+            grid->smooth_charges = smooth_charges_gauss;
             if (grid->smoothing_rcut <= 0.0 || grid->smoothing_sigma <= 0.0) {
                 mpi_fprintf(stderr, "Invalid parameters for Gaussian smoothing:\n");
                 mpi_fprintf(stderr, "r_cut: %f, sigma: %f\n", grid->smoothing_rcut, grid->smoothing_sigma);
@@ -292,7 +380,10 @@ void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma) {
 }
 
 void grid_smoothing_free(grid *grid) {
-    // No dynamic memory allocated for smoothing, so nothing to free
+    if (grid->smoothing_kernel != NULL) {
+        free(grid->smoothing_kernel);
+        grid->smoothing_kernel = NULL;
+    }
 }
 
 void grid_free(grid *grid) {
