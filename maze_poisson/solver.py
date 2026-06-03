@@ -16,8 +16,6 @@ from .myio.input import GridSetting, MDVariables, OutputSettings
 from .myio.loggers import Logger
 from .myio.output import save_json
 
-np.random.seed(42)
-
 method_grid_map: Dict[str, int] = {
     # 'LCG': 0,
     # 'FFT': 1,
@@ -67,12 +65,12 @@ pneigh_method_map: Dict[str, int] = {
     # 'CELL_LIST': 1,
 }
 
-class SolverMD(Logger):
+class SolverMD(Logger, Clock):
     """Base class for all solver classes."""
 
-    def __init__(self, gset: GridSetting, mdv: MDVariables, outset: OutputSettings):
+    def __init__(self, gset: GridSetting, mdv: MDVariables, outset: OutputSettings, *args, **kwargs):
         capi.initialize()
-        super().__init__()
+        super().__init__(*args, **kwargs)
 
         self.gset = gset
         self.mdv = mdv
@@ -109,6 +107,7 @@ class SolverMD(Logger):
 
         # Logging
         out_log = os.path.join(outset.path, 'log.txt')
+        self.clock_json = os.path.join(outset.path, 'timing.json')
         self.add_file_handler(out_log, level=logging.DEBUG)
         if self.outset.debug:
             self.set_log_level(logging.DEBUG)
@@ -119,9 +118,11 @@ class SolverMD(Logger):
         self.types_str_to_num = {}
         self.types_num_to_str = {}
 
-    @Clock('initialize')
+    @Clock.register('initialize')
     def initialize(self):
         """Initialize the solver."""
+        np.random.seed(42)
+
         capi.solver_initialize()
 
         self.mpi_rank = capi.get_rank()
@@ -139,7 +140,8 @@ class SolverMD(Logger):
     def finalize(self):
         """Finalize the solver."""
         capi.solver_finalize()
-        Clock.report_all()
+        self.logger.info(self.report_clocks())
+        save_json(self.clock_json, self.report_clocks_dct())
 
     @staticmethod
     def pd_ensure_lowercase(df: pd.DataFrame, column: str) -> pd.DataFrame:
@@ -208,6 +210,7 @@ class SolverMD(Logger):
             self.gset.w, kbar2, nonpolar_enabled
         )
 
+    @Clock.register(['initialize', 'grid'])
     def initialize_grid(self):
         """Initialize the grid."""
         self.logger.info(f"Initializing grid with method: '{self.mdv.method}'")
@@ -446,6 +449,7 @@ class SolverMD(Logger):
             self.mdv.gamma_np_au, self.mdv.beta_np, radius
         )
 
+    @Clock.register(['initialize', 'particles'])
     def initialize_particles(self):
         """Initialize the particles."""
         start_file = self.gset.input_file
@@ -517,7 +521,7 @@ class SolverMD(Logger):
         self._initialize_particle_water()
         self._initialize_particle_pb(particles, df)
 
-
+    @Clock.register(['initialize', 'integrator'])
     def initialize_integrator(self):
         """Initialize the MD integrator."""
         self.logger.info(f"Initializing integrator: '{self.mdv.integrator}'")
@@ -531,6 +535,7 @@ class SolverMD(Logger):
             self.N_p, self.mdv.dt, self.mdv.T, self.mdv.gamma, itg_id, enabled
         )
 
+    @Clock.register(['initialize', 'md'])
     def initialize_md(self):
         """Initialize the first 2 steps for the MD and forces."""
         self.logger.info("Initializing MD (first 2 steps)...")
@@ -585,18 +590,22 @@ class SolverMD(Logger):
         if step % self.mdv.rescale_stride == 0:
             capi.solver_rescale_velocities()
 
-    @Clock('update_eps_k2')
     def update_eps_k2(self):
         """Update the k^2 grid for Poisson-Boltzmann."""
         if self.mdv.poisson_boltzmann:
-            capi.solver_update_eps_k2()
+            self._update_eps_k2()
 
-    @Clock('field')
+    @Clock.register(['grid', 'update_eps_k2'])
+    def _update_eps_k2(self):
+        """Update the k^2 grid for Poisson-Boltzmann (internal method without clock)."""
+        capi.solver_update_eps_k2()
+
+    @Clock.register(['grid', 'init_field'])
     def initialize_field(self):
         """Initialize the field."""
         capi.solver_init_field()
 
-    @Clock('field')
+    @Clock.register(['grid', 'update_field'], lc_key='t_field')
     def update_field(self):
         """Update the field."""
         res = capi.solver_update_field()
@@ -605,7 +614,7 @@ class SolverMD(Logger):
             # raise ValueError("Error CG did not converge.")
         return res
 
-    @Clock('forces')
+    @Clock.register(['forces', 'total'])
     def compute_forces(self):
         """Compute the forces on the particles."""
         if self.mdv.elec:
@@ -624,61 +633,58 @@ class SolverMD(Logger):
         # Electrostatic energy from the grid (not printed in energy.csv per request)
         self.energy_elec = capi.get_energy_elec()
 
-    @Clock('forces_field')
+    @Clock.register(['forces', 'field'])
     def compute_forces_field(self):
         """Compute the forces on the particles due to the electric field."""
         # self.logger.debug("Computing forces due to electric field...")
         self.potential_short_range = capi.solver_compute_forces_elec()
 
-    @Clock('forces_notelec')
+    @Clock.register(['forces', 'notelec'])
     def compute_forces_notelec(self):
         """Compute the forces on the particles due to non-electric interactions."""
         # self.logger.debug("Computing forces due to non-electric interactions...")
         self.potential_notelec = capi.solver_compute_forces_noel()
 
-    @Clock('forces_PBoltz')
+    @Clock.register(['forces', 'PBoltz'])
     def compute_forces_pb(self):
         """Compute the forces on the particles due to Poisson-Boltzmann interactions."""
         # self.logger.debug("Computing forces due to Poisson-Boltzmann interactions...")
         self.energy_nonpolar = capi.solver_compute_forces_pb()
 
-    @Clock('file_output')
+    @Clock.register('file_output')
     def md_loop_output(self, i: int, force: bool = False):
         """Output the data for the MD loop."""
         self.ofiles.output(i, self, force)
 
-
-    @Clock('particle_neighbor')
+    @Clock.register(['p_update', 'p_neighbor'])
     def _update_particle_neighbor(self):
         """Update the particle neighbor list."""
         capi.solver_update_particle_neighbors()
 
-    @Clock('charges')
+    @Clock.register(['p_update', 'chg_spread'], lc_key='t_charges')
     def _update_charges(self):
         """Update the charge grid based on the particles position with function g to spread them on the grid."""
         if capi.solver_update_charges() != 0:
             self.logger.error('Error: change initial position, charge is not preserved.')
             sys.exit(1)
 
+    @Clock.register(['p_update'])
     def update_particles(self):
         """Run particle updates to beb performed after the positions and velocities have been updated."""
         self._update_particle_neighbor()
         self._update_charges()
         self._smoothing()
 
-        self.t_charges = Clock.get_clock('charges').last_call
-        self.t_smoothing = Clock.get_clock('smoothing').last_call
-
-    @Clock('smoothing')
+    @Clock.register(['p_update', 'chg_smooth'], lc_key='t_smoothing')
     def _smoothing(self):
         capi.solver_smoothing()
     
-    @Clock('integrator')
+    @Clock.register(['integrator', 'part1'])
     def integrator_part1(self):
         """Update the position and velocity of the particles."""
         capi.integrator_part_1()
 
-    @Clock('integrator')
+    @Clock.register(['integrator', 'part2'])
     def integrator_part2(self):
         """Update the velocity of the particles."""
         capi.integrator_part_2()
@@ -690,7 +696,6 @@ class SolverMD(Logger):
             self.update_particles()
             self.update_eps_k2()
             self.n_iters = self.update_field()
-            self.t_field = Clock.get_clock('field').last_call
             self.t_elec_total = self.t_charges + self.t_smoothing + self.t_field
             self.t_iters = self.t_field
         self.compute_forces()

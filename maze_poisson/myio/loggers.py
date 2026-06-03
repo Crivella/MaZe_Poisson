@@ -23,7 +23,10 @@ logger.setLevel(logging.DEBUG)  # Set the logging level
 
 stream_formatter = logging.Formatter('{message}', style='{')
 if HAVE_RICH:
-    stream_handler = RichHandler(rich_tracebacks=True, tracebacks_show_locals=True)
+    stream_handler = RichHandler(
+        rich_tracebacks=True, tracebacks_show_locals=True,
+        tracebacks_suppress=['click', 'rich', 'rich_click', 'multiprocessing']
+    )
 else:
     stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(stream_formatter)
