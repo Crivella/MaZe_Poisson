@@ -670,7 +670,11 @@ class SolverMD(Logger, Clock):
 
     @Clock.register(['p_update'])
     def update_particles(self):
-        """Run particle updates to beb performed after the positions and velocities have been updated."""
+        """Run particle updates to be performed after the positions and velocities have been updated.
+        - Compute the P-P neighbor list for the particles
+        - Spread the particle charges on the grid
+        - Smooth the charge grid if charge smoothing is enabled
+        """
         self._update_particle_neighbor()
         self._update_charges()
         self._smoothing()
