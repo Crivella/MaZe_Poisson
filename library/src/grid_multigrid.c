@@ -16,7 +16,9 @@ void multigrid_grid_init(grid * grid) {
     int n = grid->n;
     long int n2 = n * n;
 
-    grid_init_mpi(grid);
+    // TODO: revert this done for testing
+    // grid_init_mpi(grid);
+    grid_init_mpi_fft(grid);
 
     long int size = grid->n_local * n2;
     grid->size = size;
