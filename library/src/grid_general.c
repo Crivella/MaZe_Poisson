@@ -551,6 +551,37 @@ void grid_update_eps_and_k2_sphere(grid *g, particles *p)
             eps_z[idx] = eps_m;
         }
     }
+
+
+    /* ====================================================
+     * STEP 3 — mark enlarged sphere (region = 2)
+    Solvent points (region = 0) inside the integration sphere of
+    any particle are marked as 2.
+    The radius used is the same as in compute_stress_tensor_forces_spherical:
+    R = ceil(solv_radii / h) + 2 (in cell units)
+     * ==================================================== */
+    for (int q = 0; q < p->n_p; q++) {
+        int iq_g = (int)round(p->pos[q * 3 + 0] / h);
+        int jq   = (int)round(p->pos[q * 3 + 1] / h);
+        int kq   = (int)round(p->pos[q * 3 + 2] / h);
+        int Rq   = (int)ceil(p->solv_radii[q] / h) + 2;
+        int R2q  = Rq * Rq;
+
+        for (int di = -Rq; di <= Rq; di++) {
+            for (int dj = -Rq; dj <= Rq; dj++) {
+                for (int dk = -Rq; dk <= Rq; dk++) {
+                    if (di * di + dj * dj + dk * dk >= R2q) continue;
+                    int ii_g = iq_g + di;
+                    int jj   = jq   + dj;
+                    int kk   = kq   + dk;
+                    int ii   = ii_g - n_start;
+                    if (ii < 0 || ii >= n || jj < 0 || jj >= n || kk < 0 || kk >= n) continue;
+                    long idx = (long)kk + (long)jj * n + (long)ii * (long)n * n;
+                    if (region[idx] == 0) region[idx] = 2u;
+                }
+            }
+        }
+    }
 }
 
 void grid_update_eps_and_k2(grid *g, particles *p) {
