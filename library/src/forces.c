@@ -531,7 +531,7 @@ void compute_stress_tensor_forces_pbc(
 
                     k = pbc_grid_index(kp + dk, n);
                     idx_a = grid_index_3d(i, j, k, n);
-                    if (region != NULL && region[idx_a] != 0) {
+                    if (region != NULL && region[idx_a] == 1) {
                         continue;
                     }
                     k1 = pbc_grid_index(k + 1, n);
