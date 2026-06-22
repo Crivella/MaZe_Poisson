@@ -45,7 +45,7 @@ double compute_sc_forces(
     double *forces
 );
 double compute_lj_forces(
-    int n_p, double L, double *pos, double *params,
+    int n_p, int n_typ, double L, int *types, double *pos, double *params,
     double r_cut, neighbor **neighbors, int np_local, int np_start,
     double *forces, int lj_force_shift
 );

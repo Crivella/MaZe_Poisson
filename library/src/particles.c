@@ -520,25 +520,22 @@ void particles_init_potential_lj(particles *p, double *pot_params) {
     int n_p = p->n_p;
     int n_typ = p->n_typ;
     long int np2 = n_p * n_p;
+    int n_typ2 = n_typ * n_typ;
 
-    p->lj_params = (double *)malloc(4 * np2 * sizeof(double));
+    p->lj_params = (double *)malloc(4 * n_typ2 * sizeof(double));
 
     double r_cut = (p->r_cut > 0.0) ? p->r_cut : p->L / 2.0;
     p->r_cut = r_cut;
     
-    long int in, inj, idx;
+    long int in, inj;
     double sigma, epsilon, v_shift, alpha, beta;
-    for (int i = 0; i < n_p; i++) {
-        in = i * n_p;
-        typ1 = p->types[i];
-        for (int j = 0; j < n_p; j++) {
-            inj = in + j;
-            typ2 = p->types[j];
+    for (typ1 = 0; typ1 < n_typ; typ1++) {
+        in = typ1 * n_typ;
+        for (typ2 = 0; typ2 < n_typ; typ2++) {
+            inj = in + typ2;
 
-            idx = (typ1 * n_typ + typ2) * 2;  // pot_params is structured as [sigma, epsilon] for each type pair
-
-            sigma = pot_params[idx + 0];
-            epsilon = pot_params[idx + 1];
+            sigma = pot_params[2*inj + 0];
+            epsilon = pot_params[2*inj + 1];
 
             if (p->lj_force_shift) {
                 v_shift = 4 * epsilon * (pow(sigma / r_cut, 12) - pow(sigma / r_cut, 6));
@@ -552,16 +549,16 @@ void particles_init_potential_lj(particles *p, double *pot_params) {
             if (!isfinite(sigma) || !isfinite(epsilon) || !isfinite(alpha) || !isfinite(beta)) {
                 mpi_fprintf(
                     stderr,
-                    "Error: LJ params non-finite (i=%d j=%d sigma=%e epsilon=%e alpha=%e beta=%e)\n",
-                    i, j, sigma, epsilon, alpha, beta
+                    "Error: LJ params non-finite (typ1=%d typ2=%d sigma=%e epsilon=%e alpha=%e beta=%e)\n",
+                    typ1, typ2, sigma, epsilon, alpha, beta
                 );
                 exit(1);
             }
 
-            p->lj_params[0*np2 + inj] = sigma;
-            p->lj_params[1*np2 + inj] = epsilon;
-            p->lj_params[2*np2 + inj] = alpha;
-            p->lj_params[3*np2 + inj] = beta;
+            p->lj_params[0*n_typ2 + inj] = sigma;
+            p->lj_params[1*n_typ2 + inj] = epsilon;
+            p->lj_params[2*n_typ2 + inj] = alpha;
+            p->lj_params[3*n_typ2 + inj] = beta;
         }
     }
 
@@ -722,7 +719,7 @@ double particles_compute_forces_sc(particles *p) {
 
 double particles_compute_forces_lj(particles *p) { 
     return compute_lj_forces(
-        p->n_p, p->L, p->pos, p->lj_params,
+        p->n_p, p->n_typ, p->L, p->types, p->pos, p->lj_params,
         p->r_cut, p->particle_neighbors, p->np_local, p->np_start,
         p->fcs_noel, p->lj_force_shift
     );

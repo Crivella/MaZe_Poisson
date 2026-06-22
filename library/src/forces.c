@@ -351,7 +351,6 @@ double compute_tf_forces(
     double *forces
 ) {
     int i;
-    int n_p2 = 2 * n_p;
     int typ1, typ2;
     int n_typ2 = n_typ * n_typ;
     long int idx1, idx2;
@@ -378,7 +377,7 @@ double compute_tf_forces(
     ) reduction(+:potential_energy)
     for (int i_loc = 0; i_loc < np_local; i_loc++) {
         i = np_start + i_loc;
-        typ1 = types[np_start + i_loc];
+        typ1 = types[i];
         idx1 = typ1 * n_typ;
 
         curr = neighbors[i_loc];
@@ -464,20 +463,21 @@ static double compute_lj_tail_correction(int n_p, double L, double *params, doub
 }
 
 double compute_lj_forces(
-    int n_p, double L, double *pos, double *params,
+    int n_p, int n_typ, double L, int *types, double *pos, double *params,
     double r_cut, neighbor **neighbors, int np_local, int np_start,
     double *forces, int lj_force_shift
 ) {
-    int n_p2 = 2 * n_p;
+    int n_typ2 = n_typ * n_typ;
+    int typ1, typ2;
     long int n_p_pow2 = n_p * n_p;
     long int i, idx1, idx2;
 
     neighbor *curr;
 
     double *sigma_lj = params;
-    double *epsilon_lj = sigma_lj + n_p_pow2;
-    double *alpha = epsilon_lj + n_p_pow2;
-    double *beta = alpha + n_p_pow2;
+    double *epsilon_lj = sigma_lj + n_typ2;
+    double *alpha = epsilon_lj + n_typ2;
+    double *beta = alpha + n_typ2;
 
     double app;
     double r_diff[3];
@@ -488,19 +488,21 @@ double compute_lj_forces(
     memset(forces, 0, n_p * 3 * sizeof(double));
 
     #pragma omp parallel for private( \
-        i, idx1, idx2, \
+        i, idx1, idx2, typ1, typ2, \
         app, curr, r_diff, r_mag, f_mag, V_mag, epsilon, sigma, al, be \
     ) reduction(+:potential_energy)
-    for (int i_loc = 0; i_loc < n_p; i_loc++) {
+    for (int i_loc = 0; i_loc < np_local; i_loc++) {
         i = np_start + i_loc;
-        idx1 = i * n_p;
+        typ1 = types[i];
+        idx1 = typ1 * n_typ;
         
         curr = neighbors[i_loc];
 
         while (curr->valid) {
+            typ2 = types[curr->idx];
             r_mag = curr->dist;
 
-            idx2 = idx1 + curr->idx;
+            idx2 = idx1 + typ2;
             sigma = sigma_lj[idx2];
             epsilon = epsilon_lj[idx2];
             al = alpha[idx2];
