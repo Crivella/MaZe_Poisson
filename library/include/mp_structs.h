@@ -230,8 +230,8 @@ struct particles {
 
     potential_type pot_type;  // Type of the potential
     int lj_force_shift;
-    double *tf_params;  // Parameters for the TF potential (7 x n_p x n_p)
-    double *lj_params;  // Parameters for the LJ potential (4 x n_p x n_p)
+    double *tf_params;  // Parameters for the TF potential (7 x n_typ x n_typ)
+    double *lj_params;  // Parameters for the LJ potential (4 x n_typ x n_typ)
     double *sc_params;  // Parameters for the SC potential (5)
 
     // Poisson-Boltzmann specific
