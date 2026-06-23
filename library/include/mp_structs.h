@@ -37,6 +37,12 @@ void grid_smoothing_free(grid *grid);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
 double grid_get_energy_elec(grid *grid);
 
+void scafacos_grid_init(grid * grid);
+void scafacos_grid_cleanup(grid * grid);
+void scafacos_grid_init_field(grid *grid);
+int scafacos_grid_update_field(grid *grid);
+double scafacos_grid_update_charges(grid *grid, particles *p);
+
 void lcg_grid_init(grid * grid);
 void lcg_grid_cleanup(grid * grid);
 void lcg_grid_init_field(grid *grid);
@@ -158,6 +164,14 @@ struct grid {
     double *eps_x;  // Dielectric constant
     double *eps_y;  // Dielectric constant
     double *eps_z;  // Dielectric constant
+
+    // ScaFaCos specific
+    int tuned;  // Flag to indicate if ScaFaCos has been tuned
+    void *fcs_handle;
+    double *fcs_pos;
+    double *fcs_charges;
+    double *fcs_potential;
+    long int n_p;  // Number of particles (for ScaFaCos)
 
     // P3M specific
     smoothing_type smoothing; 

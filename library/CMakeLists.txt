@@ -22,20 +22,38 @@ option(MP_MTUNE "Enable -mtune=native" ON)
 option(MP_AVX "Enable AVX" ON)
 option(MP_USE_MPI "Use MPI" ON)
 option(MP_USE_OPENMP "Use OpenMP" ON)
+option(MP_USE_LAPACKE "Use LAPACKE" OFF)
+option(MP_USE_SCAFACOS "Use SCAFACOS" ON)
 
 set(FFTW_COMPONENTS DOUBLE)
 
 # Find the required packages
-find_package(OpenMP COMPONENTS C)
-find_package(MPI COMPONENTS C)
-if (MPI_C_FOUND AND MP_USE_MPI)
-    list(APPEND FFTW_COMPONENTS DOUBLE_MPI)
+if (MP_USE_OPENMP)
+    find_package(OpenMP COMPONENTS C)
+    if (OpenMP_C_FOUND)
+        list(APPEND FFTW_COMPONENTS DOUBLE_OPENMP)
+    endif()
+else()
+    message(STATUS "OpenMP disabled via CMake option")
 endif()
-if (OpenMP_C_FOUND AND MP_USE_OPENMP)
-    list(APPEND FFTW_COMPONENTS DOUBLE_OPENMP)
+
+if (MP_USE_MPI)
+    find_package(MPI COMPONENTS C)
+    if (MPI_C_FOUND)
+        list(APPEND FFTW_COMPONENTS DOUBLE_MPI)
+    endif()
+else()
+    message(STATUS "MPI disabled via CMake option")
 endif()
+
 find_package(FFTW3 COMPONENTS ${FFTW_COMPONENTS})
 find_package(LAPACK)
+
+if(MP_USE_SCAFACOS)
+    find_package(scafacos)
+else()
+    message(STATUS "SCAFACOS disabled via CMake option")
+endif()
 
 # Set the compiler flags
 set(CMAKE_C_FLAGS_DEBUG "-g")
@@ -68,6 +86,7 @@ add_library(maze_poisson MODULE
     src/grid_multigrid.c
     src/grid_maze_multigrid.c
     src/grid_fft.c
+    src/grid_scafacos.c
     
     src/integrator_general.c
     src/integrator_ovrvo.c
@@ -115,6 +134,21 @@ if (MPI_C_FOUND AND MP_USE_MPI)
     target_include_directories(maze_poisson PRIVATE ${MPI_C_INCLUDE_PATH})
     target_link_libraries(maze_poisson PRIVATE ${MPI_C_LIBRARIES})
 endif()
+
+if (MP_USE_SCAFACOS)
+    if(SCAFACOS_FOUND)
+        if (MPI_C_FOUND)
+            target_compile_definitions(maze_poisson PRIVATE __SCAFACOS)
+            target_include_directories(maze_poisson PRIVATE ${SCAFACOS_INCLUDE_DIRS})
+            target_link_libraries(maze_poisson PRIVATE ${SCAFACOS_LIBRARIES})
+        else()
+            message(WARNING "SCAFACOS requires MPI, but MPI was not found... disabling SCAFACOS")
+        endif()
+    else()
+        message(WARNING "SCAFACOS not found, some features will be disabled")
+    endif()
+endif()
+
 # Set LAPACK flags
 if (LAPACK_FOUND)
     find_path(
@@ -138,15 +172,20 @@ if (LAPACK_FOUND)
         target_link_libraries(maze_poisson PRIVATE ${_lapack_libs})
         target_include_directories(maze_poisson PRIVATE ${LAPACK_INCLUDE_DIRS})
 
-        find_library(
-            LAPACKE_LIBRARY
-            NAMES lapacke
-        )
-        if (LAPACKE_LIBRARY)
-            message(STATUS "LAPACKE library found: ${LAPACKE_LIBRARY}")
-            target_link_libraries(maze_poisson PRIVATE ${LAPACKE_LIBRARY})
+        if (NOT MP_USE_LAPACKE)
+            message(STATUS "LAPACKE disabled via CMake option")
         else()
-            message(WARNING "LAPACKE library not found")
+            find_library(
+                LAPACKE_LIBRARY
+                NAMES lapacke
+            )
+            if (LAPACKE_LIBRARY)
+                message(STATUS "LAPACKE library found: ${LAPACKE_LIBRARY}")
+                target_compile_definitions(maze_poisson PRIVATE __LAPACKE)
+                target_link_libraries(maze_poisson PRIVATE ${LAPACKE_LIBRARY})
+            else()
+                message(WARNING "LAPACKE library not found")
+            endif()
         endif()
     endif()
 else()

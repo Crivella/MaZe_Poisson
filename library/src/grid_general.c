@@ -28,6 +28,9 @@ grid * grid_init(
         case GRID_TYPE_MAZE_MGRID:
             init_func = maze_multigrid_grid_init;  
             break;
+        case GRID_TYPE_SCAFACOS:
+            init_func = scafacos_grid_init;  
+            break;
         default:
             break;
     }
@@ -401,6 +404,9 @@ void grid_free(grid *grid) {
         case GRID_TYPE_MAZE_MGRID:
             maze_multigrid_grid_cleanup(grid);
             break;
+        case GRID_TYPE_SCAFACOS:
+            scafacos_grid_cleanup(grid);
+            break;
         default:
             break;
     }
@@ -579,6 +585,20 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
 /*Important, when called for IO must be called by all procs*/
 double grid_get_energy_elec(grid *g){
     double energy = 0.0;
+
+    if (g->type == GRID_TYPE_SCAFACOS) {
+        mpi_fprintf(stderr, "Warning: grid_get_energy_elec needs testing with ScaFacos.\n");
+        for (long int i = 0; i < g->n_p; i++) {
+            energy += g->fcs_potential[i];
+            // energy += 0.5 * g->fcs_potential[i];
+            // energy += 0.5 * g->phi_n[i] * g->fcs_charges[i];
+            // g->fcs_potential[i] * g->fcs_charges[i]
+        }
+
+        allreduce_sum(&energy, 1);
+
+        return energy;
+    }
 
     #pragma omp parallel for reduction(+:energy)
     for (long int i = 0; i < g->size; i++) {
