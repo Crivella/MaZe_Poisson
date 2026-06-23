@@ -11,6 +11,8 @@
 #ifdef __LAPACK ///////////////////////////////////////////////////////////////////////////
 
 #include <cblas.h>
+
+#ifdef __LAPACKE
 #include <lapacke.h>
 
 EXTERN_C void dgetri(double *A, int n) {
@@ -34,6 +36,15 @@ EXTERN_C void dgetri(double *A, int n) {
 
     free(ipiv);
 }
+
+#else // __LAPACKE
+
+EXTERN_C void dgetri(double *A, int n) {
+    mpi_fprintf(stderr, "dgerti is not implemented without LAPACKE\n");
+    exit(1);
+}
+
+#endif // __LAPACKE
 
 EXTERN_C double ddot(double *u, double *v, long int n) {
     double result = 0.0;
@@ -92,7 +103,7 @@ EXTERN_C void vec_copy(double *in, double *out, long int n) {
 #else // __LAPACK ///////////////////////////////////////////////////////////////////////////
 
 EXTERN_C void dgetri(double *A, int n) {
-    mpi_fprintf(stderr, "dgerti is not implemented without LAPACK\n");
+    mpi_fprintf(stderr, "dgerti is not implemented without LAPACK+LAPACKE\n");
     exit(1);
 }
 
