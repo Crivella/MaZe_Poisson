@@ -542,28 +542,28 @@ class SolverMD(Logger, Clock):
         ffile = self.gset.restart_field_file
         if ffile is None or not self.mdv.invert_time:
             # STEP 0 Verlet
-            # self.logger.debug("Running first step of MD loop (Verlet)...")
-            # self.logger.debug("Updating charges...")
+            self.logger.debug("Running first step of MD loop (Verlet)...")
+            self.logger.debug("Updating particles...")
             self.update_particles()
-            # self.logger.debug("Updating k^2 grid for Poisson-Boltzmann...")
+            self.logger.debug("Updating k^2 grid for Poisson-Boltzmann...")
             self.update_eps_k2()
-            # self.logger.debug("Initializing field...")
+            self.logger.debug("Initializing field...")
             self.initialize_field()
-            # self.logger.debug("Computing forces...")
+            self.logger.debug("Computing forces...")
             self.compute_forces()
 
             # STEP 1 Verlet
-            # self.logger.debug("Running second step of MD loop (Verlet)...")
+            self.logger.debug("Running second step of MD loop (Verlet)...")
             self.integrator_part1()
-            # self.logger.debug("Updating charges...")
+            self.logger.debug("Updating particles...")
             self.update_particles()
-            # self.logger.debug("Updating k^2 grid for Poisson-Boltzmann...")
+            self.logger.debug("Updating k^2 grid for Poisson-Boltzmann...")
             self.update_eps_k2()
-            # self.logger.debug("Updating field...")
+            self.logger.debug("Updating field...")
             self.initialize_field()
-            # self.logger.debug("Computing forces...")
+            self.logger.debug("Computing forces...")
             self.compute_forces()
-            # self.logger.debug("Running second part of integrator...")
+            self.logger.debug("Running second part of integrator...")
             self.integrator_part2()
         elif ffile:
             if self.mpi_rank == 0:
@@ -629,27 +629,35 @@ class SolverMD(Logger, Clock):
         else:
             self.energy_intra = 0.0
             self.energy_corr = 0.0
-        capi.solver_compute_forces_tot()
+        
+        self.compute_forces_tot()
         # Electrostatic energy from the grid (not printed in energy.csv per request)
+        self.logger.debug("Computing electrostatic energy...")
         self.energy_elec = capi.get_energy_elec()
 
     @Clock.register(['forces', 'field'])
     def compute_forces_field(self):
         """Compute the forces on the particles due to the electric field."""
-        # self.logger.debug("Computing forces due to electric field...")
+        self.logger.debug("Computing forces due to electric field...")
         self.potential_short_range = capi.solver_compute_forces_elec()
 
     @Clock.register(['forces', 'notelec'])
     def compute_forces_notelec(self):
         """Compute the forces on the particles due to non-electric interactions."""
-        # self.logger.debug("Computing forces due to non-electric interactions...")
+        self.logger.debug("Computing forces due to non-electric interactions...")
         self.potential_notelec = capi.solver_compute_forces_noel()
 
     @Clock.register(['forces', 'PBoltz'])
     def compute_forces_pb(self):
         """Compute the forces on the particles due to Poisson-Boltzmann interactions."""
-        # self.logger.debug("Computing forces due to Poisson-Boltzmann interactions...")
+        self.logger.debug("Computing forces due to Poisson-Boltzmann interactions...")
         self.energy_nonpolar = capi.solver_compute_forces_pb()
+
+    @Clock.register(['forces', 'tot'])
+    def compute_forces_tot(self):
+        """Compute the total forces on the particles."""
+        self.logger.debug("Computing total forces...")
+        capi.solver_compute_forces_tot()
 
     @Clock.register('file_output')
     def md_loop_output(self, i: int, force: bool = False):
@@ -659,11 +667,13 @@ class SolverMD(Logger, Clock):
     @Clock.register(['p_update', 'p_neighbor'])
     def _update_particle_neighbor(self):
         """Update the particle neighbor list."""
+        self.logger.debug("Updating the particle neighbor list...")
         capi.solver_update_particle_neighbors()
 
     @Clock.register(['p_update', 'chg_spread'], lc_key='t_charges')
     def _update_charges(self):
         """Update the charge grid based on the particles position with function g to spread them on the grid."""
+        self.logger.debug("Updating the charge grid...")
         if capi.solver_update_charges() != 0:
             self.logger.error('Error: change initial position, charge is not preserved.')
             sys.exit(1)
@@ -681,6 +691,7 @@ class SolverMD(Logger, Clock):
 
     @Clock.register(['p_update', 'chg_smooth'], lc_key='t_smoothing')
     def _smoothing(self):
+        self.logger.debug("Smoothing the charge grid...")
         capi.solver_smoothing()
     
     @Clock.register(['integrator', 'part1'])

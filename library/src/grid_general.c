@@ -587,7 +587,8 @@ double grid_get_energy_elec(grid *g){
     double energy = 0.0;
 
     if (g->type == GRID_TYPE_SCAFACOS) {
-        mpi_fprintf(stderr, "Warning: grid_get_energy_elec needs testing with ScaFacos.\n");
+        // mpi_fprintf(stderr, "Warning: grid_get_energy_elec needs testing with ScaFacos.\n");
+        return 0.0;
         for (long int i = 0; i < g->n_p; i++) {
             energy += g->fcs_potential[i];
             // energy += 0.5 * g->fcs_potential[i];
