@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "constants.h"
 #include "mp_structs.h"
 #include "mpi_base.h"
 
@@ -24,7 +25,7 @@ void scafacos_grid_init(grid * grid) {
     FCSResult result;
 
     mpi_data *mpid = get_mpi_data();
-    scafacos_check_result(fcs_init(&handle, "fmm", mpid->comm));
+    scafacos_check_result(fcs_init(&handle, "p3m", mpid->comm));
 
     grid->fcs_handle = handle;
     mpi_printf("ScaFaCoS initialized successfully.\n");
@@ -108,8 +109,68 @@ void scafacos_tune(grid *grid, particles *p) {
     }
 
     scafacos_check_result(fcs_set_total_particles(handle, p->n_p));
-    scafacos_check_result(fcs_fmm_set_internal_tuning(handle, FCS_FMM_HOMOGENOUS_SYSTEM));
-    scafacos_check_result(fcs_tune(handle, p->n_p, p->pos, p->charges));
+
+    // FMM
+    // scafacos_check_result(fcs_fmm_set_internal_tuning(handle, FCS_FMM_HOMOGENOUS_SYSTEM));
+
+    // P3M
+    char P3M_parameters[1024];
+    sprintf(
+        P3M_parameters,
+        // TODO: need to check conversion for this tolerance
+        // "tolerance_field_rel,%e,"
+        "p3m_r_cut,%e,"
+        "p3m_grid,%d,"
+        "p3m_cao,3"
+        ,
+        // grid->tol,
+        p->r_cut * a0,
+        grid->n
+    );
+
+
+    double r_cut;
+    int fcs_grid;
+    int fcs_cao;
+    double tol;
+
+    // // Automatic tuning of parameters
+    // mpi_printf("Tuning ScaFaCoS parameters...\n");
+    // scafacos_check_result(fcs_tune(handle, p->n_p, p->pos, p->charges));
+
+    // // Compare autotuned parameters with ours
+    // mpi_printf("ScaFaCoS autotuned parameters:\n");
+    // if ( get_rank() == 0 ) {
+    //     fcs_print_parameters(handle);
+    // }
+    // scafacos_check_result(fcs_get_r_cut(handle, &r_cut));
+    // scafacos_check_result(fcs_p3m_get_grid(handle, &fcs_grid));
+    // scafacos_check_result(fcs_p3m_get_cao(handle, &fcs_cao));
+    // scafacos_check_result(fcs_p3m_get_tolerance_field(handle, &tol));
+    // mpi_printf("ScaFaCoS autotuned r_cut: %f vs ours:  particles->r_cut=%f\n", r_cut, p->r_cut * a0);
+    // mpi_printf("ScaFaCoS autotuned grid: %d vs ours:  grid->n=%d\n", fcs_grid, grid->n);
+    // mpi_printf("ScaFaCoS autotuned cao: %d vs ours:  cao=%d\n", fcs_cao, 3);
+    // mpi_printf("ScaFaCoS autotuned tolerance: %e vs ours:  grid->tol=%e\n", tol, grid->tol);
+    
+
+    // char P3M_parameters[] = "P3M_tolerance_field_abs,1e-6";
+
+    mpi_printf("\n");
+    mpi_printf("Setting ScaFaCoS parameters: `%s`\n", P3M_parameters);
+
+    scafacos_check_result(fcs_set_parameters(handle, P3M_parameters, FCS_FALSE));
+    // mpi_printf("ScaFaCoS MANUAL parameters:\n");
+    // if ( get_rank() == 0 ) {
+    //     fcs_print_parameters(handle);
+    // }
+    scafacos_check_result(fcs_get_r_cut(handle, &r_cut));
+    scafacos_check_result(fcs_p3m_get_grid(handle, &fcs_grid));
+    scafacos_check_result(fcs_p3m_get_cao(handle, &fcs_cao));
+    scafacos_check_result(fcs_p3m_get_tolerance_field(handle, &tol));
+    mpi_printf("ScaFaCoS autotuned r_cut: %f vs ours:  particles->r_cut=%f\n", r_cut, p->r_cut * a0);
+    mpi_printf("ScaFaCoS autotuned grid: %d vs ours:  grid->n=%d\n", fcs_grid, grid->n);
+    mpi_printf("ScaFaCoS autotuned cao: %d vs ours:  cao=%d\n", fcs_cao, 3);
+    mpi_printf("ScaFaCoS autotuned tolerance: %e vs ours:  grid->tol=%e\n", tol, grid->tol);
 
     grid->tuned = 1;
 }
