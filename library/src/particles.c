@@ -474,7 +474,8 @@ void particles_init_potential_tf(particles *p, double *pot_params) {
 
     p->tf_params = (double *)malloc(7 * n_typ2 * sizeof(double));
 
-    double r_cut = p->r_cut;
+    double r_cut = (p->r_cut > 0.0) ? p->r_cut : p->L / 2.0;
+    p->r_cut = r_cut;
     double r_cut_6 = pow(r_cut, 6);
     double r_cut_7 = r_cut_6 * r_cut;
     double r_cut_8 = r_cut_7 * r_cut;

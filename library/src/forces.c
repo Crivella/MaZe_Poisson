@@ -427,10 +427,10 @@ Compute the particle-particle forces using the tabulated Lennard-Jones potential
 @param np_start: the starting index of the local particles (for parallelization)
 @param forces: the output forces on each particle (n_p, 3)
 */
-static double compute_lj_tail_correction(int n_p, double L, double *params, double r_cut) {
-    long int n_p_pow2 = n_p * n_p;
+static double compute_lj_tail_correction(int n_p, int n_typ, const int *types, double L, double *params, double r_cut) {
+    int n_typ2 = n_typ * n_typ;
     double *sigma_lj = params;
-    double *epsilon_lj = sigma_lj + n_p_pow2;
+    double *epsilon_lj = sigma_lj + n_typ2;
     double volume = L * L * L;
     double tail = 0.0;
 
@@ -438,11 +438,12 @@ static double compute_lj_tail_correction(int n_p, double L, double *params, doub
         return 0.0;
     }
 
-    // TODO: Does this need to go over all the particle pairs or should this also be affected by the cutoff?
     for (int i = 0; i < n_p; i++) {
-        long int idx1 = i * n_p;
+        int typ1 = types[i];
+        long int idx1 = typ1 * n_typ;
         for (int j = 0; j < n_p; j++) {
-            long int idx = idx1 + j;
+            int typ2 = types[j];
+            long int idx = idx1 + typ2;
             double sigma = sigma_lj[idx];
             double epsilon = epsilon_lj[idx];
             if (epsilon == 0.0) {
@@ -524,7 +525,7 @@ double compute_lj_forces(
 
     potential_energy /= 2.0;
     if (!lj_force_shift) {
-        potential_energy += compute_lj_tail_correction(n_p, L, params, r_cut);
+        potential_energy += compute_lj_tail_correction(n_p, n_typ, types, L, params, r_cut);
     }
     return potential_energy;
 }

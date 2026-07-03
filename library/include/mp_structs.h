@@ -2,17 +2,19 @@
 #define __MP_STRUCTS_H
 
 #include "enums.h"
+#include "constants.h"
 
 // Struct typedefs
 typedef struct grid grid;
 typedef struct neighbor neighbor;
 typedef struct particles particles;
 typedef struct integrator integrator;
+typedef struct y_extrap_config y_extrap_config;
 
 // Struct function definitions
 grid * grid_init(
     int n, double L, double h, double tol, double eps, double eps_int,
-    grid_type type, precond_type precond_type
+    grid_type type, precond_type precond_type, int y_initial_guess
 );
 neighbor * neighbor_init();
 particles * particles_init(int n_p, int n_typ, double L, double h, ca_scheme_type cas_type);
@@ -128,6 +130,10 @@ void precond_blockjacobi_cleanup();
 
 char *get_water_electrostatic_type_str(int n);
 
+struct y_extrap_config {
+    int order;
+};
+
 // Struct definitions
 struct grid {
     grid_type type;  // Type of the grid
@@ -142,6 +148,10 @@ struct grid {
     int n_start; // Start index of the grid in the global array (MPI aware)
 
     double *y;  // Intermediate field constraint
+    // y_hist[0..MAX-1] stores older states, y_hist[MAX] is the scratch/newest slot.
+    double *y_hist[MAZE_Y_HIST_MAX + 1];
+    int y_hist_len;
+    y_extrap_config y_extrap;
     double *q;  // Charge density
     double *phi_p;  // Previous potential (could be NULL if not needed by the method)
     double *phi_n;  // Last potential

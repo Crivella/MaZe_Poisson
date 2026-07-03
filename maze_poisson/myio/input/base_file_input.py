@@ -59,6 +59,7 @@ class OutputSettings(BaseFileInput):
     print_forces_pb: bool = False
     print_restart: bool = False
     print_restart_field: bool = False
+    print_convergence: bool = True
 
     path: str = 'Outputs/'
     format: str = 'csv'
@@ -89,6 +90,7 @@ class GridSetting(BaseFileInput):
 
     precond: str = 'NONE'
     smoother: str = 'LCG'
+    y_initial_guess: str = 'BASE'  # BASE | VERLET | ORDER2
 
     charge_smoothing: str = 'NONE' #Decide wether perform smoohting of the charges or not
     smoothing_rcut: float = 0 #Cutoff distance

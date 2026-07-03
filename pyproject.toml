@@ -12,7 +12,7 @@ authors = [
     { name = "" },
 ]
 readme = "README.md"
-license = { file = "LICENSE.txt" }
+license = { file = "LICENSE" }
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Operating System :: Microsoft :: Windows",

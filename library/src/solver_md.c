@@ -5,6 +5,7 @@
 
 #include "mp_structs.h"
 #include "mpi_base.h"
+#include "multigrid.h"
 #include "omp_base.h"
 
 #define MAX_ITG_PARAMS 10
@@ -46,9 +47,9 @@ void solver_initialize() {
 
 void solver_initialize_grid(
     int n_grid, double L, double h, double tol, double eps, double eps_int,
-    grid_type grid_type, precond_type precond_type
+    grid_type grid_type, precond_type precond_type, int y_initial_guess
 ) {
-    g_grid = grid_init(n_grid, L, h, tol, eps, eps_int, grid_type, precond_type);
+    g_grid = grid_init(n_grid, L, h, tol, eps, eps_int, grid_type, precond_type, y_initial_guess);
 }
 
 void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enabled) {
@@ -146,6 +147,10 @@ void solver_smoothing() {
 
 void solver_init_field() {
     g_grid->init_field(g_grid);
+}
+
+void solver_set_print_convergence(int val) {
+    set_print_convergence(val);
 }
 
 void solver_set_field(double *phi) {

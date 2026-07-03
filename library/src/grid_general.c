@@ -7,9 +7,21 @@
 #include "mp_structs.h"
 #include "fftw_wrap.h"
 
+static int validate_y_initial_guess(int y_initial_guess) {
+    if (y_initial_guess < 0 || y_initial_guess > MAZE_Y_HIST_MAX) {
+        mpi_fprintf(
+            stderr,
+            "Invalid y_initial_guess=%d (expected 0..%d). Using BASE.\n",
+            y_initial_guess, MAZE_Y_HIST_MAX
+        );
+        return 0;
+    }
+    return y_initial_guess;
+}
+
 grid * grid_init(
     int n, double L, double h, double tol, double eps, double eps_int,
-    grid_type grid_type, precond_type precond_type
+    grid_type grid_type, precond_type precond_type, int y_initial_guess
 ) {
     void   (*init_func)(grid *);
     switch (grid_type) {
@@ -45,6 +57,11 @@ grid * grid_init(
     new->n_start = 0;
 
     new->y = NULL;
+    for (int yh = 0; yh <= MAZE_Y_HIST_MAX; yh++) {
+        new->y_hist[yh] = NULL;
+    }
+    new->y_hist_len = 0;
+    new->y_extrap.order = validate_y_initial_guess(y_initial_guess);
     new->q = NULL;
     new->phi_p = NULL;
     new->phi_n = NULL;

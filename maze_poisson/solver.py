@@ -60,6 +60,12 @@ smoothing_map: Dict[str, int] = {
     # 'DIFFUSION': 2,
 }
 
+y_initial_guess_map: Dict[str, int] = {
+    'BASE': 0,
+    'VERLET': 1,
+    'ORDER2': 2,
+}
+
 pneigh_method_map: Dict[str, int] = {
     # 'SPHERE': 0,
     # 'CELL_LIST': 1,
@@ -112,6 +118,8 @@ class SolverMD(Logger, Clock):
         if self.outset.debug:
             self.set_log_level(logging.DEBUG)
             self.logger.debug("Set verbosity to DEBUG")
+
+        capi.solver_set_print_convergence(int(self.outset.print_convergence))
 
         self.save_input()
 
@@ -220,12 +228,19 @@ class SolverMD(Logger, Clock):
         precond = self.gset.precond.upper()
         if not precond in precond_map:
             raise ValueError(f"Preconditioner {precond} not recognized.")
+        y_initial_guess = (self.gset.y_initial_guess or 'BASE').upper()
+        if y_initial_guess not in y_initial_guess_map:
+            raise ValueError(
+                f"y_initial_guess {y_initial_guess} not recognized. "
+                f"Expected one of {sorted(y_initial_guess_map)}."
+            )
 
         grid_id = method_grid_map[method]
         precond_id = precond_map[precond]
+        y_initial_guess_id = y_initial_guess_map[y_initial_guess]
         capi.solver_initialize_grid(
             self.N, self.L, self.h, self.mdv.tol, self.gset.eps_s, self.gset.eps_int,
-            grid_id, precond_id
+            grid_id, precond_id, y_initial_guess_id
         )
 
         self._initialize_grid_pb()

@@ -9,7 +9,7 @@ capi.register_function(
     'solver_initialize', None, []
 )
 
-# void solverinitialize_grid(int n_grid, double L, double h, double tol, double eps, int grid_type, int precond_type) {
+# void solverinitialize_grid(int n_grid, double L, double h, double tol, double eps, int grid_type, int precond_type, int y_initial_guess) {
 capi.register_function(
     'solver_initialize_grid', None, [
         ctypes.c_int,
@@ -18,6 +18,7 @@ capi.register_function(
         ctypes.c_double,
         ctypes.c_double,
         ctypes.c_double,
+        ctypes.c_int,
         ctypes.c_int,
         ctypes.c_int,
     ],
@@ -123,6 +124,14 @@ capi.register_function(
 # void solver_init_field() {
 capi.register_function(
     'solver_init_field', None, [],
+)
+
+# void solver_set_print_convergence(int val) {
+capi.register_function(
+    'solver_set_print_convergence', None, [
+        ctypes.c_int,
+    ],
+    fallback=lambda val: None,
 )
 
 # void solver_set_field(double *phi) {
