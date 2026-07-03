@@ -59,7 +59,7 @@ class OutputSettings(BaseFileInput):
     print_forces_pb: bool = False
     print_restart: bool = False
     print_restart_field: bool = False
-    print_convergence: bool = True
+    print_convergence: bool = False
 
     path: str = 'Outputs/'
     format: str = 'csv'

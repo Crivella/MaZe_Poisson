@@ -235,6 +235,200 @@ double compute_force_short_range(
     return potential; 
 }
 
+/*
+Compute the short-range particle-particle correction for the Wendland C2 screening density.
+
+The charge assigned to the grid is smeared with the normalized Wendland C2 kernel of eq. (12):
+    rho_s(r) = (21 Q / (2 pi sigma^3)) * (1 - r/sigma)^4 * (4 r/sigma + 1), for r <= sigma
+whose electrostatic potential (eq. 37) equals the bare Coulomb potential Q/r exactly for r > sigma.
+The short-range correction restores the bare point-charge interaction at short range:
+    V_SR(r) = Qi*Qj * (1/r - phi_s(r)/Qj), for r <= sigma, and 0 otherwise (eq. 41).
+Because of the exact compact support, both V_SR and its derivative vanish exactly at r = sigma, so
+(unlike the Gaussian case) no truncation shift is required for continuity.
+*/
+double compute_force_short_range_wendland_c2(
+    int n_p,
+    double *pos,
+    double *charges,
+    double *forces, // Output forces on each particle (n_p, 3)
+    double sigma,
+    double L,
+    neighbor **neighbors, int np_local, int np_start
+) {
+    neighbor *curr;
+
+    // Precompute everything that only depends on sigma once, outside the pairwise loop: on a
+    // per-pair basis only 1/r genuinely varies, so this turns 4 divisions/pair into 1.
+    double inv_sigma = 1.0 / sigma;
+    double inv_sigma3 = inv_sigma * inv_sigma * inv_sigma;
+    double seven_inv_sigma3 = 7.0 * inv_sigma3;
+
+    long int i;
+    double inv_r, inv_r3;
+    double r, t, qi, qj;
+    double energy_bracket, force_bracket;
+    double factor;
+    double potential = 0.0;
+
+    memset(forces, 0, n_p * 3 * sizeof(double));
+
+    #pragma omp parallel for private( \
+        i, curr, r, t, qi, qj, \
+        inv_r, inv_r3, energy_bracket, force_bracket, factor \
+    ) reduction(+:potential)
+    for (int i_loc = 0; i_loc < np_local; i_loc++) {
+        i = np_start + i_loc;
+        qi = charges[i];
+        curr = neighbors[i_loc];
+
+        while (curr->valid) {
+            r = curr->dist;
+
+            if (r <= sigma) {
+                qj = charges[curr->idx];
+
+                inv_r = 1.0 / r;
+                inv_r3 = inv_r * inv_r * inv_r;
+
+                t = r * inv_sigma;
+
+                // Horner evaluation: 3 - 7t^2 + 21t^4 - 28t^5 + 15t^6 - 3t^7
+                energy_bracket = -3.0;
+                energy_bracket = energy_bracket * t + 15.0;
+                energy_bracket = energy_bracket * t - 28.0;
+                energy_bracket = energy_bracket * t + 21.0;
+                energy_bracket = energy_bracket * t;
+                energy_bracket = energy_bracket * t - 7.0;
+                energy_bracket = energy_bracket * t;
+                energy_bracket = energy_bracket * t + 3.0;
+
+                // Horner evaluation: 2 - 12t^2 + 20t^3 - (90/7)t^4 + 3t^5
+                force_bracket = 3.0;
+                force_bracket = force_bracket * t - (90.0 / 7.0);
+                force_bracket = force_bracket * t + 20.0;
+                force_bracket = force_bracket * t - 12.0;
+                force_bracket = force_bracket * t;
+                force_bracket = force_bracket * t + 2.0;
+
+                factor = qi * qj * (inv_r3 - seven_inv_sigma3 * force_bracket);
+
+                forces[3*i + 0] += factor * curr->dx;
+                forces[3*i + 1] += factor * curr->dy;
+                forces[3*i + 2] += factor * curr->dz;
+
+                potential += qi * qj * (inv_r - energy_bracket * inv_sigma);
+            }
+
+            curr = curr->next;
+        }
+    }
+
+    allreduce_sum(forces, 3 * n_p);
+    allreduce_sum(&potential, 1);
+
+    return potential;
+}
+
+/*
+Compute the short-range particle-particle correction for the Wendland C4 screening density.
+
+The charge assigned to the grid is smeared with the normalized Wendland C4 kernel (eq. 10):
+    rho_s(r) = (165 Q / (32 pi sigma^3)) * (1 - r/sigma)^6 * (35 (r/sigma)^2 + 18 (r/sigma) + 3),
+    for r <= sigma, whose electrostatic potential (eq. 30) equals the bare Coulomb potential Q/r
+    exactly for r > sigma. Same short-range correction logic as the Wendland C2 case above: exact
+    compact support means V_SR and its derivative vanish exactly at r = sigma, no truncation shift
+    needed.
+*/
+double compute_force_short_range_wendland_c4(
+    int n_p,
+    double *pos,
+    double *charges,
+    double *forces, // Output forces on each particle (n_p, 3)
+    double sigma,
+    double L,
+    neighbor **neighbors, int np_local, int np_start
+) {
+    neighbor *curr;
+
+    // Precompute everything that only depends on sigma once, outside the pairwise loop: on a
+    // per-pair basis only 1/r genuinely varies, so this turns 4 divisions/pair into 1.
+    double inv_sigma = 1.0 / sigma;
+    double inv_sigma3 = inv_sigma * inv_sigma * inv_sigma;
+
+    long int i;
+    double inv_r, inv_r3;
+    double r, t, qi, qj;
+    double energy_bracket, force_bracket;
+    double factor;
+    double potential = 0.0;
+
+    memset(forces, 0, n_p * 3 * sizeof(double));
+
+    #pragma omp parallel for private( \
+        i, curr, r, t, qi, qj, \
+        inv_r, inv_r3, energy_bracket, force_bracket, factor \
+    ) reduction(+:potential)
+    for (int i_loc = 0; i_loc < np_local; i_loc++) {
+        i = np_start + i_loc;
+        qi = charges[i];
+        curr = neighbors[i_loc];
+
+        while (curr->valid) {
+            r = curr->dist;
+
+            if (r <= sigma) {
+                qj = charges[curr->idx];
+
+                inv_r = 1.0 / r;
+                inv_r3 = inv_r * inv_r * inv_r;
+
+                t = r * inv_sigma;
+
+                // Horner evaluation:
+                // 55/16 - (165/16)t^2 + (231/8)t^4 - (825/8)t^6 + 165t^7 - (1925/16)t^8 + 44t^9 - (105/16)t^10
+                energy_bracket = -105.0 / 16.0;
+                energy_bracket = energy_bracket * t + 44.0;
+                energy_bracket = energy_bracket * t - 1925.0 / 16.0;
+                energy_bracket = energy_bracket * t + 165.0;
+                energy_bracket = energy_bracket * t - 825.0 / 8.0;
+                energy_bracket = energy_bracket * t;
+                energy_bracket = energy_bracket * t + 231.0 / 8.0;
+                energy_bracket = energy_bracket * t;
+                energy_bracket = energy_bracket * t - 165.0 / 16.0;
+                energy_bracket = energy_bracket * t;
+                energy_bracket = energy_bracket * t + 55.0 / 16.0;
+
+                // Horner evaluation:
+                // 165/8 - (231/2)t^2 + (2475/4)t^4 - 1155t^5 + (1925/2)t^6 - 396t^7 + (525/8)t^8
+                force_bracket = 525.0 / 8.0;
+                force_bracket = force_bracket * t - 396.0;
+                force_bracket = force_bracket * t + 1925.0 / 2.0;
+                force_bracket = force_bracket * t - 1155.0;
+                force_bracket = force_bracket * t + 2475.0 / 4.0;
+                force_bracket = force_bracket * t;
+                force_bracket = force_bracket * t - 231.0 / 2.0;
+                force_bracket = force_bracket * t;
+                force_bracket = force_bracket * t + 165.0 / 8.0;
+
+                factor = qi * qj * (inv_r3 - inv_sigma3 * force_bracket);
+
+                forces[3*i + 0] += factor * curr->dx;
+                forces[3*i + 1] += factor * curr->dy;
+                forces[3*i + 2] += factor * curr->dz;
+
+                potential += qi * qj * (inv_r - energy_bracket * inv_sigma);
+            }
+
+            curr = curr->next;
+        }
+    }
+
+    allreduce_sum(forces, 3 * n_p);
+    allreduce_sum(&potential, 1);
+
+    return potential;
+}
+
 // /*
 // Compute the forces on each particle by computing the field from the potential using finite differences.
 // New version computes the field only where the particles are located.

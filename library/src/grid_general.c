@@ -261,8 +261,13 @@ void smooth_charges_gauss_init(grid *grid) {
     free(gaussian_kernel);
 }
 
-void smooth_charges_gauss(grid *grid) {
-    // Apply Gaussian smoothing to the charge distribution using convolution in Fourier space
+/*
+Apply the smoothing kernel currently stored in grid->smoothing_kernel (in Fourier space) to the
+charge distribution via convolution (element-wise multiplication in Fourier space). This routine
+is agnostic to the actual kernel shape, so it is shared by every smoothing method that works by
+convolving the charges with a Fourier-space kernel (Gaussian, Wendland C2, ...).
+*/
+void smooth_charges_fourier_kernel(grid *grid) {
     int n = grid->n;
     int nh = n / 2 + 1;
     int n_loc = grid->n_local;
@@ -287,6 +292,119 @@ void smooth_charges_gauss(grid *grid) {
     irfft_3d(n, n_loc, q_fft, q);
 
     free(q_fft);
+}
+
+/*
+Allocate and initialize the Wendland C2 smoothing kernel in Fourier space.
+The kernel is the normalized Wendland C2 screening density (compact support r <= sigma):
+    rho(r) propto (1 - r/sigma)^4 * (4*r/sigma + 1), for r <= sigma, 0 otherwise.
+It is generated in real space, normalized discretely (as done for the Gaussian kernel) and then
+transformed to Fourier space using the forward FFT.
+*/
+void smooth_charges_wendland_c2_init(grid *grid) {
+    int n = grid->n;
+    int nh = n / 2 + 1;
+    long int n2 = n * n;
+    long int c_size = grid->n_local * nh * n;  // Size of the complex-space grid for the local portion
+    long int r_size = grid->n_local * n2;  // Size of the real-space grid for the local portion
+
+    double sigma = grid->smoothing_sigma / grid->h;  // Convert sigma to grid units
+
+    double *wendland_kernel = (double *)calloc(r_size, sizeof(double));
+
+    // Generate the Wendland C2 kernel in real space
+    int i, j, k;
+    int di, dj, dk;
+    double ri, rj, r2, r, t;
+    for (int i_loc = 0; i_loc < grid->n_local; i_loc++) {
+        i = grid->n_start + i_loc;
+        di = i > n / 2 ? i - n : i;  // Wrap around for periodicity
+        ri = di * di;
+        for (j = 0; j < n; j++) {
+            dj = j > n / 2 ? j - n : j;  // Wrap around for periodicity
+            rj = ri + dj * dj;
+            for (k = 0; k < n; k++) {
+                dk = k > n / 2 ? k - n : k;  // Wrap around for periodicity
+                r2 = rj + dk * dk;
+                r = sqrt(r2);
+                if (r <= sigma) {
+                    t = r / sigma;
+                    wendland_kernel[i_loc * n2 + j * n + k] = pow(1.0 - t, 4) * (4.0 * t + 1.0);
+                }
+            }
+        }
+    }
+
+    // Normalize the kernel
+    double sum = 0.0;
+    for (i = 0; i < r_size; i++) {
+        sum += wendland_kernel[i];
+    }
+    allreduce_sum(&sum, 1);
+    dscal(wendland_kernel, 1.0 / sum, r_size);  // Normalize so that the sum of the kernel is 1
+    dscal(wendland_kernel, 1.0 / pow(n, 3), r_size);  // FFT normalization factor
+
+    // Convert the kernel in Fourier space
+    grid->smoothing_kernel = malloc(c_size * sizeof(fftw_complex));
+    rfft_3d(n, grid->n_local, wendland_kernel, (fftw_complex *)grid->smoothing_kernel);
+
+    free(wendland_kernel);
+}
+
+/*
+Allocate and initialize the Wendland C4 smoothing kernel in Fourier space.
+The kernel is the normalized Wendland C4 screening density (compact support r <= sigma):
+    rho(r) propto (1 - r/sigma)^6 * (35*(r/sigma)^2 + 18*(r/sigma) + 3), for r <= sigma, 0 otherwise.
+Same generation/normalization/FFT scheme as the Wendland C2 kernel above.
+*/
+void smooth_charges_wendland_c4_init(grid *grid) {
+    int n = grid->n;
+    int nh = n / 2 + 1;
+    long int n2 = n * n;
+    long int c_size = grid->n_local * nh * n;  // Size of the complex-space grid for the local portion
+    long int r_size = grid->n_local * n2;  // Size of the real-space grid for the local portion
+
+    double sigma = grid->smoothing_sigma / grid->h;  // Convert sigma to grid units
+
+    double *wendland_kernel = (double *)calloc(r_size, sizeof(double));
+
+    // Generate the Wendland C4 kernel in real space
+    int i, j, k;
+    int di, dj, dk;
+    double ri, rj, r2, r, t;
+    for (int i_loc = 0; i_loc < grid->n_local; i_loc++) {
+        i = grid->n_start + i_loc;
+        di = i > n / 2 ? i - n : i;  // Wrap around for periodicity
+        ri = di * di;
+        for (j = 0; j < n; j++) {
+            dj = j > n / 2 ? j - n : j;  // Wrap around for periodicity
+            rj = ri + dj * dj;
+            for (k = 0; k < n; k++) {
+                dk = k > n / 2 ? k - n : k;  // Wrap around for periodicity
+                r2 = rj + dk * dk;
+                r = sqrt(r2);
+                if (r <= sigma) {
+                    t = r / sigma;
+                    wendland_kernel[i_loc * n2 + j * n + k] = pow(1.0 - t, 6) * (35.0 * t * t + 18.0 * t + 3.0);
+                }
+            }
+        }
+    }
+
+    // Normalize the kernel
+    double sum = 0.0;
+    for (i = 0; i < r_size; i++) {
+        sum += wendland_kernel[i];
+    }
+    allreduce_sum(&sum, 1);
+    dscal(wendland_kernel, 1.0 / sum, r_size);  // Normalize so that the sum of the kernel is 1
+    dscal(wendland_kernel, 1.0 / pow(n, 3), r_size);  // FFT normalization factor
+
+    // Convert the kernel in Fourier space
+    grid->smoothing_kernel = malloc(c_size * sizeof(fftw_complex));
+    rfft_3d(n, grid->n_local, wendland_kernel, (fftw_complex *)grid->smoothing_kernel);
+
+    free(wendland_kernel);
 }
 
 void smooth_charges_diffusion(grid *grid) {
@@ -369,12 +487,37 @@ void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma) {
         case SMOOTHING_TYPE_GAUSS:
             // For now performed outside in theh python code
             smooth_charges_gauss_init(grid);  // Initialize the Gaussian smoothing kernel if needed
-            grid->smooth_charges = smooth_charges_gauss;
+            grid->smooth_charges = smooth_charges_fourier_kernel;
             if (grid->smoothing_rcut <= 0.0 || grid->smoothing_sigma <= 0.0) {
                 mpi_fprintf(stderr, "Invalid parameters for Gaussian smoothing:\n");
                 mpi_fprintf(stderr, "r_cut: %f, sigma: %f\n", grid->smoothing_rcut, grid->smoothing_sigma);
                 exit(1);
             }
+            break;
+        case SMOOTHING_TYPE_WENDLAND_C2:
+            // The Wendland C2 screening density has exact compact support r <= sigma, so sigma is
+            // the only meaningful length scale: the short-range cutoff is forced to match it
+            // regardless of whatever r_cut value was supplied.
+            if (grid->smoothing_sigma <= 0.0) {
+                mpi_fprintf(stderr, "Invalid parameters for Wendland C2 smoothing:\n");
+                mpi_fprintf(stderr, "sigma: %f\n", grid->smoothing_sigma);
+                exit(1);
+            }
+            grid->smoothing_rcut = grid->smoothing_sigma;
+            smooth_charges_wendland_c2_init(grid);
+            grid->smooth_charges = smooth_charges_fourier_kernel;
+            break;
+        case SMOOTHING_TYPE_WENDLAND_C4:
+            // Same reasoning as Wendland C2: exact compact support r <= sigma, so sigma is the
+            // only meaningful length scale for the short-range cutoff too.
+            if (grid->smoothing_sigma <= 0.0) {
+                mpi_fprintf(stderr, "Invalid parameters for Wendland C4 smoothing:\n");
+                mpi_fprintf(stderr, "sigma: %f\n", grid->smoothing_sigma);
+                exit(1);
+            }
+            grid->smoothing_rcut = grid->smoothing_sigma;
+            smooth_charges_wendland_c4_init(grid);
+            grid->smooth_charges = smooth_charges_fourier_kernel;
             break;
         case SMOOTHING_TYPE_DIFFUSION:
             grid->smooth_charges = smooth_charges_diffusion;

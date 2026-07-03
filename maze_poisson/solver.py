@@ -188,11 +188,25 @@ class SolverMD(Logger, Clock):
             raise ValueError(f"Smoothing method {method} not recognized.")
 
         method_id = smoothing_map[method]
+        # Wendland kernels (C2, C4, ...) have *exact* compact support at r = sigma: both the
+        # charge-spreading kernel and the short-range correction are identically zero beyond it.
+        # Unlike the Gaussian (infinite tail: sigma is a width, smoothing_rcut is an independent,
+        # arbitrary truncation radius for the short-range correction), there is no independent
+        # truncation radius to choose here, so smoothing_rcut is forced to sigma, mirroring the
+        # same enforcement done on the C side.
+        is_compact_support = method.startswith('WENDLAND')
+
         self.smoothing_rcut = self.gset.smoothing_rcut
         if self.gset.smoothing_sigma is None:
-            self.smoothing_sigma = self.smoothing_rcut / 3.0
+            if is_compact_support:
+                self.smoothing_sigma = self.smoothing_rcut
+            else:
+                self.smoothing_sigma = self.smoothing_rcut / 3.0
         else:
             self.smoothing_sigma = self.gset.smoothing_sigma
+
+        if is_compact_support:
+            self.smoothing_rcut = self.smoothing_sigma
 
         capi.solver_initialize_grid_smoothing(method_id, self.smoothing_rcut, self.smoothing_sigma)
     
