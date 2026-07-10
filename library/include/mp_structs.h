@@ -2,7 +2,6 @@
 #define __MP_STRUCTS_H
 
 #include "enums.h"
-#include "constants.h"
 
 // Struct typedefs
 typedef struct grid grid;
