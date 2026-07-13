@@ -7,6 +7,12 @@
 #include "mp_structs.h"
 #include "sphere_intersect.h"
 
+static int pbc_grid_index(int idx, int n) {
+    idx %= n;
+    if (idx < 0) idx += n;
+    return idx;
+}
+
 char grid_type_str[GRID_TYPE_NUM][16] = {"LCG", "FFT", "MULTIGRID", "MAZE-LCG", "MAZE-MULTIGRID"}; 
 int get_grid_type_num() {
     return GRID_TYPE_NUM;
@@ -149,7 +155,7 @@ void grid_pb_init(
     grid->eps_y = mpi_grid_allocate(n_local, n);
     grid->eps_z = mpi_grid_allocate(n_local, n);
     grid->k2 = (double *)malloc(grid->size * sizeof(double));
-    grid->region = (unsigned int *)calloc(grid->size, sizeof(unsigned int));
+    grid->region = mpi_grid_allocate_uint(n_local, n);
 }
 
 void grid_pb_free(grid *grid) {
@@ -159,7 +165,7 @@ void grid_pb_free(grid *grid) {
         mpi_grid_free(grid->eps_z, grid->n);
 
         free(grid->k2);
-        free(grid->region);
+        mpi_grid_free_uint(grid->region, grid->n);
     }
 }
 
@@ -462,6 +468,7 @@ static double eps_mix_eval(double eps1, double eps2, double frac)
 void grid_update_eps_and_k2_sphere(grid *g, particles *p)
 {
     const int n       = g->n;
+    const int n_local = g->n_local;
     const int n_start = g->n_start;
     const double h    = g->h;
     const long size   = g->size;
@@ -506,6 +513,9 @@ void grid_update_eps_and_k2_sphere(grid *g, particles *p)
     // printf("REGION_DEBUG (sphere): inside=%lld outside=%lld (tot=%ld)\n",
         //    region_inside, region_outside, size);
 
+    // Exchange the top and bottom region slices
+    mpi_grid_exchange_bot_top_uint(region, n_local, n);
+
     /* ====================================================
      * STEP 2 - compute epsilon on each edge
      * ==================================================== */
@@ -525,7 +535,7 @@ void grid_update_eps_and_k2_sphere(grid *g, particles *p)
         eps_z[idx] = eps_s;
 
         /* Edge X */
-        long idx_px = (i == n - 1) ? idx - (long)(n - 1) * n * n : idx + (long)n * n;
+        long idx_px = idx + (long)n * n;
         if (region[idx] != region[idx_px]) {
             double frac = sphere_edge_fraction(p, x1, y1, z1, h, 0, L);
             eps_x[idx] = eps_mix_eval(eps_m, eps_s, frac);
@@ -571,17 +581,20 @@ void grid_update_eps_and_k2_sphere(grid *g, particles *p)
             for (int dj = -Rq; dj <= Rq; dj++) {
                 for (int dk = -Rq; dk <= Rq; dk++) {
                     if (di * di + dj * dj + dk * dk >= R2q) continue;
-                    int ii_g = iq_g + di;
-                    int jj   = jq   + dj;
-                    int kk   = kq   + dk;
+                    int ii_g = pbc_grid_index(iq_g + di, n);
+                    int jj   = pbc_grid_index(jq + dj, n);
+                    int kk   = pbc_grid_index(kq + dk, n);
                     int ii   = ii_g - n_start;
-                    if (ii < 0 || ii >= n || jj < 0 || jj >= n || kk < 0 || kk >= n) continue;
+                    if (ii < 0 || ii >= n_local) continue;
                     long idx = (long)kk + (long)jj * n + (long)ii * (long)n * n;
                     if (region[idx] == 0) region[idx] = 2u;
                 }
             }
         }
     }
+
+    // Exchange the final region map used by the stress tensor
+    mpi_grid_exchange_bot_top_uint(region, n_local, n);
 }
 
 void grid_update_eps_and_k2(grid *g, particles *p) {

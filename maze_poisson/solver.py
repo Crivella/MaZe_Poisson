@@ -167,8 +167,11 @@ class SolverMD(Logger):
         if self.mdv.poisson_boltzmann:
             eps_s = self.gset.eps_s
             # eps_int = self.gset.eps_int
+            # Debye screening: kappa^2 [Bohr^-2] = 2*NA*EC^2*I*1000 / (eps0*eps_s*kB_si*T) * BR^2
+            # (Gaussian-AU PB uses ∇·(ε∇φ) − κ²φ = −4πρ; the factor 8π present before was wrong
+            #  by 4π because the Gaussian-to-SI conversion already accounts for the 4π in Coulomb's law)
             kbar2 = (
-                8 * np.pi * cst.NA * cst.EC**2 * self.gset.I * 1e3
+                2 * cst.NA * cst.EC**2 * self.gset.I * 1e3
             ) / (
                 eps_s * cst.eps0 * cst.kB_si * self.mdv.T
             ) * cst.BR ** 2 * self.h ** 2
@@ -179,6 +182,12 @@ class SolverMD(Logger):
             pb_force = self.mdv.pb_force.upper()
             if pb_force not in pb_force_type_map:
                 raise ValueError(f"PB force method {pb_force} not recognized.")
+            if pb_force == 'STRESS_TENSOR' and eps_map != 'SPHERE':
+                raise ValueError(
+                    f"pb_force='STRESS_TENSOR' requires eps_map='SPHERE' (got '{eps_map}'). "
+                    "The TRADITIONAL eps_map does not populate the region array needed by the "
+                    "stress-tensor surface integral to identify molecule-interior grid points."
+                )
             stress_bc = self.mdv.stress_tensor_bc.upper()
             if stress_bc not in stress_tensor_bc_type_map:
                 raise ValueError(f"Stress tensor boundary condition {stress_bc} not recognized.")

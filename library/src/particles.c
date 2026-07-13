@@ -796,7 +796,9 @@ double particles_compute_forces_pb_stress_tensor(particles *p, grid *g) {
     double non_polar_energy = 0.0;
 
     if (g->nonpolar_enabled) {
-        non_polar_energy = particles_compute_forces_pb(p, g);
+        // Call the Roux method directly to avoid infinite recursion:
+        // particles_compute_forces_pb would re-dispatch to this function.
+        non_polar_energy = particles_compute_forces_pb_roux(p, g);
     } else {
         memset(p->fcs_np, 0, size * sizeof(double));
     }

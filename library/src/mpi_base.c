@@ -119,6 +119,35 @@ void mpi_grid_exchange_bot_top(double *grid, int size1, int size2) {
     }
 }
 
+void mpi_grid_exchange_bot_top_uint(unsigned int *grid, int size1, int size2) {
+    // Skip loop communication if the processor is holding no data
+    if (size1 == 0) {
+        return;
+    }
+    long int n2 = size2 * size2;
+
+    unsigned int *bot = grid;
+    unsigned int *top = grid + (size1 - 1) * n2;
+    unsigned int *bot_recv = bot - n2;
+    unsigned int *top_recv = top + n2;
+
+    if (global_mpi_data->size == 1) {
+        memcpy(top_recv, bot, n2 * sizeof(unsigned int));
+        memcpy(bot_recv, top, n2 * sizeof(unsigned int));
+    } else {
+        MPI_Sendrecv(
+            top, n2, MPI_UNSIGNED, global_mpi_data->next_rank, 0,
+            bot_recv, n2, MPI_UNSIGNED, global_mpi_data->prev_rank, 0,
+            global_mpi_data->comm, MPI_STATUS_IGNORE
+        );
+        MPI_Sendrecv(
+            bot, n2, MPI_UNSIGNED, global_mpi_data->prev_rank, 0,
+            top_recv, n2, MPI_UNSIGNED, global_mpi_data->next_rank, 0,
+            global_mpi_data->comm, MPI_STATUS_IGNORE
+        );
+    }
+}
+
 void allreduce_sum(double *buffer, long int count) {
     if (global_mpi_data->size > 1) {
         MPI_Allreduce(MPI_IN_PLACE, buffer, count, MPI_DOUBLE, MPI_SUM, global_mpi_data->comm);
@@ -196,6 +225,18 @@ void mpi_grid_exchange_bot_top(double *grid, int size1, int size2) {
 
 }
 
+void mpi_grid_exchange_bot_top_uint(unsigned int *grid, int size1, int size2) {
+    long int n2 = size2 * size2;
+
+    unsigned int *bot = grid;
+    unsigned int *top = grid + (size1 - 1) * n2;
+    unsigned int *bot_recv = bot - n2;
+    unsigned int *top_recv = top + n2;
+
+    memcpy(top_recv, bot, n2 * sizeof(unsigned int));
+    memcpy(bot_recv, top, n2 * sizeof(unsigned int));
+}
+
 void bcast_double(double *buffer, long int size, int root) {
     // Do nothing
 }
@@ -232,7 +273,24 @@ double * mpi_grid_allocate(int size1, int size2) {
     return data + n2;
 }
 
+unsigned int * mpi_grid_allocate_uint(int size1, int size2) {
+    long int n2 = size2 * size2;
+
+    unsigned int *data = (unsigned int *)calloc((size1 + 2) * n2, sizeof(unsigned int));
+    if (data == NULL) {
+        fprintf(stderr, "Error: Unable to allocate memory for unsigned grid data\n");
+        exit(EXIT_FAILURE);
+    }
+
+    return data + n2;
+}
+
 void mpi_grid_free(double *data, int n) {
+    long int n2 = n * n;
+    free(data - n2);
+}
+
+void mpi_grid_free_uint(unsigned int *data, int n) {
     long int n2 = n * n;
     free(data - n2);
 }

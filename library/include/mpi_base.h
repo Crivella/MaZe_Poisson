@@ -44,6 +44,9 @@ void barrier();
 double * mpi_grid_allocate(int size1, int size2);
 void mpi_grid_free(double *data, int n);
 void mpi_grid_exchange_bot_top(double *grid, int size1, int size2);
+unsigned int * mpi_grid_allocate_uint(int size1, int size2);
+void mpi_grid_free_uint(unsigned int *data, int n);
+void mpi_grid_exchange_bot_top_uint(unsigned int *grid, int size1, int size2);
 void mpi_grid_collect_buffer(double *data, double *recv, int n);
 
 #endif
