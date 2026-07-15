@@ -10,6 +10,26 @@
 #include "mp_structs.h"
 #include "mpi_base.h"
 
+static void init_y_history_buffers(grid *grid, int n_loc, int n, long int size) {
+    for (int yh = 0; yh <= MAZE_Y_HIST_MAX; yh++) {
+        grid->y_hist[yh] = mpi_grid_allocate(n_loc, n);
+        memset(grid->y_hist[yh], 0, size * sizeof(double));
+    }
+}
+
+static void reset_y_history_buffers(grid *grid) {
+    for (int yh = 0; yh <= MAZE_Y_HIST_MAX; yh++) {
+        memset(grid->y_hist[yh], 0, grid->size * sizeof(double));
+    }
+    grid->y_hist_len = 0;
+}
+
+static void free_y_history_buffers(grid *grid) {
+    for (int yh = 0; yh <= MAZE_Y_HIST_MAX; yh++) {
+        mpi_grid_free(grid->y_hist[yh], grid->n);
+    }
+}
+
 void maze_multigrid_grid_init(grid * grid) {
     int n_loc = grid->n_local;
     int n = grid->n;
@@ -24,6 +44,7 @@ void maze_multigrid_grid_init(grid * grid) {
 
     grid->q = mpi_grid_allocate(n_loc, n);
     grid->y = mpi_grid_allocate(n_loc, n);
+    init_y_history_buffers(grid, n_loc, n, size);
     grid->phi_p = mpi_grid_allocate(n_loc, n);
     grid->phi_n = mpi_grid_allocate(n_loc, n);
 
@@ -38,6 +59,7 @@ void maze_multigrid_grid_init(grid * grid) {
 void maze_multigrid_grid_cleanup(grid * grid) {
     mpi_grid_free(grid->q, grid->n);
     mpi_grid_free(grid->y, grid->n);
+    free_y_history_buffers(grid);
     mpi_grid_free(grid->phi_p, grid->n);
     mpi_grid_free(grid->phi_n, grid->n);
 }
@@ -51,6 +73,7 @@ void maze_multigrid_grid_init_field(grid *grid) {
     }
 
     memset(grid->y, 0, grid->size * sizeof(double));  // y = 0
+    reset_y_history_buffers(grid);
     vec_copy(grid->phi_n, grid->phi_p, grid->size);  // phi_prev = phi_n
     // phi_n = consant * q
     vec_copy(grid->q, tmp, grid->size);
@@ -74,13 +97,15 @@ int maze_multigrid_grid_update_field(grid *grid) {
     int res;
 
     if (grid->pb_enabled) {
-           res = verlet_pb_multigrid(
+        res = verlet_pb_multigrid(
             grid->tol, grid->h, grid->phi_n, grid->phi_p, grid->q, grid->y,
+            grid->y_hist, grid->y_extrap_order, &grid->y_hist_len,
             grid->n_local, grid->n, grid->eps_x, grid->eps_y, grid->eps_z, grid->k2
-        );  
+        );
     } else{
         res = verlet_poisson_multigrid(
             grid->tol, grid->h * grid->eps_s, grid->phi_n, grid->phi_p, grid->q, grid->y,
+            grid->y_hist, grid->y_extrap_order, &grid->y_hist_len,
             grid->n_local, grid->n
         );  // grid->h * grid->eps_s to account for the dielectric constant in the poisson equation
     }

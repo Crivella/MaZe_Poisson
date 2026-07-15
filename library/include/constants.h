@@ -1,7 +1,9 @@
 #ifndef __MP_CONSTANTS_H
 #define __MP_CONSTANTS_H
 
+#ifndef M_PI
 #define M_PI 3.14159265358979323846
+#endif
 
 #define a0 0.529177210903
 #define a0_6 0.021958708714088133  // a0^6

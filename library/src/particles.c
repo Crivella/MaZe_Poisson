@@ -474,7 +474,8 @@ void particles_init_potential_tf(particles *p, double *pot_params) {
 
     p->tf_params = (double *)malloc(7 * n_typ2 * sizeof(double));
 
-    double r_cut = p->r_cut;
+    double r_cut = (p->r_cut > 0.0) ? p->r_cut : p->L / 2.0;
+    p->r_cut = r_cut;
     double r_cut_6 = pow(r_cut, 6);
     double r_cut_7 = r_cut_6 * r_cut;
     double r_cut_8 = r_cut_7 * r_cut;
@@ -689,7 +690,26 @@ double particles_compute_forces_field(particles *p, grid *grid) {
         grid->phi_n, p->grid_neighbors, p->charges, p->pos, p->fcs_elec,
         p->charges_spread_func
     );
-    if ( grid->smoothing != SMOOTHING_TYPE_NONE) {
+    if (grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2) {
+        double *fcs_tmp = (double *)malloc(p->n_p * 3 * sizeof(double));
+        res += compute_force_short_range_wendland_c2(
+            p->n_p, p->pos, p->charges, fcs_tmp, grid->smoothing_sigma, p->L,
+            p->particle_neighbors, p->np_local, p->np_start
+        );
+        daxpy(fcs_tmp, p->fcs_elec, 1.0, p->n_p * 3);
+        free(fcs_tmp);
+    } else if (grid->smoothing == SMOOTHING_TYPE_WENDLAND_C4) {
+        double *fcs_tmp = (double *)malloc(p->n_p * 3 * sizeof(double));
+        res += compute_force_short_range_wendland_c4(
+            p->n_p, p->pos, p->charges, fcs_tmp, grid->smoothing_sigma, p->L,
+            p->particle_neighbors, p->np_local, p->np_start
+        );
+        daxpy(fcs_tmp, p->fcs_elec, 1.0, p->n_p * 3);
+        free(fcs_tmp);
+    } else if (
+        grid->smoothing == SMOOTHING_TYPE_GAUSS ||
+        grid->smoothing == SMOOTHING_TYPE_DIFFUSION
+    ) {
         double *fcs_tmp = (double *)malloc(p->n_p * 3 * sizeof(double));
         res += compute_force_short_range(
             p->n_p, p->pos, p->charges, fcs_tmp, grid->smoothing_rcut, grid->smoothing_sigma, p->L,
@@ -697,6 +717,11 @@ double particles_compute_forces_field(particles *p, grid *grid) {
         );
         daxpy(fcs_tmp, p->fcs_elec, 1.0, p->n_p * 3);
         free(fcs_tmp);
+    } else if (grid->smoothing == SMOOTHING_TYPE_NONE) {
+        // No short-range correction is needed.
+    } else {
+        mpi_fprintf(stderr, "Invalid smoothing type %d\n", grid->smoothing);
+        exit(1);
     }
     return res;
 }

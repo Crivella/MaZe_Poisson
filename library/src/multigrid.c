@@ -10,6 +10,12 @@
 
 #define JACOBI_OMEGA 0.66
 
+int g_print_convergence = 1;
+
+void set_print_convergence(int val) {
+    g_print_convergence = val;
+}
+
 static int cg_coarse(double* b, double* x, int s1, int s2, int maxit, double rtol)
 {
     const long n = (long)s1 * (long)s2 * (long)s2;
@@ -769,7 +775,7 @@ Solve the Poisson equation A.out = in using the multigrid method.
 @param n_start1: starting index for the first dimension (used for restriction)
 @param sm: number of smoothing iterations to perform at each level of the multigrid V-cycle
 */
-int multigrid_apply(double *in, double *out, int s1, int s2, int n_start1, int sm) {
+void multigrid_apply(double *in, double *out, int s1, int s2, int n_start1, int sm) {
     multigrid_apply_recursive(in, out, s1, s2, n_start1, sm);
     // multigrid_apply_3lvl(in, out, s1, s2, n_start1, sm);
     // multigrid_apply_2lvl(in, out, s1, s2, n_start1, sm);
@@ -816,11 +822,13 @@ int multigrid_solve(
     double app;
     double *tmp2 = (double *)malloc(n3 * sizeof(double));
 
-    // uncomment below only to print the residual at iteration = 0
-    // laplace_filter(out, tmp2, s1, s2);  // tmp2 = A_pb . phi
-    // daxpy(in, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
-    // app = norm_inf(tmp2, n3); 
-    // printf("\niter=%d \t res=%e\n", iter_conv,app);
+    // Residual at iteration = 0 for the current y_0 initial guess.
+    if (g_print_convergence) {
+        laplace_filter(out, tmp2, s1, s2);  // tmp2 = A_pb . phi
+        daxpy(in, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
+        app = norm_inf(tmp2, n3);
+        mpi_printf("\niter=%d \t res=%e\n", iter_conv, app);
+    }
 
     while(iter_conv < MG_ITER_LIMIT) {
         // out = solve(A . out = in)
@@ -833,7 +841,9 @@ int multigrid_solve(
         // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
         app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
         iter_conv++;
-        // printf("iter=%d \t res=%e\n", iter_conv,app);
+        if (g_print_convergence) {
+            mpi_printf("iter=%d \t res=%e\n", iter_conv, app);
+        }
         if (app <= tol){
             res = iter_conv;
             break;

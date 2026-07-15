@@ -726,7 +726,7 @@ Solve the Poisson equation with a dielectric A.out = in using the multigrid meth
 @param k2_screen: cell-centered screening coefficient array
 @return: number of V-cycle iterations performed (for convergence monitoring) or -1 if the solver did not converge
 */
-int multigrid_pb_apply(
+void multigrid_pb_apply(
     double *in, double *out, int s1, int s2, int n_start1, int sm,
     double *eps_x, double *eps_y, double *eps_z, double *k2_screen
 ) {
@@ -765,11 +765,12 @@ int multigrid_solve_pb(
 
     double *tmp2 = (double *)malloc(n3 * sizeof(double));
 
-    // uncomment below only to print the residual at iteration = 0
-    // laplace_filter_pb(out, tmp2, s1, s2, eps_x, eps_y, eps_z, k2);  // tmp2 = A_pb . phi
-    // daxpy(in, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
-    // app = norm_inf(tmp2, n3); 
-    // printf("\niter=%d \t res=%e\n", iter_conv,app);
+    if (g_print_convergence) {
+        laplace_filter_pb(out, tmp2, s1, s2, eps_x, eps_y, eps_z, k2_screen);
+        daxpy(in, tmp2, -1.0, n3);
+        app = norm_inf(tmp2, n3);
+        mpi_printf("\niter=%d \t res=%e\n", iter_conv, app);
+    }
 
     while(iter_conv < MG_ITER_LIMIT_PB) {
         // out = solve_pb(A . out = in)
@@ -782,8 +783,9 @@ int multigrid_solve_pb(
         // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
         app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
         iter_conv++;
-
-        // printf("iter=%d \t res=%e\n", iter_conv,app);
+        if (g_print_convergence) {
+            mpi_printf("iter=%d \t res=%e\n", iter_conv, app);
+        }
         if (app <= tol){
             res = iter_conv;
             break;

@@ -1,11 +1,19 @@
-- get_L_N.py tells you what you can send as inputs
-- main_maze_md.py is the main file to run with inputs according to those templates in the above file
-- run ./compile_c.sh to compile the C functions
+## Compile the C library
 
-## Compile using CMake
+The Python package loads a compiled C extension from the `maze_poisson/`
+package directory. Build it with CMake from the repository root.
 
-Needs cmake version 3.20 or higher to be installed.
-Starting from the root directory of the project, run the following commands:
+Requirements:
+
+- CMake 3.20 or newer
+- a C compiler
+
+Optional dependencies:
+
+- FFTW3, for FFT-based functionality
+- MPI and OpenMP, unless disabled with the CMake options below
+
+From the root directory of the project, run:
 
 ```bash
 
@@ -39,3 +47,19 @@ cmake -S . -B build \
 cmake --build build -j8
 cmake --install build
 ```
+
+## Multigrid y initial guess
+
+For `MAZE-MULTIGRID`, the multigrid correction field `y` can be warm-started
+from the `grid_setting` section of the input file:
+
+```yaml
+grid_setting:
+  y_initial_guess: BASE
+```
+
+Supported values are:
+
+- `BASE`: reuse the previous `y` field directly
+- `VERLET`: linear Verlet-style extrapolation
+- `ORDER2`: second-order extrapolation

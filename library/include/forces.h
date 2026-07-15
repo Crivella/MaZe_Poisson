@@ -34,6 +34,30 @@ double compute_force_short_range(
     neighbor **neighbors,
     int np_local, int np_start
 );
+// Short-range analytic correction for the Wendland C2 screening density. Its compact support
+// (r <= sigma) means the correction is exactly zero (value and slope) at r = sigma, so no
+// truncation shift is needed, unlike the Gaussian case above.
+double compute_force_short_range_wendland_c2(
+    int n_p,
+    double *pos,
+    double *charges,
+    double *forces,
+    double sigma,
+    double L,
+    neighbor **neighbors,
+    int np_local, int np_start
+);
+// Same as above, for the Wendland C4 screening density.
+double compute_force_short_range_wendland_c4(
+    int n_p,
+    double *pos,
+    double *charges,
+    double *forces,
+    double sigma,
+    double L,
+    neighbor **neighbors,
+    int np_local, int np_start
+);
 double compute_tf_forces(
     int n_p, int n_typ, double L, int *types, double *pos, double *params,
     double r_cut, neighbor **neighbors, int np_local, int np_start,
