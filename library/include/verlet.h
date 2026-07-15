@@ -6,8 +6,6 @@
 #include "multigrid.h"
 #include "multigrid_pb.h"
 
-typedef struct y_extrap_config y_extrap_config;
-
 void verlet_update(double *phi, double *phi_prev, long int size);
 
 int verlet_poisson(
