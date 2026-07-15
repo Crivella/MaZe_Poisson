@@ -60,6 +60,7 @@ class OutputSettings(BaseFileInput):
     print_restart: bool = False
     print_restart_field: bool = False
     print_convergence: bool = False
+    print_eps_map: bool = False
 
     path: str = 'Outputs/'
     format: str = 'csv'
@@ -143,6 +144,11 @@ class MDVariables(BaseFileInput):
     # Poisson-Boltzmann specific
     poisson_boltzmann: bool = False  # Whether to use Poisson-Boltzmann method
     nonpolar_forces: bool = False # Whether to use non polar forces or not
+    field_dependent_dielectric: bool = False  # Backward-compatible shortcut for eps_map='FIELD_DEPENDENT'
+    eps_map: str = None  # TRADITIONAL, SPHERE, or FIELD_DEPENDENT
+    pb_force: str = 'PB_ROUX'  # PB_ROUX or STRESS_TENSOR
+    stress_tensor_bc: str = 'DBC'  # DBC or PBC
+    eps_field_alpha: float = 1.0  # Alpha parameter in eps(E) (Hu & Wei Eq. S2)
     gamma_np: float = 0.0  # Non-polarization gamma in kcal/mol/A^2
     beta_np: float = 0.0  # offset in kcal/mol
     probe_radius: float = 1.4 / a0  # Probe radius in a.u.
@@ -158,6 +164,8 @@ class MDVariables(BaseFileInput):
                 raise ValueError("rescale_stride must be None or a positive integer.")
             if self.rescale_stride <= 0:
                 raise ValueError("rescale_stride must be a positive integer.")
+        if self.eps_map is None:
+            self.eps_map = 'FIELD_DEPENDENT' if self.field_dependent_dielectric else 'TRADITIONAL'
 
     @property
     def kBT(self):

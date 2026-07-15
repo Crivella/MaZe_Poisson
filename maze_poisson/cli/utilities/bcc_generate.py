@@ -39,10 +39,10 @@ def generate_bcc_positions(box_size, num_particles):
     return positions
 
 
-# # Dimensioni delle scatole
-# # L = [16.51, 20.64, 24.77, 28.90, 33.02, 37.15, 41.28, 45.20, 49.54, 53.66]
-# # L = np.array(L)
-# # L = np.array([61.92, 70.18, 78.43, 86.69, 99.07])
+# Dimensioni delle scatole
+# L = [16.51, 20.64, 24.77, 28.90, 33.02, 37.15, 41.28, 45.20, 49.54, 53.66]
+# L = np.array(L)
+# L = np.array([61.92, 70.18, 78.43, 86.69, 99.07])
 # L = np.array([103.20])
 
 # # Numero di particelle

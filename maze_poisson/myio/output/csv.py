@@ -35,7 +35,7 @@ class CSVOutputFile(BaseOutputFile):
 
     @property
     @abstractmethod
-    def headers(self):
+    def headers(self) -> list[str]:
         pass
 
     @abstractmethod
@@ -222,7 +222,7 @@ class SolutesCSVOutputFile(CSVOutputFile):
 
 class PerformanceCSVOutputFile(CSVOutputFile):
     name =  'performance'
-    headers = ['iter', 'time', 'n_iters', 't_charges', 't_smoothing', 't_field', 't_elec_total']
+    headers = ['iter', 'time', 'n_iters', 't_charges', 't_smoothing', 't_field', 't_elec_total', 'eps_phi_iters']
     def get_data(self, iter: int, solver):
         return pd.DataFrame({
             'iter': [iter],
@@ -232,6 +232,7 @@ class PerformanceCSVOutputFile(CSVOutputFile):
             't_smoothing': [getattr(solver, 't_smoothing', 0.0)],
             't_field': [getattr(solver, 't_field', 0.0)],
             't_elec_total': [getattr(solver, 't_elec_total', 0.0)],
+            'eps_phi_iters': [solver.eps_phi_iters],
         })
 
 class RestartCSVOutputFile(CSVOutputFile):
@@ -265,6 +266,34 @@ class RestartFieldCSVOutputFile(CSVOutputFile):
 
         return df
 
+class EpsMapCSVOutputFile(CSVOutputFile):
+    name = 'epsilon_map'
+    headers = ['iter', 'eps_x', 'eps_y', 'eps_z']
+    def get_data(self, iter, solver):
+        df = pd.DataFrame()
+        tmp_x = np.empty((solver.N, solver.N, solver.N), dtype=np.float64)
+        tmp_y = np.empty((solver.N, solver.N, solver.N), dtype=np.float64)
+        tmp_z = np.empty((solver.N, solver.N, solver.N), dtype=np.float64)
+        capi.get_eps_map(tmp_x, tmp_y, tmp_z)
+
+        df['eps_x'] = tmp_x.flatten()
+        df['eps_y'] = tmp_y.flatten()
+        df['eps_z'] = tmp_z.flatten()
+        
+        df['iter'] = iter
+
+        return df
+        # np.savez_compressed(
+        #     filename,
+        #     eps_x=eps_x,
+        #     eps_y=eps_y,
+        #     eps_z=eps_z,
+        #     h=self.h,
+        #     L=self.L,
+        #     eps_s=self.gset.eps_s,
+        #     eps_int=self.gset.eps_int,
+        #     iter=iter_idx,
+        # )
 
 OutputFiles.register_format(
     'csv',
@@ -279,6 +308,7 @@ OutputFiles.register_format(
         'force_components_particle': ForceComponentsParticleCSVOutputFile,
         'forces_pb': ForcesPBoltzCSVOutputFile,
         'restart': RestartCSVOutputFile,
-        'restart_field': RestartFieldCSVOutputFile
+        'restart_field': RestartFieldCSVOutputFile,
+        'eps_map': EpsMapCSVOutputFile,
     }
 )

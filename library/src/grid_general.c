@@ -2,10 +2,18 @@
 #include <stdlib.h>
 #include <math.h>
 
+
 #include "mpi_base.h"
 #include "linalg.h"
 #include "mp_structs.h"
 #include "fftw_wrap.h"
+#include "sphere_intersect.h"
+
+static int pbc_grid_index(int idx, int n) {
+    idx %= n;
+    if (idx < 0) idx += n;
+    return idx;
+}
 
 static int validate_y_initial_guess(int y_initial_guess) {
     if (y_initial_guess < 0 || y_initial_guess > MAZE_Y_HIST_MAX) {
@@ -17,6 +25,32 @@ static int validate_y_initial_guess(int y_initial_guess) {
         return 0;
     }
     return y_initial_guess;
+}
+
+
+// TODO: Move this stuff to use the nue enums.h format
+char eps_map_type_str[EPS_MAP_TYPE_NUM][32] = {"TRADITIONAL", "SPHERE", "FIELD_DEPENDENT"};
+int get_eps_map_type_num() {
+    return EPS_MAP_TYPE_NUM;
+}
+char *get_eps_map_type_str(int n) {
+    return eps_map_type_str[n];
+}
+
+char pb_force_type_str[PB_FORCE_TYPE_NUM][32] = {"PB_ROUX", "STRESS_TENSOR"};
+int get_pb_force_type_num() {
+    return PB_FORCE_TYPE_NUM;
+}
+char *get_pb_force_type_str(int n) {
+    return pb_force_type_str[n];
+}
+
+char stress_tensor_bc_type_str[STRESS_TENSOR_BC_TYPE_NUM][32] = {"DBC", "PBC"};
+int get_stress_tensor_bc_type_num() {
+    return STRESS_TENSOR_BC_TYPE_NUM;
+}
+char *get_stress_tensor_bc_type_str(int n) {
+    return stress_tensor_bc_type_str[n];
 }
 
 grid * grid_init(
@@ -66,22 +100,38 @@ grid * grid_init(
     new->phi_p = NULL;
     new->phi_n = NULL;
     new->ig2 = NULL;
+    new->region = NULL;
 
 
     new->pb_enabled = 0;  // Poisson-Boltzmann not enabled by default
     new->nonpolar_enabled = 0; //nonpolar forces not enabled by default
+    new->eps_field_dep_enabled = 0; //field-dependent dielectric not enabled by default
+
+    // These are set in `grid_pb_init` which should always be called before running PB related functions
+    // Using this allows us to give a more descriptive error message
+    new->eps_map_type = MAP_NOT_INITIALIZED;
+    new->pb_force_type = MAP_NOT_INITIALIZED;
+    new->stress_tensor_bc_type = MAP_NOT_INITIALIZED;
+
     new->w = 0.0;  // Ionic boundary width
     new->kbar2 = 0.0;  // Screening factor
+    new->kBT = 0.0;
+    new->eps_field_alpha = 1.0;
 
     new->k2 = NULL;  // Screening factor
     new->eps_x = NULL;  // Dielectric constant in x direction
     new->eps_y = NULL;  // Dielectric constant in y direction
     new->eps_z = NULL;  // Dielectric constant in z direction
+
+    new->update_field = NULL;
+    new->update_charges = NULL;
+    new->update_eps_and_k2 = NULL;
     
     init_func(new);
 
     new->tol = tol;
     new->n_iters = 0;
+    new->eps_phi_iters = 0;
 
     new->free = grid_free;
 
@@ -177,21 +227,33 @@ void grid_init_mpi_fft(grid *grid) {
 
 #endif  // __MPI
 
-void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled) {
+void grid_pb_init(
+    grid *grid, double w, double kbar2, int nonpolar_enabled,
+    int eps_map_type, int pb_force_type, int stress_tensor_bc_type, double kBT, double eps_field_alpha
+) {
     // Initialize the grid for Poisson-Boltzmann simulations
     grid->pb_enabled = 1;  // Enable Poisson-Boltzmann
     grid->nonpolar_enabled = nonpolar_enabled; //nonpolar forces ON/OFF
+    grid->eps_map_type = eps_map_type;
+    grid->eps_field_dep_enabled = (eps_map_type == EPS_MAP_TYPE_FIELD_DEPENDENT);
+    grid->pb_force_type = pb_force_type;
+    grid->stress_tensor_bc_type = stress_tensor_bc_type;
     grid->w = w;
     grid->kbar2 = kbar2;
+    grid->kBT = kBT;
+    grid->eps_field_alpha = eps_field_alpha;
 
     // Initialize the solvent potential and dielectric constant arrays
     int n = grid->n;
     int n_local = grid->n_local;
 
+    grid->update_eps_and_k2 = grid_update_eps_and_k2;
+
     grid->eps_x = mpi_grid_allocate(n_local, n);
     grid->eps_y = mpi_grid_allocate(n_local, n);
     grid->eps_z = mpi_grid_allocate(n_local, n);
     grid->k2 = (double *)malloc(grid->size * sizeof(double));
+    grid->region = mpi_grid_allocate_uint(n_local, n);
 }
 
 void grid_pb_free(grid *grid) {
@@ -201,6 +263,7 @@ void grid_pb_free(grid *grid) {
         mpi_grid_free(grid->eps_z, grid->n);
 
         free(grid->k2);
+        mpi_grid_free_uint(grid->region, grid->n);
     }
 }
 
@@ -571,7 +634,7 @@ void grid_free(grid *grid) {
     free(grid);
 }
 
-void grid_update_eps_and_k2(grid *g, particles *p) {
+void grid_update_eps_and_k2_roux(grid *g, particles *p) {
     // Update the dielectric constant and screening factor based on the grid's transition regions
     int n = g->n;
     int n_local = g->n_local;
@@ -736,6 +799,265 @@ void grid_update_eps_and_k2(grid *g, particles *p) {
     }
 }    
 
+double grid_update_eps_field_dependent(grid *g, particles *p) {
+    mpi_fprintf(stderr, "This function should not be used YET!!\n");
+    exit(1);
+    int n = g->n;
+    int n_local = g->n_local;
+    double h = g->h;
+    double kBT = g->kBT;
+
+    double eps_s   = g->eps_s;
+    double eps_int = g->eps_int;
+
+    long int n2   = (long int)n * (long int)n;
+    long int size = g->size;
+
+    double *eps_x = g->eps_x;
+    double *eps_y = g->eps_y;
+    double *eps_z = g->eps_z;
+    double *phi_n = g->phi_n;
+    
+    double alpha = g->eps_field_alpha;  /* Hu & Wei Eq. S2 parameter (user-configurable) */
+    // Hu & Wei SI (Eq. S2, n=1): eps = eps_m + (eps_s-eps_m)/(1 + (alpha/(2 kBT)) * |grad phi|^2)
+    // The previous implementation used 1/(2*alpha*kBT)^2, which is not consistent with Eq. S2.
+    double inv_E0 = alpha / (2.0 * kBT);
+    double inv_two_h = 1.0 / (2.0 * h);
+    double inv_h     = 1.0 / h;
+    double delta_eps = eps_s - eps_int;
+
+    double max_diff = 0.0;
+
+    // Ensure halo planes of phi are available for local boundary gradients
+    mpi_grid_exchange_bot_top(phi_n, n_local, n);
+
+    #pragma omp parallel for reduction(max:max_diff)
+    for (long int idx = 0; idx < size; idx++) {
+        long int ix = idx / n2;
+        long int iy = (idx % n2) / n;
+        long int iz = idx % n;
+
+        // x-direction uses halo planes (no local wrap)
+        long int ixp = ix + 1;
+        long int ixm = ix - 1;
+        if (ixp == n_local) ixp = n_local;  // top halo plane
+        if (ixm < 0)        ixm = -1;       // bottom halo plane
+
+        long int iyp = iy + 1; if (iyp == n) iyp = 0;
+        long int iym = iy - 1; if (iym < 0)  iym = n - 1;
+        long int izp = iz + 1; if (izp == n) izp = 0;
+        long int izm = iz - 1; if (izm < 0)  izm = n - 1;
+
+        double phi_ijk     = phi_n[idx];
+        double phi_iplus1  = phi_n[ixp * n2 + iy  * n + iz];
+        double phi_iminus1 = phi_n[ixm * n2 + iy  * n + iz];
+        double phi_jplus1  = phi_n[ix  * n2 + iyp * n + iz];
+        double phi_jminus1 = phi_n[ix  * n2 + iym * n + iz];
+        double phi_kplus1  = phi_n[ix  * n2 + iy  * n + izp];
+        double phi_kminus1 = phi_n[ix  * n2 + iy  * n + izm];
+
+        double Ex_half = (phi_iplus1  - phi_ijk) * inv_h;
+        double Ey_half = (phi_jplus1  - phi_ijk) * inv_h;
+        double Ez_half = (phi_kplus1  - phi_ijk) * inv_h;
+
+        double Ex = (phi_iplus1  - phi_iminus1) * inv_two_h;
+        double Ey = (phi_jplus1  - phi_jminus1) * inv_two_h;
+        double Ez = (phi_kplus1  - phi_kminus1) * inv_two_h;
+
+        double E_mag_x2 = Ex_half * Ex_half + Ey * Ey + Ez * Ez;
+        double E_mag_y2 = Ex * Ex + Ey_half * Ey_half + Ez * Ez;
+        double E_mag_z2 = Ex * Ex + Ey * Ey + Ez_half * Ez_half;
+        
+        double new_x = eps_int + delta_eps / (1.0 + E_mag_x2 * inv_E0);
+        double new_y = eps_int + delta_eps / (1.0 + E_mag_y2 * inv_E0);
+        double new_z = eps_int + delta_eps / (1.0 + E_mag_z2 * inv_E0);
+        // printf("index %ld: Ex^2=%e, (Ex/E0)^2=%e,  eps(E)=%lf\n", idx, E_mag_x2, E_mag_x2 * inv_E02, new_x);
+
+        double dx = fabs(new_x - eps_x[idx]);
+        double dy = fabs(new_y - eps_y[idx]);
+        double dz = fabs(new_z - eps_z[idx]);
+
+        double local_max = dx;
+        if (dy > local_max) local_max = dy;
+        if (dz > local_max) local_max = dz;
+
+        if (local_max > max_diff){
+            max_diff = local_max;
+            // mpi_printf("Max dielectric change updated: %e at index %ld\n", max_diff, idx);
+        }
+        eps_x[idx] = new_x;
+        eps_y[idx] = new_y;
+        eps_z[idx] = new_z;
+    }
+    allreduce_max(&max_diff, 1);
+    // mpi_printf("\nMaximum dielectric constant change after update: %e\n", max_diff);
+    return max_diff;
+}
+
+double wha (double eps1, double eps2, double frac)
+{
+    return 1.0 / (frac / eps1 + (1.0 - frac) / eps2);
+}
+
+static double eps_mix_eval(double eps1, double eps2, double frac)
+{
+    return wha(eps1, eps2, frac);
+}
+
+void grid_update_eps_and_k2_sphere(grid *g, particles *p)
+{
+    const int n       = g->n;
+    const int n_local = g->n_local;
+    const int n_start = g->n_start;
+    const double h    = g->h;
+    const long size   = g->size;
+    const double L    = g->L;
+
+    const double eps_s = g->eps_s;
+    const double eps_m = g->eps_int;
+    const double kbar2 = g->kbar2;
+
+    double       *eps_x  = g->eps_x;
+    double       *eps_y  = g->eps_y;
+    double       *eps_z  = g->eps_z;
+    double       *k2     = g->k2;
+    unsigned int *region = g->region;
+
+    /* ====================================================
+     * STEP 1 - classify inside/outside using VdW spheres
+     * ==================================================== */
+
+    long long region_inside  = 0;
+    long long region_outside = 0;
+
+    #pragma omp parallel for schedule(static) reduction(+:region_inside,region_outside)
+    for (long idx = 0; idx < size; idx++) {
+        int k = idx % n;
+        int j = (idx / n) % n;
+        int i = idx / (n * n);
+
+        double x = (i + n_start) * h;
+        double y = j * h;
+        double z = k * h;
+
+        int inside = is_in_molecule_sphere(p, x, y, z, L);
+
+        k2[idx]     = inside ? 0.0 : kbar2;
+        region[idx] = inside ? 1u  : 0u;
+
+        if (inside) region_inside++;
+        else        region_outside++;
+    }
+
+    // printf("REGION_DEBUG (sphere): inside=%lld outside=%lld (tot=%ld)\n",
+        //    region_inside, region_outside, size);
+
+    // Exchange the top and bottom region slices
+    mpi_grid_exchange_bot_top_uint(region, n_local, n);
+
+    /* ====================================================
+     * STEP 2 - compute epsilon on each edge
+     * ==================================================== */
+
+    #pragma omp parallel for schedule(static)
+    for (long idx = 0; idx < size; idx++) {
+        int k = idx % n;
+        int j = (idx / n) % n;
+        int i = idx / (n * n);
+
+        double x1 = (i + n_start) * h;
+        double y1 = j * h;
+        double z1 = k * h;
+
+        eps_x[idx] = eps_s;
+        eps_y[idx] = eps_s;
+        eps_z[idx] = eps_s;
+
+        /* Edge X */
+        long idx_px = idx + (long)n * n;
+        if (region[idx] != region[idx_px]) {
+            double frac = sphere_edge_fraction(p, x1, y1, z1, h, 0, L);
+            eps_x[idx] = eps_mix_eval(eps_m, eps_s, frac);
+        } else if (region[idx] != 0) {
+            eps_x[idx] = eps_m;
+        }
+
+        /* Edge Y */
+        long idx_py = (j == n - 1) ? idx - (long)(n - 1) * n : idx + n;
+        if (region[idx] != region[idx_py]) {
+            double frac = sphere_edge_fraction(p, x1, y1, z1, h, 1, L);
+            eps_y[idx] = eps_mix_eval(eps_m, eps_s, frac);
+        } else if (region[idx] != 0) {
+            eps_y[idx] = eps_m;
+        }
+
+        /* Edge Z */
+        long idx_pz = (k == n - 1) ? idx - (n - 1) : idx + 1;
+        if (region[idx] != region[idx_pz]) {
+            double frac = sphere_edge_fraction(p, x1, y1, z1, h, 2, L);
+            eps_z[idx] = eps_mix_eval(eps_m, eps_s, frac);
+        } else if (region[idx] != 0) {
+            eps_z[idx] = eps_m;
+        }
+    }
+
+
+    /* ====================================================
+     * STEP 3 — mark enlarged sphere (region = 2)
+    Solvent points (region = 0) inside the integration sphere of
+    any particle are marked as 2.
+    The radius used is the same as in compute_stress_tensor_forces_spherical:
+    R = ceil(solv_radii / h) + 2 (in cell units)
+     * ==================================================== */
+    for (int q = 0; q < p->n_p; q++) {
+        int iq_g = (int)round(p->pos[q * 3 + 0] / h);
+        int jq   = (int)round(p->pos[q * 3 + 1] / h);
+        int kq   = (int)round(p->pos[q * 3 + 2] / h);
+        int Rq   = (int)ceil(p->solv_radii[q] / h) + 2;
+        int R2q  = Rq * Rq;
+
+        for (int di = -Rq; di <= Rq; di++) {
+            for (int dj = -Rq; dj <= Rq; dj++) {
+                for (int dk = -Rq; dk <= Rq; dk++) {
+                    if (di * di + dj * dj + dk * dk >= R2q) continue;
+                    int ii_g = pbc_grid_index(iq_g + di, n);
+                    int jj   = pbc_grid_index(jq + dj, n);
+                    int kk   = pbc_grid_index(kq + dk, n);
+                    int ii   = ii_g - n_start;
+                    if (ii < 0 || ii >= n_local) continue;
+                    long idx = (long)kk + (long)jj * n + (long)ii * (long)n * n;
+                    if (region[idx] == 0) region[idx] = 2u;
+                }
+            }
+        }
+    }
+
+    // Exchange the final region map used by the stress tensor
+    mpi_grid_exchange_bot_top_uint(region, n_local, n);
+}
+
+void grid_update_eps_and_k2(grid *g, particles *p) {
+    switch (g->eps_map_type) {
+        case MAP_NOT_INITIALIZED:
+            mpi_fprintf(stderr, "Error: Epsilon map type not initialized. Please call `grid_pb_init` before running Poisson-Boltzmann related functions.\n");
+            exit(1);
+        case EPS_MAP_TYPE_TRADITIONAL:
+            grid_update_eps_and_k2_roux(g, p);
+            break;
+        case EPS_MAP_TYPE_FIELD_DEPENDENT:
+            // TODO: should this be `grid_update_eps_field_dependent` instead?
+            grid_update_eps_and_k2_roux(g, p);
+            break;
+        case EPS_MAP_TYPE_SPHERE:
+            grid_update_eps_and_k2_sphere(g, p);
+            break;
+        default:
+            mpi_fprintf(stderr, "Unknown epsilon map type: %d\n", g->eps_map_type);
+            exit(1);
+    }
+}
+
+
 /*Important, when called for IO must be called by all procs*/
 double grid_get_energy_elec(grid *g){
     double energy = 0.0;
@@ -750,4 +1072,3 @@ double grid_get_energy_elec(grid *g){
 
     return energy;
 }
-

@@ -82,10 +82,11 @@ class OutputFiles:
     forces_pb = None
     restart = None
     restart_field = None
+    eps_map = None
 
     files = [
         'performance', 'energy', 'momentum', 'temperature', 'solute', 'tot_force',
-        'force_components', 'force_components_particle', 'forces_pb'
+        'force_components', 'force_components_particle', 'forces_pb', 'eps_map'
     ]
     files_restart = ['restart', 'restart_field']
 
@@ -126,7 +127,10 @@ class OutputFiles:
         """Initialize the output files."""
         ptr = self.format_classes[self.fmt]
         for name in self.files + self.files_restart:
-            cls = ptr[name]
+            try:
+                cls = ptr[name]
+            except KeyError:
+                raise ValueError(f"Output format '{self.fmt}' does not support '{name}' output")
             _path = os.path.join(self.base_path, f'{name}.{self.fmt}')
             setattr(self, name, cls(
                 path = _path,

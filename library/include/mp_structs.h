@@ -1,8 +1,23 @@
 #ifndef __MP_STRUCTS_H
 #define __MP_STRUCTS_H
+
+#define MAP_NOT_INITIALIZED -1
 // Max predictor order for the y-history warm start.
 #define MAZE_Y_HIST_MAX 2
 #include "enums.h"
+
+#define EPS_MAP_TYPE_NUM 3
+#define EPS_MAP_TYPE_TRADITIONAL 0
+#define EPS_MAP_TYPE_SPHERE 1
+#define EPS_MAP_TYPE_FIELD_DEPENDENT 2
+
+#define PB_FORCE_TYPE_NUM 2
+#define PB_FORCE_TYPE_PB_ROUX 0
+#define PB_FORCE_TYPE_STRESS_TENSOR 1
+
+#define STRESS_TENSOR_BC_TYPE_NUM 2
+#define STRESS_TENSOR_BC_TYPE_DBC 0
+#define STRESS_TENSOR_BC_TYPE_PBC 1
 
 // Struct typedefs
 typedef struct grid grid;
@@ -32,11 +47,22 @@ void grid_init_mpi_fft(grid *grid);
 // double *neighbor_get_dx(neighbor *n);
 // double *neighbor_get_dx(neighbor *n);
 
-void grid_pb_init(grid *grid, double w, double kbar2, int nonpolar_enabled);
+void grid_init_mpi(grid *grid);
+void grid_init_mpi_fft(grid *grid);
+
+// long int *neighbor_get_indices(neighbor *n);
+// double *neighbor_get_dx(neighbor *n);
+// double *neighbor_get_dx(neighbor *n);
+
+void grid_pb_init(
+    grid *grid, double w, double kbar2, int nonpolar_enabled,
+    int eps_map_type, int pb_force_type, int stress_tensor_bc_type, double kBT, double eps_field_alpha
+);
 void grid_pb_free(grid *grid);
 void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma);
 void grid_smoothing_free(grid *grid);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
+double grid_update_eps_field_dependent(grid *grid, particles *particles);
 double grid_get_energy_elec(grid *grid);
 
 void lcg_grid_init(grid * grid);
@@ -154,14 +180,21 @@ struct grid {
     double *phi_p;  // Previous potential (could be NULL if not needed by the method)
     double *phi_n;  // Last potential
     double *ig2;  // Inverse of the laplacian
+    unsigned int *region;  // Region type for each grid point (0=outside, 1=inside) defined in grid nodes
 
     precond_type precond_type;  // Type of the preconditioner
 
     // Poisson-Boltzmann specific
     int pb_enabled;  // Poisson-Boltzmann enabled
     int nonpolar_enabled; // Nonpolar forces enabled
+    int eps_field_dep_enabled; // Field-dependent dielectric enabled
+    int eps_map_type; // Dielectric map construction method
+    int pb_force_type; // Poisson-Boltzmann force computation method
+    int stress_tensor_bc_type; // Boundary condition used by stress-tensor PB forces
     double w;  // Ionic boundary width
     double kbar2;  // Screening factor
+    double kBT;  // Thermal energy factor for field-dependent dielectric updates
+    double eps_field_alpha;  // Alpha parameter in eps(E) model (Hu & Wei Eq. S2)
     double *k2;  // Screening factor
     double *eps_x;  // Dielectric constant
     double *eps_y;  // Dielectric constant
@@ -175,12 +208,14 @@ struct grid {
 
     double tol;  // Tolerance for the LCG
     long int n_iters;  // Number of iterations for convergence of the LCG
+    int eps_phi_iters;  // Iterations for eps-phi self-consistency (field-dependent dielectric)
 
     void    (*free)( grid *);
     void    (*init_field)( grid *);
     void    (*apply_precond)( double *, double *, int, int, int);
     int     (*update_field)( grid *);
     double  (*update_charges)( grid *, particles *);
+    void    (*update_eps_and_k2)( grid *, particles *);
     void    (*smooth_charges)( grid *);
 };
 

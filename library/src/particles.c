@@ -684,7 +684,16 @@ void particles_update_grid_nearest_neighbors_spline(particles *p, grid *g) {
     }    
 }
 
+// TODO: spezzare questo in modo che quando si ha PB_FORCE_TYPE_STRESS_TENSOR invece di puntare a questa
+// funzione ne usiamo una che non fa niente
+// In piu se si fa PB_FORCE_TYPE_STRESS_TENSOR va skippata la parte di short range correction?
 double particles_compute_forces_field(particles *p, grid *grid) {
+    if (grid->pb_enabled && grid->pb_force_type == PB_FORCE_TYPE_STRESS_TENSOR) {
+        // The tensor forces are already resetting this 2 zero, not sure which is the best place to do this
+        // depends on who we want to be responsible for what
+        // memset(p->fcs_elec, 0, p->n_p * 3 * sizeof(double));
+        return 0.0;
+    }
     double res = compute_force_fd(
         grid->n, p->n_p, grid->n_local, grid->n_start, p->h, p->num_neighbors,
         grid->phi_n, p->grid_neighbors, p->charges, p->pos, p->fcs_elec,
@@ -749,146 +758,6 @@ double particles_compute_forces_lj(particles *p) {
         p->fcs_noel, p->lj_force_shift
     );
 }
-
-/*
-Legacy intramolecular implementation (bond + angle in one loop).
-Kept commented out for reference per request.
-*/
-#if 0
-double particles_compute_intramolecular_forces(particles *p) {
-    if (!p->is_water) {
-        return 0.0;
-    }
-
-    int rank = 0;
-    int size = 1;
-#ifdef __MPI
-    size = get_size();
-    if (size < 1) {
-        size = 1;
-    }
-    rank = get_rank();
-#endif
-
-    long int np = p->n_p;
-    double *pos = p->pos;
-    double *fcs = p->fcs_intra;
-    double L = p->L;
-    p->energy_intra = 0.0;
-    if (fcs == NULL) {
-        fcs = (double *)calloc(np * 3, sizeof(double));
-        p->fcs_intra = fcs;
-    } else {
-        memset(fcs, 0, np * 3 * sizeof(double));
-    }
-
-    double energy_ba = 0.0;
-
-    // Utility for minimum image
-    #define MIN_IMG(d) (d -= L * round(d / L))
-
-    #pragma omp parallel for reduction(+:energy_ba)
-    for (long int m = 0; m < np / 3; m++) {
-        if (size > 1 && (m % size) != rank) {
-            continue;
-        }
-        long int iO = m * 3;
-        double qO = p->charges[iO];
-        double qH1 = p->charges[iO + 1];
-        double qH2 = p->charges[iO + 2];
-
-        long int o3 = iO * 3;
-        long int h13 = (iO + 1) * 3;
-        long int h23 = (iO + 2) * 3;
-
-        // Vectors O->H1 and O->H2 with PBC
-        double r1x = pos[h13    ] - pos[o3    ];
-        double r1y = pos[h13 + 1] - pos[o3 + 1];
-        double r1z = pos[h13 + 2] - pos[o3 + 2];
-        MIN_IMG(r1x); MIN_IMG(r1y); MIN_IMG(r1z);
-
-        double r2x = pos[h23    ] - pos[o3    ];
-        double r2y = pos[h23 + 1] - pos[o3 + 1];
-        double r2z = pos[h23 + 2] - pos[o3 + 2];
-        MIN_IMG(r2x); MIN_IMG(r2y); MIN_IMG(r2z);
-
-        double r1 = sqrt(r1x * r1x + r1y * r1y + r1z * r1z) + 1e-8;
-        double r2 = sqrt(r2x * r2x + r2y * r2y + r2z * r2z) + 1e-8;
-        if(r1 < 1e-8) printf("r1<1e-8!!\n");
-        if(r2 < 1e-8) printf("r2<1e-8!!\n");
-
-        // Bond energies
-        double dr1 = r1 - r0;
-        double dr2 = r2 - r0;
-        double ebond = 0.5 * kb * (dr1 * dr1 + dr2 * dr2);
-
-        // Bond forces
-        double fb1 = -kb * dr1 / r1;
-        double fb2 = -kb * dr2 / r2;
-
-        double f1x = fb1 * r1x;
-        double f1y = fb1 * r1y;
-        double f1z = fb1 * r1z;
-
-        double f2x = fb2 * r2x;
-        double f2y = fb2 * r2y;
-        double f2z = fb2 * r2z;
-
-        // Angle - cos(theta) = \vec{r1} * \vec{r2} / (r1 * r2)
-        double cos_t = (r1x * r2x + r1y * r2y + r1z * r2z) / (r1 * r2);
-        if (cos_t > 1.0) cos_t = 1.0;
-        if (cos_t < -1.0) cos_t = -1.0;
-
-        double theta = acos(cos_t);
-        double dtheta = theta - theta0;
-
-        // Angle energy
-        double eangle = 0.5 * ka * dtheta * dtheta;
-
-        // Forces from angle term
-        if (fabs(sin(theta)) < 1e-6) printf("WARNING: sin(theta) = %lf\n", sin(theta));
-        double coef = ka * dtheta / (sin(theta) + 1e-8);
-        double v1x = r1x / r1, v1y = r1y / r1, v1z = r1z / r1;
-        double v2x = r2x / r2, v2y = r2y / r2, v2z = r2z / r2;
-
-        double fa1x = coef * (v2x - cos_t * v1x) / r1;
-        double fa1y = coef * (v2y - cos_t * v1y) / r1;
-        double fa1z = coef * (v2z - cos_t * v1z) / r1;
-
-        double fa2x = coef * (v1x - cos_t * v2x) / r2;
-        double fa2y = coef * (v1y - cos_t * v2y) / r2;
-        double fa2z = coef * (v1z - cos_t * v2z) / r2;
-
-        // Accumulate forces (bond + angle)
-        fcs[h13    ] += f1x + fa1x;
-        fcs[h13 + 1] += f1y + fa1y;
-        fcs[h13 + 2] += f1z + fa1z;
-
-        fcs[h23    ] += f2x + fa2x;
-        fcs[h23 + 1] += f2y + fa2y;
-        fcs[h23 + 2] += f2z + fa2z;
-
-        fcs[o3    ] -= (f1x + f2x + fa1x + fa2x);
-        fcs[o3 + 1] -= (f1y + f2y + fa1y + fa2y);
-        fcs[o3 + 2] -= (f1z + f2z + fa1z + fa2z);
-
-        energy_ba += ebond + eangle;
-    }
-
-    #undef MIN_IMG
-
-#ifdef __MPI
-    if (size > 1) {
-        long int n3 = np * 3;
-        allreduce_sum(fcs, n3);
-        allreduce_sum(&energy_ba, 1);
-    }
-#endif
-
-    p->energy_intra = energy_ba;
-    return p->energy_intra;
-}
-#endif
 
 double particles_compute_intramolecular_forces(particles *p) {
     if (!p->is_water) {
@@ -1344,7 +1213,7 @@ double calc_h_ratio(double rad, double w2, double w3) {
     );
 }
 
-double particles_compute_forces_pb(particles *p, grid *g) {
+double particles_compute_forces_pb_roux(particles *p, grid *g) {
     if (! g->pb_enabled) {
         // Poisson-Boltzmann is not enabled
         mpi_fprintf(stderr, "Poisson-Boltzmann forces are not enabled in the grid.\n");
@@ -1696,9 +1565,59 @@ double particles_compute_forces_pb(particles *p, grid *g) {
 
     dscal(fcs_db, h / (8.0 * M_PI), size);
     dscal(fcs_ib, h / (8.0 * M_PI), size);
-    dscal(fcs_np, -p->gamma_np * h / (eps_s - eps_int), size);
+
+    if (g->nonpolar_enabled && fabs(p->gamma_np) > 0.0) {
+        double eps_delta = eps_s - eps_int;
+        if (fabs(eps_delta) < 1e-12) {
+            mpi_fprintf(
+                stderr,
+                "Invalid Poisson-Boltzmann setup: nonpolar forces require eps_s != eps_int.\n"
+            );
+            exit(1);
+        }
+        dscal(fcs_np, -p->gamma_np * h / eps_delta, size);
+    }
 
     return non_polar_energy;
+}
+
+double particles_compute_forces_pb_stress_tensor(particles *p, grid *g) {
+    long int size = p->n_p * 3;
+    double non_polar_energy = 0.0;
+
+    if (g->nonpolar_enabled) {
+        // Call the Roux method directly to avoid infinite recursion:
+        // particles_compute_forces_pb would re-dispatch to this function.
+        non_polar_energy = particles_compute_forces_pb_roux(p, g);
+    } else {
+        memset(p->fcs_np, 0, size * sizeof(double));
+    }
+
+    compute_stress_tensor_forces(
+        g->n, g->eps_s, p->n_p, g->L, g->h,
+        g->phi_n, g->region, p->pos, p->solv_radii, p->fcs_elec,
+        g->stress_tensor_bc_type == STRESS_TENSOR_BC_TYPE_PBC
+    );
+
+    memset(p->fcs_db, 0, size * sizeof(double));
+    memset(p->fcs_ib, 0, size * sizeof(double));
+    return non_polar_energy;
+}
+
+double particles_compute_forces_pb(particles *p, grid *g) {
+    switch (g->pb_force_type)
+    {
+        case MAP_NOT_INITIALIZED:
+            mpi_fprintf(stderr, "Poisson-Boltzmann force type not initialized. Please call `grid_pb_init` before running Poisson-Boltzmann related functions.\n");
+            exit(1);
+        case PB_FORCE_TYPE_PB_ROUX:
+            return particles_compute_forces_pb_roux(p, g);
+        case PB_FORCE_TYPE_STRESS_TENSOR:
+            return particles_compute_forces_pb_stress_tensor(p, g);
+        default:
+            mpi_fprintf(stderr, "Invalid Poisson-Boltzmann force type specified.\n");
+            exit(1);
+    }
 }
 
 void particles_compute_forces_tot(particles *p) {
