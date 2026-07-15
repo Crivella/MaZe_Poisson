@@ -61,7 +61,7 @@ grid * grid_init(
         new->y_hist[yh] = NULL;
     }
     new->y_hist_len = 0;
-    new->y_extrap.order = validate_y_initial_guess(y_initial_guess);
+    new->y_extrap_order = validate_y_initial_guess(y_initial_guess);
     new->q = NULL;
     new->phi_p = NULL;
     new->phi_n = NULL;
@@ -750,6 +750,4 @@ double grid_get_energy_elec(grid *g){
 
     return energy;
 }
-
-
 

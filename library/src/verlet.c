@@ -39,12 +39,12 @@ static const double POLY_COEF[MAZE_Y_HIST_MAX + 1][MAZE_Y_HIST_MAX + 1] = {
     {3.0, -3.0, 1.0},
 };
 
-static void fill_extrapolation_coefficients(const y_extrap_config *y_extrap, int y_hist_len, double *coef, int *order) {
+static void fill_extrapolation_coefficients(y_extrap_order y_extrap, int y_hist_len, double *coef, int *order) {
     for (int i = 0; i <= MAZE_Y_HIST_MAX; i++) {
         coef[i] = 0.0;
     }
 
-    int effective_order = y_extrap->order;
+    int effective_order = y_extrap;
     if (effective_order > y_hist_len) {
         effective_order = y_hist_len;
     }
@@ -64,20 +64,8 @@ static void extrap_predict(double *out, double *y_km1, double **y_hist, const do
     }
 }
 
-static void rotate_y_history(double **y_hist) {
-    double *new_hist[MAZE_Y_HIST_MAX + 1];
-    new_hist[0] = y_hist[MAZE_Y_HIST_MAX];
-    for (int i = 1; i < MAZE_Y_HIST_MAX; i++) {
-        new_hist[i] = y_hist[i - 1];
-    }
-    new_hist[MAZE_Y_HIST_MAX] = y_hist[MAZE_Y_HIST_MAX - 1];
-    for (int i = 0; i <= MAZE_Y_HIST_MAX; i++) {
-        y_hist[i] = new_hist[i];
-    }
-}
-
 // Snapshot y^{k-1} and overwrite y with the selected warm-start predictor.
-static void y_build_guess(double *y, double **y_hist, const y_extrap_config *y_extrap, int y_hist_len, long int size) {
+static void y_build_guess(double *y, double **y_hist, y_extrap_order y_extrap, int y_hist_len, long int size) {
     double *y_km1 = y_hist[MAZE_Y_HIST_MAX];  // spare slot -> snapshot of y^{k-1}
     double coef[MAZE_Y_HIST_MAX + 1];
     int order;
@@ -87,7 +75,12 @@ static void y_build_guess(double *y, double **y_hist, const y_extrap_config *y_e
 }
 
 static void y_shift_history(double **y_hist, int *y_hist_len) {
-    rotate_y_history(y_hist);
+    double *newest = y_hist[MAZE_Y_HIST_MAX];
+    for (int i = MAZE_Y_HIST_MAX; i > 0; i--) {
+        y_hist[i] = y_hist[i - 1];
+    }
+    y_hist[0] = newest;
+
     if (*y_hist_len < MAZE_Y_HIST_MAX) {
         (*y_hist_len)++;
     }
@@ -155,7 +148,7 @@ The previous and current fields and the y array are updated in place.
 */
 EXTERN_C int verlet_poisson_multigrid(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y,
-    double** y_hist, const y_extrap_config *y_extrap,
+    double** y_hist, y_extrap_order y_extrap,
     int *y_hist_len,
     int size1, int size2
 ) {
@@ -249,7 +242,7 @@ The previous and current fields and the y array are updated in place.
 */
 EXTERN_C int verlet_pb_multigrid(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y,
-    double** y_hist, const y_extrap_config *y_extrap,
+    double** y_hist, y_extrap_order y_extrap,
     int *y_hist_len,
     int size1, int size2, double *eps_x, double *eps_y, double *eps_z, double *k2_screen
 ) {

@@ -7,7 +7,10 @@ Requirements:
 
 - CMake 3.20 or newer
 - a C compiler
-- FFTW3
+
+Optional dependencies:
+
+- FFTW3, for FFT-based functionality
 - MPI and OpenMP, unless disabled with the CMake options below
 
 From the root directory of the project, run:

@@ -1,6 +1,7 @@
 #ifndef __MP_STRUCTS_H
 #define __MP_STRUCTS_H
-
+// Max predictor order for the y-history warm start.
+#define MAZE_Y_HIST_MAX 2
 #include "enums.h"
 
 // Struct typedefs
@@ -8,7 +9,7 @@ typedef struct grid grid;
 typedef struct neighbor neighbor;
 typedef struct particles particles;
 typedef struct integrator integrator;
-typedef struct y_extrap_config y_extrap_config;
+typedef int y_extrap_order;
 
 // Struct function definitions
 grid * grid_init(
@@ -129,10 +130,6 @@ void precond_blockjacobi_cleanup();
 
 char *get_water_electrostatic_type_str(int n);
 
-struct y_extrap_config {
-    int order;
-};
-
 // Struct definitions
 struct grid {
     grid_type type;  // Type of the grid
@@ -146,11 +143,13 @@ struct grid {
     int n_local; // X - Number of grid points per dimension (MPI aware)
     int n_start; // Start index of the grid in the global array (MPI aware)
 
+    // TODO: Generalize y-history beyond MG so y_hist[0] is the current y,
+    // removing the separate y buffer and extrapolating from the first history entries.
     double *y;  // Intermediate field constraint
     // y_hist[0..MAX-1] stores older states, y_hist[MAX] is the scratch/newest slot.
     double *y_hist[MAZE_Y_HIST_MAX + 1];
     int y_hist_len;
-    y_extrap_config y_extrap;
+    y_extrap_order y_extrap_order;
     double *q;  // Charge density
     double *phi_p;  // Previous potential (could be NULL if not needed by the method)
     double *phi_n;  // Last potential

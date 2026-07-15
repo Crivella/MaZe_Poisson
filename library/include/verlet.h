@@ -5,6 +5,7 @@
 #include "plcg.h"
 #include "multigrid.h"
 #include "multigrid_pb.h"
+#include "mp_structs.h"
 
 void verlet_update(double *phi, double *phi_prev, long int size);
 
@@ -14,7 +15,7 @@ int verlet_poisson(
 );
 int verlet_poisson_multigrid(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y,
-    double** y_hist, const y_extrap_config *y_extrap,
+    double** y_hist, y_extrap_order y_extrap,
     int *y_hist_len,
     int size1, int size2
 );
@@ -25,7 +26,7 @@ int verlet_poisson_pb(
 );
 int verlet_pb_multigrid(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y,
-    double** y_hist, const y_extrap_config *y_extrap,
+    double** y_hist, y_extrap_order y_extrap,
     int *y_hist_len,
     int size1, int size2, double *eps_x, double *eps_y, double *eps_z, double *k2_screen
 );

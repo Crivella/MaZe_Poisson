@@ -150,6 +150,7 @@ void solver_init_field() {
 }
 
 void solver_set_print_convergence(int val) {
+    // TODO: Generalize convergence printing to all solvers; currently this only controls Multigrid.
     set_print_convergence(val);
 }
 
