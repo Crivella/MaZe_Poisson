@@ -582,6 +582,20 @@ void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma) {
             smooth_charges_wendland_c4_init(grid);
             grid->smooth_charges = smooth_charges_fourier_kernel;
             break;
+        case SMOOTHING_TYPE_WENDLAND_C2_NOFFT:
+        case SMOOTHING_TYPE_WENDLAND_C4_NOFFT:
+            if (grid->smoothing_sigma <= 0.0) {
+                mpi_fprintf(stderr, "Invalid parameters for no-FFT Wendland smoothing:\n");
+                mpi_fprintf(stderr, "sigma: %f\n", grid->smoothing_sigma);
+                exit(1);
+            }
+            grid->smoothing_rcut = grid->smoothing_sigma;
+            smooth_charges_wendland_nofft_init(
+                grid,
+                grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2_NOFFT ? 2 : 4
+            );
+            grid->smooth_charges = smooth_charges_wendland_nofft;
+            break;
         case SMOOTHING_TYPE_DIFFUSION:
             grid->smooth_charges = smooth_charges_diffusion;
             if (
@@ -601,6 +615,13 @@ void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma) {
 }
 
 void grid_smoothing_free(grid *grid) {
+    if (
+        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2_NOFFT ||
+        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C4_NOFFT
+    ) {
+        smooth_charges_wendland_nofft_free(grid);
+        return;
+    }
     if (grid->smoothing_kernel != NULL) {
         free(grid->smoothing_kernel);
         grid->smoothing_kernel = NULL;

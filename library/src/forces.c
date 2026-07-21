@@ -171,7 +171,6 @@ double compute_force_short_range(
 ) {
     neighbor *curr;
 
-    double R_c2 = R_c * R_c;
     double inv_rc = 1.0 / R_c;
     double inv_r2c = inv_rc * inv_rc;
     double inv_r3c = inv_r2c * inv_rc;
@@ -184,7 +183,7 @@ double compute_force_short_range(
     double inv_r, inv_r2, inv_r3;
     double r, x, qi, qj;
     double erf_term, exp_term;
-    double factor, factor_c;
+    double factor, factor_c, force_c;
     double shift, shift_potential;
     double potential = 0.0;
 
@@ -192,7 +191,7 @@ double compute_force_short_range(
 
     #pragma omp parallel for private( \
         i, curr, r, x, qi, qj, \
-        inv_r, inv_r2, inv_r3, erf_term, exp_term, factor, factor_c, shift, shift_potential \
+        inv_r, inv_r2, inv_r3, erf_term, exp_term, factor, factor_c, force_c, shift, shift_potential \
     ) reduction(+:potential)
     for (int i_loc = 0; i_loc < np_local; i_loc++) {
         i = np_start + i_loc;
@@ -227,15 +226,19 @@ double compute_force_short_range(
                     (sqrt(2.0) / (sqrt(M_PI) * sigma_gauss)) * exp_term * inv_r2
                 );
 
-            //Apply shifted of the forces to ensure that the forces go to zero at the cutoff distance
-            shift = factor - factor_c;
+            /* Force-shifted interaction at the short-range cutoff R_c:
+             * V_fs(r) = V(r)-V(R_c)+(r-R_c)F(R_c), with F(R_c)=factor_c*R_c.
+             * R_c is independent of the smoothing cutoff. */
+            force_c = factor_c * R_c;
+            shift = factor - force_c * inv_r;
 
             forces[3*i + 0] += shift * curr->dx;
             forces[3*i + 1] += shift * curr->dy;
             forces[3*i + 2] += shift * curr->dz;
 
             shift_potential = qi * qj * erf_term_c * inv_rc;
-            potential += qi * qj * erf_term / r - shift_potential;
+            potential += qi * qj * erf_term * inv_r - shift_potential
+                       + (r - R_c) * force_c;
 
             curr = curr->next;
         }

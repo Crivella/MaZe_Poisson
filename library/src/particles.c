@@ -699,7 +699,10 @@ double particles_compute_forces_field(particles *p, grid *grid) {
         grid->phi_n, p->grid_neighbors, p->charges, p->pos, p->fcs_elec,
         p->charges_spread_func
     );
-    if (grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2) {
+    if (
+        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2 ||
+        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2_NOFFT
+    ) {
         double *fcs_tmp = (double *)malloc(p->n_p * 3 * sizeof(double));
         res += compute_force_short_range_wendland_c2(
             p->n_p, p->pos, p->charges, fcs_tmp, grid->smoothing_sigma, p->L,
@@ -707,7 +710,10 @@ double particles_compute_forces_field(particles *p, grid *grid) {
         );
         daxpy(fcs_tmp, p->fcs_elec, 1.0, p->n_p * 3);
         free(fcs_tmp);
-    } else if (grid->smoothing == SMOOTHING_TYPE_WENDLAND_C4) {
+    } else if (
+        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C4 ||
+        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C4_NOFFT
+    ) {
         double *fcs_tmp = (double *)malloc(p->n_p * 3 * sizeof(double));
         res += compute_force_short_range_wendland_c4(
             p->n_p, p->pos, p->charges, fcs_tmp, grid->smoothing_sigma, p->L,
@@ -721,7 +727,7 @@ double particles_compute_forces_field(particles *p, grid *grid) {
     ) {
         double *fcs_tmp = (double *)malloc(p->n_p * 3 * sizeof(double));
         res += compute_force_short_range(
-            p->n_p, p->pos, p->charges, fcs_tmp, grid->smoothing_rcut, grid->smoothing_sigma, p->L,
+            p->n_p, p->pos, p->charges, fcs_tmp, p->r_cut, grid->smoothing_sigma, p->L,
             p->particle_neighbors, p->np_local, p->np_start
         );
         daxpy(fcs_tmp, p->fcs_elec, 1.0, p->n_p * 3);

@@ -210,9 +210,9 @@ class SolverMD(Logger, Clock):
         method_id = smoothing_map[method]
         # Wendland kernels (C2, C4, ...) have *exact* compact support at r = sigma: both the
         # charge-spreading kernel and the short-range correction are identically zero beyond it.
-        # Unlike the Gaussian (infinite tail: sigma is a width, smoothing_rcut is an independent,
-        # arbitrary truncation radius for the short-range correction), there is no independent
-        # truncation radius to choose here, so smoothing_rcut is forced to sigma, mirroring the
+        # Unlike the Gaussian (infinite tail: sigma is a width and smoothing_rcut is an independent
+        # smoothing control radius), there is no second smoothing radius to choose here, so
+        # smoothing_rcut is forced to sigma, mirroring the
         # same enforcement done on the C side.
         is_compact_support = method.startswith('WENDLAND')
 

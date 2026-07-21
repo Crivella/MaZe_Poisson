@@ -93,9 +93,10 @@ class GridSetting(BaseFileInput):
     smoother: str = 'LCG'
     y_initial_guess: str = 'BASE'  # BASE | VERLET | ORDER2
 
-    charge_smoothing: str = 'NONE' #Decide wether perform smoohting of the charges or not
-    smoothing_rcut: float = 0 #Cutoff distance
-    smoothing_sigma: float = 0 # Gaussian smoothing width
+    # WENDLANDC{2,4} and GAUSS use FFT convolution; WENDLANDC{2,4}_NOFFT and DIFFUSION use only real-space stencils.
+    charge_smoothing: str = 'NONE'
+    smoothing_rcut: float = 0  # Smoothing control/cutoff radius; distinct from neighbor_r_cut
+    smoothing_sigma: float = 0  # Gaussian width or Wendland support radius
     # smoothing_steps: int = 0 # Number of steps for iterative smoothing methods
     # smoothing_diffusion_coeff: float = 0 # Diffusion coefficient for diffusion-based smoothing methods
 

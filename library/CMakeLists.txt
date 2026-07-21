@@ -64,6 +64,7 @@ add_library(maze_poisson MODULE
     src/particles.c
 
     src/grid_general.c
+    src/smoothing_wendland.c
     src/grid_lcg.c
     src/grid_maze_lcg.c
     src/grid_multigrid.c
