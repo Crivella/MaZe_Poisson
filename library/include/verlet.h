@@ -9,6 +9,8 @@
 
 void verlet_update(double *phi, double *phi_prev, long int size);
 
+struct grid;
+
 int verlet_poisson(
     double tol, double h, double* phi, double* phi_prev, double* q, double* y, int size1, int size2,
     void (*precond)(double *, double *, int, int, int)
@@ -29,5 +31,10 @@ int verlet_pb_multigrid(
     double** y_hist, y_extrap_order y_extrap,
     int *y_hist_len,
     int size1, int size2, double *eps_x, double *eps_y, double *eps_z, double *k2_screen
+);
+int verlet_pb_multigrid_eps_field(
+    double tol, double h, double* phi, double* phi_prev, double* q, double* y,
+    int size1, int size2, double *eps_x, double *eps_y, double *eps_z, double *k2_screen,
+    struct grid *grid_ctx
 );
 #endif // VERLET_H

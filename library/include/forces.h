@@ -95,5 +95,8 @@ double compute_forces_harmonic_bond(
 double compute_forces_harmonic_angle(
     long int n_p, const double *pos, double *forces, double L, double k, double theta0_val
 );
+void compute_stress_tensor_forces_dbc(int n, double eps_s, int n_p, double L, double h, const double *phi, const unsigned int *region, double *pos, double *solv_radii, double *forces);
+void compute_stress_tensor_forces_pbc(int n, double eps_s, int n_p, double L, double h, double *phi, const unsigned int *region, double *pos, double *solv_radii, double *forces);
+void compute_stress_tensor_forces(int n, double eps_s, int n_p, double L, double h, double *phi, const unsigned int *region, double *pos, double *solv_radii, double *forces, int use_pbc);
 
 #endif

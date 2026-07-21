@@ -52,9 +52,11 @@ void solver_initialize_grid(
     g_grid = grid_init(n_grid, L, h, tol, eps, eps_int, grid_type, precond_type, y_initial_guess);
 }
 
-void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enabled) {
+void solver_initialize_grid_pois_boltz(
+    double w, double kbar2, int nonpolar_enabled, int eps_map_type, int pb_force_type, int stress_tensor_bc_type, double kBT, double eps_field_alpha
+) {
     // Initialize the solvent potential and dielectric constant arrays
-    grid_pb_init(g_grid, w, kbar2, nonpolar_enabled);
+    grid_pb_init(g_grid, w, kbar2, nonpolar_enabled, eps_map_type, pb_force_type, stress_tensor_bc_type, kBT, eps_field_alpha);
 }
 
 void solver_initialize_grid_smoothing(particle_neighbor_type method, double r_cut, double sigma) {
@@ -170,7 +172,11 @@ int solver_update_field() {
 
 void solver_update_eps_k2() {
     // Update the dielectric constant and screening factor based on the grid's transition state
-    grid_update_eps_and_k2(g_grid, g_particles);
+    g_grid->update_eps_and_k2(g_grid, g_particles);
+}
+
+int get_eps_phi_iters() {
+    return g_grid ? g_grid->eps_phi_iters : 0;
 }
 
 double solver_compute_forces_elec() {
@@ -336,6 +342,25 @@ void get_field(double *recv) {
 void get_field_prev(double *recv) {
     double *ptr = g_grid->phi_p !=  NULL ? g_grid->phi_p : g_grid->phi_n;
     mpi_grid_collect_buffer(ptr, recv, g_grid->n);
+}
+
+void get_eps_map(double *recv_x, double *recv_y, double *recv_z) {
+    long int n3 = (long) g_grid->n * g_grid->n * g_grid->n;
+
+
+    // TODO would leave this comment here to mark that this function is not really implemented yet,
+    mpi_fprintf(stderr, "get_eps_map is not fully implemented yet, returning zeros\n");
+    if (recv_x != NULL) {
+        memset(recv_x, 0, n3 * sizeof(double));
+    }
+
+    if (recv_y != NULL) {
+        memset(recv_y, 0, n3 * sizeof(double));
+    }
+
+    if (recv_z != NULL) {
+        memset(recv_z, 0, n3 * sizeof(double));
+    }
 }
 
 // void get_field_s(double *recv) {

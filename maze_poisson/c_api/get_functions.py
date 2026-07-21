@@ -16,6 +16,10 @@ for imap in [
     'precond',
     'smoothing',
     'particle_neighbor',
+    'eps_map',
+    'pb_force',
+    'stress_tensor_bc',
+    
 ]:
     capi.register_function(f'get_{imap}_type_num', ctypes.c_int, [],)
     capi.register_function(f'get_{imap}_type_str', ctypes.c_char_p, [ctypes.c_int,],)
@@ -130,6 +134,20 @@ capi.register_function(
     'get_field_prev', None, [
         npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
     ],
+)
+
+# void get_eps_map(double *eps_x, double *eps_y, double *eps_z) {
+capi.register_function(
+    'get_eps_map', None, [
+        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+        npct.ndpointer(dtype=np.float64, ndim=3, flags='C_CONTIGUOUS'),
+    ],
+)
+
+# int get_eps_phi_iters() {
+capi.register_function(
+    'get_eps_phi_iters', ctypes.c_int, [],
 )
 
 # void get_q(double *recv) {

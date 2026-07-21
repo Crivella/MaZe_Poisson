@@ -24,12 +24,18 @@ capi.register_function(
     ],
 )
 
-# void solver_initialize_grid_pois_boltz(double I, double w, double kbar2) {
+# void solver_initialize_grid_pois_boltz(double w, double kbar2, int nonpolar_enabled,
+#     int eps_map_type, int pb_force_type, int stress_tensor_bc_type, double kBT, double eps_field_alpha) {
 capi.register_function(
     'solver_initialize_grid_pois_boltz', None, [
         ctypes.c_double,
         ctypes.c_double,
-        ctypes.c_int
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_double,
+        ctypes.c_double,
     ],
 )
 
