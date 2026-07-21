@@ -722,6 +722,7 @@ double compute_lj_forces(
             forces[i*3 + 0] += f_mag * curr->dx / r_mag;
             forces[i*3 + 1] += f_mag * curr->dy / r_mag;
             forces[i*3 + 2] += f_mag * curr->dz / r_mag;
+            potential_energy += V_mag;
             curr = curr->next;
         }
     }
@@ -778,7 +779,7 @@ double compute_sc_forces(
 
     memset(forces, 0, size * sizeof(double));
 
-    #pragma omp parallel private( i, curr, r_mag, f_mag, f_k, V_mag, d_over_r_pow) reduction(+:potential_energy)
+    #pragma omp parallel for private( i, curr, r_mag, f_mag, f_k, V_mag, d_over_r_pow) reduction(+:potential_energy)
     for (int i_loc = 0; i_loc < np_local; i_loc++) {
         i = np_start + i_loc;
         curr = neighbors[i_loc];
@@ -803,7 +804,7 @@ double compute_sc_forces(
     allreduce_sum(forces, n_p * 3);
     allreduce_sum(&potential_energy, 1);
 
-    return potential_energy;
+    return potential_energy / 2.0;
 }
 
 double compute_lj_pair_force_excl(
