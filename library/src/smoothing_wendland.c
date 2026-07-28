@@ -108,6 +108,7 @@ static void fill_extended_grid(grid *grid, wendland_nofft_kernel *kernel) {
     if (n_local == 0) return;
 
     if (mpid->size == 1) {
+        #pragma omp parallel for schedule(static)
         for (int e = 0; e < ext_planes; ++e) {
             int source = periodic_index(e - halo, n);
             memcpy(kernel->extended + (long)e * n2, grid->q + (long)source * n2,
@@ -310,10 +311,58 @@ static int smooth_charges_wendland_sparse(grid *grid, wendland_nofft_kernel *ker
     const long output_size = (long)n_local * n2;
     long nonzero_count = 0;
 
-    for (long p = 0; p < ext_size; ++p) {
-        const int source_i = p / n2;
-        if (kernel->extended[p] != 0.0 && kernel->source_work[source_i] > 0) {
-            kernel->nonzero_indices[nonzero_count++] = p;
+    /*
+     * Scanning ext_size once, serially, would dwarf the sparse convolution
+     * below for typical P3M charge assignments (few nonzeros over a full
+     * grid). Split it into contiguous per-thread chunks, count locally, then
+     * write with a prefix-sum offset so the result stays ordered by p, which
+     * the work-balancing below relies on.
+     */
+    int scan_threads = max_threads();
+    if (scan_threads > kernel->thread_capacity) scan_threads = kernel->thread_capacity;
+    if (scan_threads < 1) scan_threads = 1;
+    if ((long)scan_threads > ext_size) scan_threads = ext_size > 0 ? (int)ext_size : 1;
+    if (scan_threads > 1) {
+        long scan_counts[scan_threads];
+        const long chunk = (ext_size + scan_threads - 1) / scan_threads;
+        #pragma omp parallel num_threads(scan_threads)
+        {
+            const int tid = thread_number();
+            long begin = (long)tid * chunk;
+            long end = begin + chunk;
+            if (begin > ext_size) begin = ext_size;
+            if (end > ext_size) end = ext_size;
+            long local = 0;
+            for (long p = begin; p < end; ++p) {
+                const int source_i = p / n2;
+                if (kernel->extended[p] != 0.0 && kernel->source_work[source_i] > 0) ++local;
+            }
+            scan_counts[tid] = local;
+            #pragma omp barrier
+            #pragma omp single
+            {
+                long offset = 0;
+                for (int t = 0; t < scan_threads; ++t) {
+                    long c = scan_counts[t];
+                    scan_counts[t] = offset;
+                    offset += c;
+                }
+                nonzero_count = offset;
+            }
+            long write = scan_counts[tid];
+            for (long p = begin; p < end; ++p) {
+                const int source_i = p / n2;
+                if (kernel->extended[p] != 0.0 && kernel->source_work[source_i] > 0) {
+                    kernel->nonzero_indices[write++] = p;
+                }
+            }
+        }
+    } else {
+        for (long p = 0; p < ext_size; ++p) {
+            const int source_i = p / n2;
+            if (kernel->extended[p] != 0.0 && kernel->source_work[source_i] > 0) {
+                kernel->nonzero_indices[nonzero_count++] = p;
+            }
         }
     }
     /* Random scatter writes stop winning well before a 50% fill fraction. */
@@ -469,20 +518,49 @@ static int smooth_charges_wendland_sparse(grid *grid, wendland_nofft_kernel *ker
             }
         }
 
+        /*
+         * thread_output_begin/end are non-decreasing across t (threads
+         * consume nonzero indices in increasing source_i order), so the
+         * threads overlapping a given output plane form a contiguous range
+         * found by binary search, instead of scanning all n_threads per
+         * output element below.
+         */
         #pragma omp barrier
         #pragma omp for schedule(static)
-        for (long out = 0; out < output_size; ++out) {
-            const int output_i = out / n2;
-            const long yz = out - (long)output_i * n2;
-            double value = 0.0;
-            for (int t = 0; t < n_threads; ++t) {
-                if (output_i >= kernel->thread_output_begin[t] &&
-                    output_i < kernel->thread_output_end[t]) {
-                    value += kernel->thread_buffers[t][
-                        (long)(output_i - kernel->thread_output_begin[t]) * n2 + yz];
+        for (int output_i = 0; output_i < n_local; ++output_i) {
+            int lo = 0, hi = n_threads;
+            {
+                int l = 0, r = n_threads;
+                while (l < r) {
+                    int m = (l + r) / 2;
+                    if (kernel->thread_output_end[m] > output_i) r = m; else l = m + 1;
+                }
+                lo = l;
+            }
+            {
+                int l = 0, r = n_threads;
+                while (l < r) {
+                    int m = (l + r) / 2;
+                    if (kernel->thread_output_begin[m] <= output_i) l = m + 1; else r = m;
+                }
+                hi = l;
+            }
+            double *dst = kernel->output + (long)output_i * n2;
+            if (lo >= hi) {
+                memset(dst, 0, n2 * sizeof(double));
+            } else if (hi - lo == 1) {
+                const double *src = kernel->thread_buffers[lo] +
+                    (long)(output_i - kernel->thread_output_begin[lo]) * n2;
+                memcpy(dst, src, n2 * sizeof(double));
+            } else {
+                memset(dst, 0, n2 * sizeof(double));
+                for (int t = lo; t < hi; ++t) {
+                    const double *src = kernel->thread_buffers[t] +
+                        (long)(output_i - kernel->thread_output_begin[t]) * n2;
+                    #pragma omp simd
+                    for (long yz = 0; yz < n2; ++yz) dst[yz] += src[yz];
                 }
             }
-            kernel->output[out] = value;
         }
     }
 #ifdef _OPENMP
