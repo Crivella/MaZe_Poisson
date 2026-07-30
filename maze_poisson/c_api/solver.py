@@ -39,15 +39,13 @@ capi.register_function(
     ],
 )
 
-# void solver_initialize_grid_smoothing(int method, int steps, double r_cut, double sigma, double D) {
-# void solver_initialize_grid_smoothing(int method, double r_cut, double sigma) {
+# void solver_initialize_grid_smoothing(int method, double r_cut, double sigma, int window_order) {
 capi.register_function(
     'solver_initialize_grid_smoothing', None, [
         ctypes.c_int,
-        # ctypes.c_int,
         ctypes.c_double,
         ctypes.c_double,
-        # ctypes.c_double,
+        ctypes.c_int,
     ],
 )
 

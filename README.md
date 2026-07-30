@@ -63,3 +63,17 @@ Supported values are:
 - `BASE`: reuse the previous `y` field directly
 - `VERLET`: linear Verlet-style extrapolation
 - `ORDER2`: second-order extrapolation
+
+## Charge-assignment window deconvolution
+
+The leading-order charge-assignment window can be removed from the mesh
+interaction independently of the selected smoothing backend:
+
+```yaml
+grid_setting:
+  smoothing_deconvolve_window: true
+```
+
+The correction is a local separable three-point filter. Enabling it does not
+change the smoothing kernel or, for diffusion smoothing, the number of
+diffusion steps.

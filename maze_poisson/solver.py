@@ -87,6 +87,13 @@ pneigh_method_map: Dict[str, int] = {
     # 'CELL_LIST': 1,
 }
 
+# B-spline order of each charge-assignment scheme.
+CAS_SPLINE_ORDER: Dict[str, int] = {
+    'CIC': 2,
+    'SPL_QUADR': 3,
+    'SPL_CUBIC': 4,
+}
+
 class SolverMD(Logger, Clock):
     """Base class for all solver classes."""
 
@@ -228,7 +235,13 @@ class SolverMD(Logger, Clock):
         if is_compact_support:
             self.smoothing_rcut = self.smoothing_sigma
 
-        capi.solver_initialize_grid_smoothing(method_id, self.smoothing_rcut, self.smoothing_sigma)
+        window_order = 0
+        if self.gset.smoothing_deconvolve_window:
+            window_order = CAS_SPLINE_ORDER[self.gset.cas.upper()]
+
+        capi.solver_initialize_grid_smoothing(
+            method_id, self.smoothing_rcut, self.smoothing_sigma, window_order
+        )
     
     def _initialize_grid_pb(self):
         """Initialize the grid for Poisson-Boltzmann."""

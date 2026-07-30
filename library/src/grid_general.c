@@ -126,6 +126,11 @@ grid * grid_init(
     new->update_field = NULL;
     new->update_charges = NULL;
     new->update_eps_and_k2 = NULL;
+
+    // grid_smoothing_free runs even if smoothing initialization is skipped.
+    new->smoothing_window_order = 0;
+    new->deconv_scratch = NULL;
+    new->smoothing_kernel = NULL;
     
     init_func(new);
 
@@ -496,7 +501,9 @@ void smooth_charges_diffusion(grid *grid) {
 
     double D = 1 / 6.2;  // Diffusion coefficient for a simple 3D diffusion process on a grid
     double sigma = grid->smoothing_sigma / grid->h;  // Convert sigma to grid units
-    int num_steps = ceil(sigma * sigma / (2.0 * D)) + 1;
+    // Keep the diffusion kernel independent of charge-window deconvolution.
+    int num_steps = (int)lround(sigma * sigma / (2.0 * D));
+    if (num_steps < 1) num_steps = 1;
 
     double *u = grid->q;  // Input charge distribution
     double *u_new = (double *)malloc(size * sizeof(double));  // Temporary array for the new charge distribution
@@ -537,10 +544,91 @@ void smooth_charges_diffusion(grid *grid) {
     free(u_new);
 }
 
-void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma) {
+/*
+Deconvolve the leading-order charge-assignment window from the mesh density.
+
+Assignment and interpolation contribute W_hat(k)^2. For a B-spline of order P,
+
+    W_hat(k)^2 = 1 - P (k h)^2 / 12 + O((k h)^4).
+
+The separable filter T = 1 - (P/12) delta^2 has the inverse transfer function
+to leading order. Its one-dimensional taps are [-b, 1+2b, -b], b=P/12, and
+sum to one, so the correction conserves total charge.
+*/
+void grid_deconvolve_window(grid *grid) {
+    const int P = grid->smoothing_window_order;
+    if (P <= 0) return;
+
+    const int n = grid->n;
+    const int n_loc = grid->n_local;
+    const long int n2 = (long int)n * n;
+    const long int size = (long int)n_loc * n2;
+    const double b = P / 12.0;
+
+    if (size == 0) return;
+
+    double *u = grid->q;
+    if (grid->deconv_scratch == NULL) {
+        grid->deconv_scratch = (double *)malloc(size * sizeof(double));
+        if (grid->deconv_scratch == NULL) {
+            mpi_fprintf(stderr, "Unable to allocate window deconvolution scratch\n");
+            exit(1);
+        }
+    }
+    double *tmp = grid->deconv_scratch;
+
+    int prev[n], next[n];
+    for (int t = 0; t < n; ++t) {
+        prev[t] = (t - 1 + n) % n;
+        next[t] = (t + 1) % n;
+    }
+
+    // x is split across MPI ranks and requires halo planes.
+    mpi_grid_exchange_bot_top(u, n_loc, n);
+    #pragma omp parallel for
+    for (int i = 0; i < n_loc; ++i) {
+        const long int i0 = (long int)i * n2;
+        for (long int t = 0; t < n2; ++t) {
+            tmp[i0 + t] = u[i0 + t]
+                        - b * (u[i0 - n2 + t] - 2.0 * u[i0 + t] + u[i0 + n2 + t]);
+        }
+    }
+
+    // y and z are local to each rank and wrap periodically.
+    #pragma omp parallel for
+    for (int i = 0; i < n_loc; ++i) {
+        const long int i0 = (long int)i * n2;
+        for (int j = 0; j < n; ++j) {
+            const long int j0 = i0 + (long int)j * n;
+            const long int jm = i0 + (long int)prev[j] * n;
+            const long int jp = i0 + (long int)next[j] * n;
+            for (int k = 0; k < n; ++k) {
+                u[j0 + k] = tmp[j0 + k]
+                          - b * (tmp[jm + k] - 2.0 * tmp[j0 + k] + tmp[jp + k]);
+            }
+        }
+    }
+
+    #pragma omp parallel for
+    for (int i = 0; i < n_loc; ++i) {
+        const long int i0 = (long int)i * n2;
+        for (int j = 0; j < n; ++j) {
+            const long int j0 = i0 + (long int)j * n;
+            for (int k = 0; k < n; ++k) {
+                tmp[j0 + k] = u[j0 + k]
+                            - b * (u[j0 + prev[k]] - 2.0 * u[j0 + k] + u[j0 + next[k]]);
+            }
+        }
+    }
+    vec_copy(tmp, u, size);
+}
+
+void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma, int window_order) {
     grid->smoothing = method;
     grid->smoothing_rcut = r_cut;
     grid->smoothing_sigma = sigma;
+    grid->smoothing_window_order = window_order;
+    grid->deconv_scratch = NULL;
     grid->smoothing_kernel = NULL;  // Initialize the smoothing kernel to NULL
 
     switch (grid->smoothing) {
@@ -615,6 +703,11 @@ void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma) {
 }
 
 void grid_smoothing_free(grid *grid) {
+    if (grid->deconv_scratch != NULL) {
+        free(grid->deconv_scratch);
+        grid->deconv_scratch = NULL;
+    }
+
     if (
         grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2_NOFFT ||
         grid->smoothing == SMOOTHING_TYPE_WENDLAND_C4_NOFFT

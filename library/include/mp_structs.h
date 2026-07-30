@@ -59,7 +59,8 @@ void grid_pb_init(
     int eps_map_type, int pb_force_type, int stress_tensor_bc_type, double kBT, double eps_field_alpha
 );
 void grid_pb_free(grid *grid);
-void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma);
+void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma, int window_order);
+void grid_deconvolve_window(grid *grid);
 void grid_smoothing_free(grid *grid);
 void grid_update_eps_and_k2(grid *grid, particles *particles);
 double grid_update_eps_field_dependent(grid *grid, particles *particles);
@@ -204,10 +205,12 @@ struct grid {
     double *eps_z;  // Dielectric constant
 
     // P3M specific
-    smoothing_type smoothing; 
+    smoothing_type smoothing;
     void *smoothing_kernel;  // Backend-specific precomputed smoothing data
     double smoothing_rcut;
-    double smoothing_sigma;
+    double smoothing_sigma;       // Physical screening width; what the short-range correction assumes
+    int smoothing_window_order;   // B-spline order P to deconvolve; 0 disables the correction
+    double *deconv_scratch;       // Persistent scratch for grid_deconvolve_window (per-step hot path)
 
     double tol;  // Tolerance for the LCG
     long int n_iters;  // Number of iterations for convergence of the LCG

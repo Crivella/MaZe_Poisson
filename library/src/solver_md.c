@@ -59,9 +59,12 @@ void solver_initialize_grid_pois_boltz(
     grid_pb_init(g_grid, w, kbar2, nonpolar_enabled, eps_map_type, pb_force_type, stress_tensor_bc_type, kBT, eps_field_alpha);
 }
 
-void solver_initialize_grid_smoothing(particle_neighbor_type method, double r_cut, double sigma) {
+/* window_order is the B-spline assignment order, or zero to disable deconvolution. */
+void solver_initialize_grid_smoothing(
+    particle_neighbor_type method, double r_cut, double sigma, int window_order
+) {
     // Initialize the charge smoothing to perform after charge assignment
-    grid_smoothing_init(g_grid, method, r_cut, sigma);
+    grid_smoothing_init(g_grid, method, r_cut, sigma, window_order);
 }
 
 void solver_initialize_particles(
@@ -145,6 +148,7 @@ int solver_update_charges() {
 
 void solver_smoothing() {
     g_grid->smooth_charges(g_grid);
+    grid_deconvolve_window(g_grid);
 }
 
 void solver_init_field() {

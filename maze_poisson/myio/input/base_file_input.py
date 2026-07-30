@@ -97,6 +97,8 @@ class GridSetting(BaseFileInput):
     charge_smoothing: str = 'NONE'
     smoothing_rcut: float = 0  # Smoothing control/cutoff radius; distinct from neighbor_r_cut
     smoothing_sigma: float = 0  # Gaussian width or Wendland support radius
+    # Remove the leading-order charge-assignment window from the mesh interaction.
+    smoothing_deconvolve_window: bool = False
     # smoothing_steps: int = 0 # Number of steps for iterative smoothing methods
     # smoothing_diffusion_coeff: float = 0 # Diffusion coefficient for diffusion-based smoothing methods
 
