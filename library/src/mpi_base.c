@@ -128,6 +128,33 @@ void mpi_grid_exchange_bot_top(double *grid, int size1, int size2) {
     }
 }
 
+void mpi_grid_exchange_bot_top_2(double *grid, int size1, int size2) {
+    if (size1 == 0) return;
+    if (size1 < 2) {
+        mpi_fprintf(stderr, "Fourth-order force gradient requires at least two x-slices per MPI rank.\n");
+        exit(EXIT_FAILURE);
+    }
+    const long int n2 = (long int)size2 * size2;
+    double *bot_recv = grid - 2 * n2;
+    double *top_recv = grid + size1 * n2;
+
+    if (global_mpi_data->size == 1) {
+        memcpy(bot_recv, grid + (size1 - 2) * n2, 2 * n2 * sizeof(double));
+        memcpy(top_recv, grid, 2 * n2 * sizeof(double));
+    } else {
+        MPI_Sendrecv(
+            grid + (size1 - 2) * n2, 2 * n2, MPI_DOUBLE, global_mpi_data->next_rank, 10,
+            bot_recv, 2 * n2, MPI_DOUBLE, global_mpi_data->prev_rank, 10,
+            global_mpi_data->comm, MPI_STATUS_IGNORE
+        );
+        MPI_Sendrecv(
+            grid, 2 * n2, MPI_DOUBLE, global_mpi_data->prev_rank, 11,
+            top_recv, 2 * n2, MPI_DOUBLE, global_mpi_data->next_rank, 11,
+            global_mpi_data->comm, MPI_STATUS_IGNORE
+        );
+    }
+}
+
 void mpi_grid_exchange_bot_top_uint(unsigned int *grid, int size1, int size2) {
     // Skip loop communication if the processor is holding no data
     if (size1 == 0) {
@@ -241,6 +268,16 @@ void mpi_grid_exchange_bot_top(double *grid, int size1, int size2) {
 
 }
 
+void mpi_grid_exchange_bot_top_2(double *grid, int size1, int size2) {
+    if (size1 < 2) {
+        mpi_fprintf(stderr, "Fourth-order force gradient requires at least two x-slices.\n");
+        exit(EXIT_FAILURE);
+    }
+    const long int n2 = (long int)size2 * size2;
+    memcpy(grid - 2 * n2, grid + (size1 - 2) * n2, 2 * n2 * sizeof(double));
+    memcpy(grid + size1 * n2, grid, 2 * n2 * sizeof(double));
+}
+
 void mpi_grid_exchange_bot_top_uint(unsigned int *grid, int size1, int size2) {
     long int n2 = size2 * size2;
 
@@ -286,13 +323,13 @@ void mpi_grid_distribute_buffer(double *data, double *send, int n) {
 double * mpi_grid_allocate(int size1, int size2) {
     long int n2 = size2 * size2;
 
-    double *data = (double *)malloc((size1 + 2) * n2 * sizeof(double));
+    double *data = (double *)malloc((size1 + 4) * n2 * sizeof(double));
     if (data == NULL) {
         fprintf(stderr, "Error: Unable to allocate memory for grid data\n");
         exit(EXIT_FAILURE);
     }
 
-    return data + n2;
+    return data + 2 * n2;
 }
 
 unsigned int * mpi_grid_allocate_uint(int size1, int size2) {
@@ -309,7 +346,7 @@ unsigned int * mpi_grid_allocate_uint(int size1, int size2) {
 
 void mpi_grid_free(double *data, int n) {
     long int n2 = n * n;
-    free(data - n2);
+    free(data - 2 * n2);
 }
 
 void mpi_grid_free_uint(unsigned int *data, int n) {

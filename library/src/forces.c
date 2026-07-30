@@ -464,31 +464,36 @@ double compute_force_short_range_wendland_c4(
 double compute_force_fd(
     int n_grid, int n_p, int n_loc, int n_start, double h, int num_neigh,
     double *phi, long int *neighbors, double *charges, double *pos, double *forces,
-    double (*g)(double, double, double)
+    double (*g)(double, double, double), int gradient_order
 ) {
     int nn3 = num_neigh * 3;
     long int n = n_grid;
     long int n2 = n * n;
 
     long int i, j, k, jn, in2, i_loc;
-    long int i0, i1, i2;
-    long int j0, j1, j2;
-    long int k0, k1, k2;
+    long int i0, i1, i2, im2, ip2;
+    long int j0, j1, j2, jm2, jp2;
+    long int k1, k2, km2, kp2;
     double E, qc;
     
 
     double const h2 = 2.0 * h;
+    double const h12 = 12.0 * h;
     double const L = n * h;
     double px, py, pz, chg;
 
     memset(forces, 0, n_p * 3 * sizeof(double));
     
     // Exchange the top and bottom slices
-    mpi_grid_exchange_bot_top(phi, n_loc, n);
+    if (gradient_order == 4) {
+        mpi_grid_exchange_bot_top_2(phi, n_loc, n);
+    } else {
+        mpi_grid_exchange_bot_top(phi, n_loc, n);
+    }
 
     double sum_q = 0.0;
     #pragma omp parallel for private( \
-        i_loc, i, j, k, i0, i1, i2, in2, j0, j1, j2, jn, k0, k1, k2, \
+        i_loc, i, j, k, i0, i1, i2, im2, ip2, in2, j0, j1, j2, jm2, jp2, jn, k1, k2, km2, kp2, \
         E, qc, px, py, pz, chg \
     ) reduction(+:sum_q)
     for (int ip = 0; ip < n_p; ip++) {
@@ -515,21 +520,36 @@ double compute_force_fd(
 
             qc = chg * g(px - i*h, L, h) * g(py - j*h, L, h) * g(pz - k*h, L, h);
             sum_q += qc;
-            // X
             i1 = (i_loc+1) * n2;
             i2 = (i_loc-1) * n2;
-            E = (phi[i2 + jn + k] - phi[i1 + jn + k]) / h2;
-            forces[j0] += qc * E;
-            // Y
             j1 = ((j+1) % n) * n;
             j2 = ((j-1 + n) % n) * n;
-            E = (phi[in2 + j2 + k] - phi[in2 + j1 + k]) / h2;
-            forces[j0 + 1] += qc * E;
-            // Z
             k1 = ((k+1) % n);
             k2 = ((k-1 + n) % n);
-            E = (phi[in2 + jn + k2] - phi[in2 + jn + k1]) / h2;
-            forces[j0 + 2] += qc * E;
+            if (gradient_order == 4) {
+                ip2 = (i_loc+2) * n2;
+                im2 = (i_loc-2) * n2;
+                jp2 = ((j+2) % n) * n;
+                jm2 = ((j-2 + n) % n) * n;
+                kp2 = (k+2) % n;
+                km2 = (k-2 + n) % n;
+                E = (phi[ip2 + jn + k] - 8.0 * phi[i1 + jn + k]
+                     + 8.0 * phi[i2 + jn + k] - phi[im2 + jn + k]) / h12;
+                forces[j0] += qc * E;
+                E = (phi[in2 + jp2 + k] - 8.0 * phi[in2 + j1 + k]
+                     + 8.0 * phi[in2 + j2 + k] - phi[in2 + jm2 + k]) / h12;
+                forces[j0 + 1] += qc * E;
+                E = (phi[in2 + jn + kp2] - 8.0 * phi[in2 + jn + k1]
+                     + 8.0 * phi[in2 + jn + k2] - phi[in2 + jn + km2]) / h12;
+                forces[j0 + 2] += qc * E;
+            } else {
+                E = (phi[i2 + jn + k] - phi[i1 + jn + k]) / h2;
+                forces[j0] += qc * E;
+                E = (phi[in2 + j2 + k] - phi[in2 + j1 + k]) / h2;
+                forces[j0 + 1] += qc * E;
+                E = (phi[in2 + jn + k2] - phi[in2 + jn + k1]) / h2;
+                forces[j0 + 2] += qc * E;
+            }
         }
     }
   

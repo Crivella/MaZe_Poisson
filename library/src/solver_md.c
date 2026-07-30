@@ -47,9 +47,13 @@ void solver_initialize() {
 
 void solver_initialize_grid(
     int n_grid, double L, double h, double tol, double eps, double eps_int,
-    grid_type grid_type, precond_type precond_type, int y_initial_guess
+    grid_type grid_type, precond_type precond_type, int y_initial_guess,
+    electrostatic_discretization_type discretization, int force_gradient_order
 ) {
-    g_grid = grid_init(n_grid, L, h, tol, eps, eps_int, grid_type, precond_type, y_initial_guess);
+    g_grid = grid_init(
+        n_grid, L, h, tol, eps, eps_int, grid_type, precond_type,
+        y_initial_guess, discretization, force_gradient_order
+    );
 }
 
 void solver_initialize_grid_pois_boltz(
@@ -144,6 +148,11 @@ int solver_update_charges() {
     }
 
     return res;
+}
+
+/* Use multigrid as a Krylov preconditioner instead of iterating V-cycles directly. */
+void solver_set_mg_krylov(int val) {
+    multigrid_set_krylov(val);
 }
 
 void solver_smoothing() {

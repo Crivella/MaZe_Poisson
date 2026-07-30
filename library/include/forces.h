@@ -21,7 +21,7 @@ static inline void pbc_displacement(
 double compute_force_fd(
     int n_grid, int n_p, int n_loc, int n_start, double h, int num_neigh,
     double *phi, long int *neighbors, double *charges, double *pos, double *forces,
-    double (*g)(double, double, double)
+    double (*g)(double, double, double), int gradient_order
 );
 double compute_force_short_range(
     int n_p,

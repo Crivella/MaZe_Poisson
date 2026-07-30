@@ -8,6 +8,7 @@
 #include "mp_structs.h"
 #include "fftw_wrap.h"
 #include "sphere_intersect.h"
+#include "laplace.h"
 
 static int pbc_grid_index(int idx, int n) {
     idx %= n;
@@ -55,7 +56,8 @@ char *get_stress_tensor_bc_type_str(int n) {
 
 grid * grid_init(
     int n, double L, double h, double tol, double eps, double eps_int,
-    grid_type grid_type, precond_type precond_type, int y_initial_guess
+    grid_type grid_type, precond_type precond_type, int y_initial_guess,
+    electrostatic_discretization_type discretization, int force_gradient_order
 ) {
     void   (*init_func)(grid *);
     switch (grid_type) {
@@ -81,6 +83,8 @@ grid * grid_init(
     grid *new = (grid *)malloc(sizeof(grid));
     new->type = grid_type;
     new->precond_type = precond_type;
+    new->force_gradient_order = force_gradient_order;
+    laplace_set_discretization(discretization);
     new->n = n;
     new->L = L;
     new->h = h;

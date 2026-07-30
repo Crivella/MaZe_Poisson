@@ -14,6 +14,7 @@ for imap in [
     'water_electrostatic',
     'integrator',
     'precond',
+    'electrostatic_discretization',
     'smoothing',
     'particle_neighbor',
     'eps_map',

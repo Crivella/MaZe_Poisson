@@ -12,6 +12,14 @@
 
 int g_print_convergence = 1;
 
+/* Krylov acceleration of the second-order solve. Off by default so its cost can
+   be compared with the plain V-cycle iteration. MEHRSTELLEN4 always uses it. */
+static int g_mg_krylov = 0;
+
+void multigrid_set_krylov(int val) {
+    g_mg_krylov = val;
+}
+
 void set_print_convergence(int val) {
     g_print_convergence = val;
 }
@@ -20,32 +28,29 @@ static int cg_coarse(double* b, double* x, int s1, int s2, int maxit, double rto
 {
     const long n = (long)s1 * (long)s2 * (long)s2;
 
-    /* --- scalari --- */
     int    k;
     double r0_inf, r_inf;
     double r_dot_v, denom, alpha;
     double rn_rn, rn_dot_vn, beta;
 
-    /* --- buffer con ghost --- */
     double *r;
     double *p;
     double *Ap;
 
-    /* --- allocazioni --- */
     r  = mpi_grid_allocate(s1, s2);
     p  = mpi_grid_allocate(s1, s2);
     Ap = mpi_grid_allocate(s1, s2);
 
-    /* r = A x - b  (x è il guess iniziale passatoci dal chiamante) */
-    // mpi_grid_exchange_bot_top(x, s1, s2);
-    laplace_filter(x, r, s1, s2);   /* r <- A x */
-    daxpy(b, r, -1.0, n);           /* r <- r - b */
+    /* r = A x - b, using the caller-provided x as the initial guess. */
+    laplace_filter_standard(x, r, s1, s2);
+    daxpy(b, r, -1.0, n);
 
-    /* p = -v = r/6  con v = -r/6 (precondizionatore diagonale del Laplaciano) */
+    /* Diagonal preconditioner for the negative Laplacian. */
+    const double inv_diag_mag = 1.0 / 6.0;
     memcpy(p, r, n * sizeof(double));
-    dscal(p, 1.0/6.0, n);
+    dscal(p, inv_diag_mag, n);
 
-    /* norma iniziale (stop relativo) */
+    /* Relative stopping criterion. */
     r0_inf = norm_inf(r, n);
     if (r0_inf == 0.0) {
         mpi_grid_free(r, s2);
@@ -54,17 +59,17 @@ static int cg_coarse(double* b, double* x, int s1, int s2, int maxit, double rto
         return 0;
     }
 
-    /* r_dot_v = <r, v> = -<r, p> perché p = -v */
+    /* r_dot_v = <r, v> = -<r, p>, since p = -v. */
     r_dot_v = - ddot(r, p, n);
 
     for (k = 0; k < maxit; ++k) {
         /* Ap = A p */
         // mpi_grid_exchange_bot_top(p, s1, s2);
-        laplace_filter(p, Ap, s1, s2);
+        laplace_filter_standard(p, Ap, s1, s2);
 
         denom = ddot(p, Ap, n);
         if (fabs(denom) < 1e-300) {
-            /* direzione quasi nulla / breakdown */
+            /* Near-null search direction: numerical breakdown. */
             break;
         }
 
@@ -73,32 +78,32 @@ static int cg_coarse(double* b, double* x, int s1, int s2, int maxit, double rto
         /* x <- x + alpha p */
         daxpy(p, x, alpha, n);
 
-        /* r <- r + alpha Ap   (perché r = A x - b) */
+        /* r <- r + alpha Ap, since r = A x - b. */
         daxpy(Ap, r, alpha, n);
 
-        /* criterio di arresto relativo in norma infinito */
+        /* Relative infinity-norm stopping criterion. */
         r_inf = norm_inf(r, n);
-        if (r_inf <= rtol * r0_inf) { // TODO: questo non lo capisco
-            ++k;           /* conta anche l’iterazione corrente */
+        if (r_inf <= rtol * r0_inf) {
+            ++k;           /* Include the current iteration. */
             break;
         }
 
         /* update scalari */
         rn_rn     = ddot(r, r, n);
-        rn_dot_vn = - rn_rn / 6.0;     /* <r_new, v_new> con v_new = -r_new/6 */
+        rn_dot_vn = - rn_rn * inv_diag_mag;
         beta      = rn_dot_vn / r_dot_v;
         r_dot_v   = rn_dot_vn;
 
         /* p <- beta p + r/6 */
         dscal(p, beta, n);
-        daxpy(r, p, 1.0/6.0, n);
+        daxpy(r, p, inv_diag_mag, n);
     }
 
     mpi_grid_free(r,  s2);
     mpi_grid_free(p,  s2);
     mpi_grid_free(Ap, s2);
 
-    return k;  /* numero di iterazioni eseguite */
+    return k;
 }
 
 
@@ -111,24 +116,19 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
     const int s1_nxt      = (s1 + 1 - (n_start % 2)) / 2;
     const int s2_nxt      = s2 / 2;
 
-    // Se lo giri senza MPI funziona anche senza il +1 ma con il +1 server per tenero conto di quando n_start e' dispari
-    const int n_start_nxt = (n_start + 1) / 2;   // CHANGED: floor  
+    /* Map the first global fine-grid plane to the next level. */
+    const int n_start_nxt = (n_start + 1) / 2;
 
     const int sm_iter = (int)ceil(sm * pow(MG_RECURSION_FACTOR, depth));
 
-    // base case
-    if ( (s1_nxt < fmax(16, get_size())) || (depth >= 1) ) {
-        if (depth == 0) {
-            mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
-            mpi_fprintf(stderr, "Multigrid: requires atleast one level of recursion (s1 >= %d)\n", fmax(4, get_size()));
-            mpi_fprintf(stderr, "Increase the size of the grid or reduce the number of MPI processes.\n");
-            mpi_fprintf(stderr, "------------------------------------------------------------------------------------\n");
-            exit(1);
-        }
-        // smooth(in, out, s1, s2, sm_iter);
-        // printf("Solving exact at depth %d with CG\n", depth);
-        cg_coarse(in, out, s1, s2, MG_CG_ITER_LIMIT, MG_CG_TOL); //prima era 1e-4
-        // conj_grad(in, out, out, 1e-5, s1, s2);
+    /* Stop before a restriction would leave too few x planes per rank for
+     * the operator halo.  Use the global transverse size so every rank makes
+     * the same decision even when local slab sizes differ by one plane. */
+    const int can_restrict = (s2_nxt / get_size()) >= 1;
+
+    /* The production hierarchy consists of one fine and one coarse level. */
+    if (!can_restrict || depth >= 1) {
+        cg_coarse(in, out, s1, s2, MG_CG_ITER_LIMIT, MG_CG_TOL);
         return depth;
     }
 
@@ -145,19 +145,17 @@ int v_cycle(double *in, double *out, int s1, int s2, int n_start, int sm, int de
     smooth(in, out, s1, s2, sm_iter);
 
     // 2) residual: r = in - A*out
-    laplace_filter(out, r, s1, s2);
+    laplace_filter_standard(out, r, s1, s2);
     dscal(r, -1.0, size);
     daxpy(in, r, 1.0, size);
 
     // 3) restrict to coarse
-    // mpi_grid_exchange_bot_top(r, s1, s2);                 // CHANGED
     restriction(r, rhs, s1, s2, n_start);
 
     // 4) coarse solve (recursive)
     res = v_cycle(rhs, eps, s1_nxt, s2_nxt, n_start_nxt, sm, depth + 1);
 
     // 5) prolong correction
-    // mpi_grid_exchange_bot_top(eps, s1_nxt, s2_nxt);       // CHANGED
     prolong(eps, r, s1_nxt, s2_nxt, s1, s2, n_start);
 
     // 6) apply correction
@@ -227,14 +225,14 @@ void multigrid_apply_3lvl(double *in, double *out, int s1, int s2, int n_start1,
 
     smooth(in, out, n_loc1, n1, sm);  // out = smooth(in, out)  ~solve(A . out = in)
     // r1  =  in - A . out
-    laplace_filter(out, r1, n_loc1, n1);
+    laplace_filter_standard(out, r1, n_loc1, n1);
     dscal(r1, -1.0, size1);
     daxpy(in, r1, 1.0, size1);
     restriction(r1, r2, n_loc1, n1, n_start1);  // r2 = restriction(r1)
 
     smooth(r2, e2, n_loc2, n2, (int)ceil(sm * 1.2));  // e2 = smooth(r2)  ~solve(A . e2 = r2)
     // tmp2  =  r2 - A . e2
-    laplace_filter(e2, tmp2, n_loc2, n2);
+    laplace_filter_standard(e2, tmp2, n_loc2, n2);
     dscal(tmp2, -1.0, size2);
     daxpy(r2, tmp2, 1.0, size2);
     restriction(tmp2, r3, n_loc2, n2, n_start2);  // r3 = restriction(r2 - A . e2)
@@ -300,7 +298,7 @@ void multigrid_apply_2lvl(double *in, double *out, int s1, int s2, int n_start1,
 
     smooth(in, out, n_loc1, n1, sm);  // out = smooth(in, out)  ~solve(A . out = in)
     // r1  =  in - A . out
-    laplace_filter(out, r1, n_loc1, n1);
+    laplace_filter_standard(out, r1, n_loc1, n1);
     dscal(r1, -1.0, size1);
     daxpy(in, r1, 1.0, size1);
     restriction(r1, r2, n_loc1, n1, n_start1);  // r2 = restriction(r1)
@@ -634,16 +632,18 @@ void smooth_jacobi(double *in, double *out, int s1, int s2, double tol) {
 
     double omega = JACOBI_OMEGA / -6.0;
 
-    double *tmp = (double *)malloc(n3 * sizeof(double));
+    double *tmp = mpi_grid_allocate(s1, s2);
+    double *current = out;
+    double *next = tmp;
 
-    for (int iter=0; iter < tol; iter++) { 
-        // out = out + omega * (in - A. out)
-        laplace_filter(out, tmp, s1, s2);  // res = A . out
-        daxpy(tmp, out, -omega, n3);
-        daxpy(in, out, omega, n3);
+    for (int iter = 0; iter < (int)tol; ++iter) {
+        laplace_jacobi_step(in, current, next, s1, s2, omega);
+        double *swap = current;
+        current = next;
+        next = swap;
     }
-
-    free(tmp);
+    if (current != out) memcpy(out, current, n3 * sizeof(double));
+    mpi_grid_free(tmp, s2);
 }
 
 
@@ -812,45 +812,123 @@ Solve the Poisson equation A.out = in using the multigrid method.
 @param n_start1: starting index for the first dimension (used for restriction)
 @return: number of iterations to converge within the specified tolerance, or -1 if convergence was not achieved
 */
+static double standard_residual(
+    double *in, double *out, double *work, long int n3, int s1, int s2
+) {
+    laplace_filter_standard(out, work, s1, s2);
+    daxpy(in, work, -1.0, n3);
+    return norm_inf(work, n3);
+}
+
+static int multigrid_solve_standard(
+    double tol, double *in, double *out, int s1, int s2, int n_start,
+    int max_cycles, int print_convergence
+) {
+    const long int n3 = (long int)s1 * s2 * s2;
+    double *residual = mpi_grid_allocate(s1, s2);
+    double res_norm = standard_residual(in, out, residual, n3, s1, s2);
+    int cycles = 0;
+
+    if (print_convergence) mpi_printf("\niter=%d \t res=%e\n", cycles, res_norm);
+    while (res_norm > tol && cycles < max_cycles) {
+        multigrid_apply(in, out, s1, s2, n_start, MG_SOLVE_SM);
+        res_norm = standard_residual(in, out, residual, n3, s1, s2);
+        ++cycles;
+        if (print_convergence) mpi_printf("iter=%d \t res=%e\n", cycles, res_norm);
+    }
+
+    mpi_grid_free(residual, s2);
+    return res_norm <= tol ? cycles : -cycles;
+}
+
+/*
+Krylov solve preconditioned by one V-cycle of the existing multigrid. It is
+used both to accelerate the standard 7-point solve and to solve the 19-point
+MEHRSTELLEN4 system. The mean-zero electrostatic subspace removes the constant
+null mode. Polak-Ribiere with restart is used because the practical V-cycle is
+not a fixed symmetric preconditioner: its coarse solve has a relative tolerance
+and its red-black pre/post smoothing order is not transposed.
+*/
+static int multigrid_solve_krylov(
+    double tol, double *in, double *out, int s1, int s2, int n_start,
+    void (*apply_operator)(double *, double *, int, int), const char *label
+) {
+    const int max_iter = MG_ITER_LIMIT;
+    const long int n3 = (long int)s1 * s2 * s2;
+
+    double *r     = mpi_grid_allocate(s1, s2);
+    double *r_old = mpi_grid_allocate(s1, s2);
+    double *z     = mpi_grid_allocate(s1, s2);
+    double *p     = mpi_grid_allocate(s1, s2);
+    double *Ap    = mpi_grid_allocate(s1, s2);
+
+    /* r = f - A u */
+    apply_operator(out, r, s1, s2);
+    dscal(r, -1.0, n3);
+    daxpy(in, r, 1.0, n3);
+    double res = norm_inf(r, n3);
+
+    int it = 0;
+    if (res > tol) {
+        memset(z, 0, n3 * sizeof(double));
+        multigrid_apply(r, z, s1, s2, n_start, MG_SOLVE_SM);
+        vec_copy(z, p, n3);
+        double rz = ddot(r, z, n3);
+
+        for (it = 1; it <= max_iter; ++it) {
+            apply_operator(p, Ap, s1, s2);
+            const double pAp = ddot(p, Ap, n3);
+            if (pAp == 0.0) break;
+            const double alpha = rz / pAp;
+
+            vec_copy(r, r_old, n3);
+            daxpy(p, out, alpha, n3);        /* u += alpha p */
+            daxpy(Ap, r, -alpha, n3);        /* r -= alpha A p */
+            res = norm_inf(r, n3);
+            if (g_print_convergence) {
+                mpi_printf("%s=%d \t res=%e\n", label, it, res);
+            }
+            if (res <= tol) break;
+
+            memset(z, 0, n3 * sizeof(double));
+            multigrid_apply(r, z, s1, s2, n_start, MG_SOLVE_SM);
+
+            /* Polak-Ribiere: beta = <r - r_old, z_new> / <r_old, z_old>. */
+            dscal(r_old, -1.0, n3);
+            daxpy(r, r_old, 1.0, n3);        /* r_old <- r - r_old */
+            double beta = ddot(r_old, z, n3) / rz;
+            rz = ddot(r, z, n3);
+            if (beta < 0.0) beta = 0.0;      /* Restart. */
+            if (rz == 0.0) break;
+
+            dscal(p, beta, n3);              /* p = z + beta p */
+            daxpy(z, p, 1.0, n3);
+        }
+    }
+
+    mpi_grid_free(r, s2);
+    mpi_grid_free(r_old, s2);
+    mpi_grid_free(z, s2);
+    mpi_grid_free(p, s2);
+    mpi_grid_free(Ap, s2);
+
+    return res <= tol ? it : -1;
+}
+
+
+
 int multigrid_solve(
     double tol, double *in, double *out, int s1, int s2, int n_start
 ) {
-    int res = -1;
-    int iter_conv = 0;
-    long int n3 = s1 * s2 * s2;
-
-    double app;
-    double *tmp2 = (double *)malloc(n3 * sizeof(double));
-
-    // Residual at iteration = 0 for the current y_0 initial guess.
-    if (g_print_convergence) {
-        laplace_filter(out, tmp2, s1, s2);  // tmp2 = A_pb . phi
-        daxpy(in, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
-        app = norm_inf(tmp2, n3);
-        mpi_printf("\niter=%d \t res=%e\n", iter_conv, app);
+    if (laplace_get_discretization() == ELECTROSTATIC_DISCRETIZATION_MEHRSTELLEN4) {
+        return multigrid_solve_krylov(tol, in, out, s1, s2, n_start,
+                                      laplace_filter_mehrstellen4, "m4cg");
     }
-
-    while(iter_conv < MG_ITER_LIMIT) {
-        // out = solve(A . out = in)
-        multigrid_apply(in, out, s1, s2, n_start, MG_SOLVE_SM);
-
-        // Compute the residual
-        laplace_filter(out, tmp2, s1, s2);  // tmp2 = A_pb . phi
-        daxpy(in, tmp2, -1.0, n3);  // tmp2 = A_pb . phi - (- 4pi/h q)
-        
-        // app = sqrt(ddot(tmp2, tmp2, n3));  // Compute the norm of the residual
-        app = norm_inf(tmp2, n3);   // Compute norm_inf of residual
-        iter_conv++;
-        if (g_print_convergence) {
-            mpi_printf("iter=%d \t res=%e\n", iter_conv, app);
-        }
-        if (app <= tol){
-            res = iter_conv;
-            break;
-        }
+    if (g_mg_krylov) {
+        return multigrid_solve_krylov(tol, in, out, s1, s2, n_start,
+                                      laplace_filter_standard, "mgcg");
     }
-
-    free(tmp2);
-
-    return res;
+    return multigrid_solve_standard(
+        tol, in, out, s1, s2, n_start, MG_ITER_LIMIT, g_print_convergence
+    );
 }

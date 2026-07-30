@@ -21,6 +21,8 @@ capi.register_function(
         ctypes.c_int,
         ctypes.c_int,
         ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
     ],
 )
 
@@ -118,6 +120,12 @@ capi.register_function(
 # int solver_update_charges() {
 capi.register_function(
     'solver_update_charges', ctypes.c_int, [],
+)
+
+# void solver_set_mg_krylov(int val) {
+capi.register_function(
+    'solver_set_mg_krylov', None, [ctypes.c_int],
+    fallback=lambda val: None,
 )
 
 # void solver_smoothing() {

@@ -29,7 +29,8 @@ typedef int y_extrap_order;
 // Struct function definitions
 grid * grid_init(
     int n, double L, double h, double tol, double eps, double eps_int,
-    grid_type type, precond_type precond_type, int y_initial_guess
+    grid_type type, precond_type precond_type, int y_initial_guess,
+    electrostatic_discretization_type discretization, int force_gradient_order
 );
 neighbor * neighbor_init();
 particles * particles_init(int n_p, int n_typ, double L, double h, ca_scheme_type cas_type);
@@ -205,6 +206,7 @@ struct grid {
     double *eps_z;  // Dielectric constant
 
     // P3M specific
+    int force_gradient_order;
     smoothing_type smoothing;
     void *smoothing_kernel;  // Backend-specific precomputed smoothing data
     double smoothing_rcut;

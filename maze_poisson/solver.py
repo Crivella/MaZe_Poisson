@@ -49,6 +49,8 @@ precond_map: Dict[str, int] = {
     # 'BLOCKJACOBI': 4,  # Symmetric Successive Over-Relaxation
 }
 
+electrostatic_discretization_map: Dict[str, int] = {}
+
 eps_map_type_map: Dict[str, int] = {
     # 'TRADITIONAL': 0,
     # 'SPHERE': 1,
@@ -194,6 +196,11 @@ class SolverMD(Logger, Clock):
             (ca_scheme_map, 'get_ca_scheme_type_num', 'get_ca_scheme_type_str'),
             (integrator_map, 'get_integrator_type_num', 'get_integrator_type_str'),
             (precond_map, 'get_precond_type_num', 'get_precond_type_str'),
+            (
+                electrostatic_discretization_map,
+                'get_electrostatic_discretization_type_num',
+                'get_electrostatic_discretization_type_str',
+            ),
             (smoothing_map, 'get_smoothing_type_num', 'get_smoothing_type_str'),
             (pneigh_method_map, 'get_particle_neighbor_type_num', 'get_particle_neighbor_type_str'),
             (eps_map_type_map, 'get_eps_map_type_num', 'get_eps_map_type_str'),
@@ -308,10 +315,28 @@ class SolverMD(Logger, Clock):
         grid_id = method_grid_map[method]
         precond_id = precond_map[precond]
         y_initial_guess_id = y_initial_guess_map[y_initial_guess]
+        discretization = (self.gset.discretization or 'STANDARD').upper()
+        if discretization not in electrostatic_discretization_map:
+            raise ValueError(
+                f"Discretization {discretization} not recognized. "
+                f"Expected one of {sorted(electrostatic_discretization_map)}."
+            )
+        discretization_id = electrostatic_discretization_map[discretization]
+        if discretization == 'MEHRSTELLEN4' and self.mdv.poisson_boltzmann:
+            raise ValueError(f'{discretization} is not implemented for Poisson-Boltzmann.')
+        if discretization == 'MEHRSTELLEN4' and grid_id != method_grid_map['MAZE-MULTIGRID']:
+            raise ValueError(f'{discretization} currently requires MAZE-MULTIGRID.')
+        force_gradient_order = self.gset.force_gradient_order
+        if force_gradient_order not in (2, 4):
+            raise ValueError('force_gradient_order must be 2 or 4.')
+        if force_gradient_order == 4 and grid_id != method_grid_map['MAZE-MULTIGRID']:
+            raise ValueError('force_gradient_order=4 currently requires MAZE-MULTIGRID.')
         capi.solver_initialize_grid(
             self.N, self.L, self.h, self.mdv.tol, self.gset.eps_s, self.gset.eps_int,
-            grid_id, precond_id, y_initial_guess_id
+            grid_id, precond_id, y_initial_guess_id, discretization_id,
+            force_gradient_order
         )
+        capi.solver_set_mg_krylov(1 if self.gset.mg_krylov else 0)
         self._initialize_grid_pb()
         self._initialize_grid_smoothing()
 
@@ -837,6 +862,10 @@ class SolverMD(Logger, Clock):
         self.logger.info(f'  density = {density} g/cm^3')
         self.logger.info(f'  Solvent dielectric constant: {self.gset.eps_s}')
         self.logger.info(f'  Solver: "{self.mdv.method}",  Preconditioner: "{self.gset.precond}"')
+        self.logger.info(
+            f'  Electrostatic discretization: "{self.gset.discretization}", '
+            f'force gradient order: {self.gset.force_gradient_order}'
+        )
         self.logger.info(f'  Charge assignment scheme: "{self.gset.cas}"')
         self.logger.info(f'  Particle neighbor method: "{self.mdv.neighbor_method}"')
         # self.logger.info(f'  Preconditioning: {self.mdv.preconditioning}')

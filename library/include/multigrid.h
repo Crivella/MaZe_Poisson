@@ -25,4 +25,6 @@ int multigrid_solve(
 );
 
 
+void multigrid_set_krylov(int val);
+
 #endif // __MP_MULTIGRID_H

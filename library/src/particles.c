@@ -697,7 +697,7 @@ double particles_compute_forces_field(particles *p, grid *grid) {
     double res = compute_force_fd(
         grid->n, p->n_p, grid->n_local, grid->n_start, p->h, p->num_neighbors,
         grid->phi_n, p->grid_neighbors, p->charges, p->pos, p->fcs_elec,
-        p->charges_spread_func
+        p->charges_spread_func, grid->force_gradient_order
     );
     if (
         grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2 ||

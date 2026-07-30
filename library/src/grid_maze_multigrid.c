@@ -31,13 +31,13 @@ static void free_y_history_buffers(grid *grid) {
 }
 
 void maze_multigrid_grid_init(grid * grid) {
-    int n_loc = grid->n_local;
     int n = grid->n;
     long int n2 = n * n;
 
-    // TODO: revert this done for testing
-    // grid_init_mpi(grid);
+    /* The Poisson solve remains entirely real-space.  The FFT-compatible
+     * slab decomposition is retained only for optional charge smoothing. */
     grid_init_mpi_fft(grid);
+    int n_loc = grid->n_local;
 
     long int size = grid->n_local * n2;
     grid->size = size;
@@ -76,7 +76,7 @@ void maze_multigrid_grid_init_field(grid *grid) {
     reset_y_history_buffers(grid);
     vec_copy(grid->phi_n, grid->phi_p, grid->size);  // phi_prev = phi_n
     // phi_n = consant * q
-    vec_copy(grid->q, tmp, grid->size);
+    laplace_filter_rhs(grid->q, tmp, grid->n_local, grid->n);
     dscal(tmp, constant, grid->size);
 
     if (grid->pb_enabled) {

@@ -92,6 +92,11 @@ class GridSetting(BaseFileInput):
     precond: str = 'NONE'
     smoother: str = 'LCG'
     y_initial_guess: str = 'BASE'  # BASE | VERLET | ORDER2
+    discretization: str = 'STANDARD'  # STANDARD | MEHRSTELLEN4
+    force_gradient_order: int = 2  # 2 | 4
+    # Use one multigrid V-cycle as a Krylov preconditioner. MEHRSTELLEN4
+    # always uses this solver.
+    mg_krylov: bool = False
 
     # WENDLANDC{2,4} and GAUSS use FFT convolution; WENDLANDC{2,4}_NOFFT and DIFFUSION use only real-space stencils.
     charge_smoothing: str = 'NONE'

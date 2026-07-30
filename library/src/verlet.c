@@ -162,13 +162,15 @@ EXTERN_C int verlet_poisson_multigrid(
 
     double constant;
     double *tmp = (double*)malloc(n3 * sizeof(double));
+    double *q_rhs = mpi_grid_allocate(size1, size2);
 
     // Compute provisional update for the field phi
     verlet_update(phi, phi_prev, n3);
 
     constant = (4 * M_PI) / h;
     laplace_filter(phi, tmp, size1, size2);
-    daxpy(q, tmp, constant, n3);  // sigma_p = A . phi + 4 * pi * rho / eps
+    laplace_filter_rhs(q, q_rhs, size1, size2);
+    daxpy(q_rhs, tmp, constant, n3);  // sigma_p = A . phi + 4 * pi * B.rho / eps
     // memset(y, 0, n3 * sizeof(double));
     // printf("\nprima y = %e\n", norm_inf(y, n3));
 
@@ -185,6 +187,7 @@ EXTERN_C int verlet_poisson_multigrid(
 
     // Free temporary arrays
     free(tmp);
+    mpi_grid_free(q_rhs, size2);
 
     if (res == -1) {
         fprintf(stderr, "Warning: Multigrid did not converge after 1000 iterations.\n");    
@@ -267,7 +270,7 @@ EXTERN_C int verlet_pb_multigrid(
     // Build the y_0 initial guess for the multigrid solve.
     y_build_guess(y, y_hist, y_extrap, *y_hist_len, n3);
 
-    multigrid_solve_pb(
+    res = multigrid_solve_pb(
         tol, tmp, y, size1, size2, get_n_start(),
         eps_x, eps_y, eps_z, k2_screen
     );  // solve A_pb . y = sigma_p

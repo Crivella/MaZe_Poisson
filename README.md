@@ -64,6 +64,25 @@ Supported values are:
 - `VERLET`: linear Verlet-style extrapolation
 - `ORDER2`: second-order extrapolation
 
+## Higher-order electrostatics
+
+The real-space fourth-order path is enabled in the `grid_setting` section:
+
+```yaml
+grid_setting:
+  method: MAZE-MULTIGRID
+  discretization: MEHRSTELLEN4
+  force_gradient_order: 4
+```
+
+`MEHRSTELLEN4` combines the 19-point Mehrstellen Laplacian with its filtered
+right-hand side and always uses the multigrid-preconditioned Krylov solver. It
+is currently available only with `MAZE-MULTIGRID` and is not implemented for
+Poisson-Boltzmann calculations.
+
+For the standard 7-point discretization, the same Krylov wrapper can be tested
+independently with `mg_krylov: true`; the default is `false`.
+
 ## Charge-assignment window deconvolution
 
 The leading-order charge-assignment window can be removed from the mesh
