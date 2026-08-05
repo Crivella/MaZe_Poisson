@@ -9,6 +9,7 @@
 #include "fftw_wrap.h"
 #include "sphere_intersect.h"
 #include "laplace.h"
+#include "smoothing_wendland_poly.h"
 
 static int pbc_grid_index(int idx, int n) {
     idx %= n;
@@ -688,6 +689,17 @@ void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma, int
             );
             grid->smooth_charges = smooth_charges_wendland_nofft;
             break;
+        case SMOOTHING_TYPE_WENDLAND_C2_POLY:
+        case SMOOTHING_TYPE_WENDLAND_C4_POLY:
+            if (grid->smoothing_sigma <= 0.0) {
+                mpi_fprintf(stderr, "Invalid parameters for polynomial Wendland smoothing:\n");
+                mpi_fprintf(stderr, "sigma: %f\n", grid->smoothing_sigma);
+                exit(EXIT_FAILURE);
+            }
+            grid->smoothing_rcut = grid->smoothing_sigma;
+            smooth_charges_wendland_poly_init(grid);
+            grid->smooth_charges = smooth_charges_wendland_poly;
+            break;
         case SMOOTHING_TYPE_DIFFUSION:
             grid->smooth_charges = smooth_charges_diffusion;
             if (
@@ -717,6 +729,13 @@ void grid_smoothing_free(grid *grid) {
         grid->smoothing == SMOOTHING_TYPE_WENDLAND_C4_NOFFT
     ) {
         smooth_charges_wendland_nofft_free(grid);
+        return;
+    }
+    if (
+        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2_POLY ||
+        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C4_POLY
+    ) {
+        smooth_charges_wendland_poly_free(grid);
         return;
     }
     if (grid->smoothing_kernel != NULL) {

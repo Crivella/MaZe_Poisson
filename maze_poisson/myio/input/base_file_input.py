@@ -98,7 +98,8 @@ class GridSetting(BaseFileInput):
     # always uses this solver.
     mg_krylov: bool = False
 
-    # WENDLANDC{2,4} and GAUSS use FFT convolution; WENDLANDC{2,4}_NOFFT and DIFFUSION use only real-space stencils.
+    # WENDLANDC{2,4} and GAUSS use FFT convolution; WENDLANDC{2,4}_{NOFFT,POLY}
+    # and DIFFUSION use only real-space stencils.
     charge_smoothing: str = 'NONE'
     smoothing_rcut: float = 0  # Smoothing control/cutoff radius; distinct from neighbor_r_cut
     smoothing_sigma: float = 0  # Gaussian width or Wendland support radius

@@ -15,6 +15,7 @@ from .myio import OutputFiles, ProgressBar
 from .myio.input import GridSetting, MDVariables, OutputSettings
 from .myio.loggers import Logger
 from .myio.output import save_json
+from .wendland_poly import generate_wendland_polynomial_fit
 
 method_grid_map: Dict[str, int] = {
     # 'LCG': 0,
@@ -218,7 +219,7 @@ class SolverMD(Logger, Clock):
 
         self.logger.info(f"Initializing smoothing with method: '{smoothing}'")
         method = smoothing.upper()
-        if not method in smoothing_map:
+        if method not in smoothing_map:
             raise ValueError(f"Smoothing method {method} not recognized.")
 
         method_id = smoothing_map[method]
@@ -246,10 +247,37 @@ class SolverMD(Logger, Clock):
         if self.gset.smoothing_deconvolve_window:
             window_order = CAS_SPLINE_ORDER[self.gset.cas.upper()]
 
+        polynomial_fit = None
+        if method in ('WENDLANDC2_POLY', 'WENDLANDC4_POLY'):
+            order = 2 if method == 'WENDLANDC2_POLY' else 4
+            polynomial_fit = generate_wendland_polynomial_fit(
+                n=self.N,
+                order=order,
+                sigma_grid=self.smoothing_sigma / self.h,
+            )
+            self.logger.info(
+                "Runtime Wendland C%d fit: degree=%d, relative L2=%.3e, max abs=%.3e",
+                order,
+                polynomial_fit.degree,
+                polynomial_fit.relative_l2,
+                polynomial_fit.max_abs,
+            )
+            if not polynomial_fit.meets_tolerance:
+                self.logger.warning(
+                    "Wendland C%d fit did not reach the requested tolerances; "
+                    "using the best degree-%d polynomial found",
+                    order,
+                    polynomial_fit.degree,
+                )
+
         capi.solver_initialize_grid_smoothing(
             method_id, self.smoothing_rcut, self.smoothing_sigma, window_order
         )
-    
+        if polynomial_fit is not None:
+            capi.solver_set_wendland_poly_coefficients(
+                polynomial_fit.degree, polynomial_fit.coefficients
+            )
+
     def _initialize_grid_pb(self):
         """Initialize the grid for Poisson-Boltzmann."""
         if not self.mdv.poisson_boltzmann:

@@ -69,7 +69,7 @@ void particle_pneigh_sphere(particles *p) {
 
     neighbor *curr = NULL;
 
-    #pragma omp parallel private(i, curr, dx, dy, dz, dr2)
+    #pragma omp parallel for private(i, curr, dx, dy, dz, dr2)
     for (int i_loc = 0; i_loc < p->np_local; i_loc++) {
         i = p->np_start + i_loc;
 
@@ -701,7 +701,8 @@ double particles_compute_forces_field(particles *p, grid *grid) {
     );
     if (
         grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2 ||
-        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2_NOFFT
+        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2_NOFFT ||
+        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C2_POLY
     ) {
         double *fcs_tmp = (double *)malloc(p->n_p * 3 * sizeof(double));
         res += compute_force_short_range_wendland_c2(
@@ -712,7 +713,8 @@ double particles_compute_forces_field(particles *p, grid *grid) {
         free(fcs_tmp);
     } else if (
         grid->smoothing == SMOOTHING_TYPE_WENDLAND_C4 ||
-        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C4_NOFFT
+        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C4_NOFFT ||
+        grid->smoothing == SMOOTHING_TYPE_WENDLAND_C4_POLY
     ) {
         double *fcs_tmp = (double *)malloc(p->n_p * 3 * sizeof(double));
         res += compute_force_short_range_wendland_c4(

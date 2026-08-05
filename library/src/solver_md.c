@@ -7,6 +7,7 @@
 #include "mpi_base.h"
 #include "multigrid.h"
 #include "omp_base.h"
+#include "smoothing_wendland_poly.h"
 
 #define MAX_ITG_PARAMS 10
 
@@ -69,6 +70,17 @@ void solver_initialize_grid_smoothing(
 ) {
     // Initialize the charge smoothing to perform after charge assignment
     grid_smoothing_init(g_grid, method, r_cut, sigma, window_order);
+}
+
+void solver_set_wendland_poly_coefficients(int degree, const double *coefficients) {
+    if (g_grid == NULL || (
+        g_grid->smoothing != SMOOTHING_TYPE_WENDLAND_C2_POLY &&
+        g_grid->smoothing != SMOOTHING_TYPE_WENDLAND_C4_POLY
+    )) {
+        mpi_fprintf(stderr, "Polynomial coefficients require a polynomial Wendland smoother\n");
+        exit(EXIT_FAILURE);
+    }
+    smooth_charges_wendland_poly_set_coefficients(g_grid, degree, coefficients);
 }
 
 void solver_initialize_particles(

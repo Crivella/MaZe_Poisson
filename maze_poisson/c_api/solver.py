@@ -51,6 +51,13 @@ capi.register_function(
     ],
 )
 
+capi.register_function(
+    'solver_set_wendland_poly_coefficients', None, [
+        ctypes.c_int,
+        npct.ndpointer(dtype=np.float64, ndim=1, flags='C_CONTIGUOUS'),
+    ],
+)
+
 # void solver_initialize_particles(
 #     int n_typ, double L, double h, int n_p, int pot_type, int cas_type,
 #     int *types, double *pos, double *vel, double *mass, double *charges,
