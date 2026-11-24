@@ -657,6 +657,14 @@ void grid_smoothing_init(grid *grid, int method, double r_cut, double sigma, int
     grid->deconv_scratch = NULL;
     grid->smoothing_kernel = NULL;  // Initialize the smoothing kernel to NULL
 
+    switch (grid->type) {
+        case GRID_TYPE_SCAFACOS:
+            // ScaFaCoS does not support smoothing, so we set the smoothing method to none
+            grid->smoothing = SMOOTHING_TYPE_NONE;
+            mpi_fprintf(stderr, "Warning: Smoothing is not supported for ScaFaCoS grids. Setting smoothing to NONE.\n");
+            break;   
+    }
+
     switch (grid->smoothing) {
         case SMOOTHING_TYPE_NONE:
             grid->smooth_charges = smooth_charges_none;
